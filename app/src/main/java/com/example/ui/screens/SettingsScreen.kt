@@ -581,7 +581,78 @@ fun SettingsScreen(
             }
         }
 
-        // 6. About App Card
+        // 6. Google Account & Logout Card
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = CardDefaults.outlinedCardBorder()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.AccountCircle, contentDescription = null, tint = EmeraldPrimary, modifier = Modifier.size(24.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (language == "bn") "গুগল অ্যাকাউন্ট ও লগআউট" else "Google Account & Logout",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = if (shopInfo.userEmail.isNotBlank())
+                            (if (language == "bn") "সংযুক্ত জিমেইল: ${shopInfo.userEmail}" else "Linked Gmail: ${shopInfo.userEmail}")
+                        else
+                            (if (language == "bn") "কোনো জিমেইল আইডি লগিন করা নেই" else "No Gmail account logged in"),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { showEditProfileDialog = true },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.ManageAccounts, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(if (language == "bn") "অ্যাকাউন্ট পরিবর্তন" else "Change Account")
+                        }
+
+                        Button(
+                            onClick = { viewModel.logoutUser() },
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = LossRed.copy(alpha = 0.9f)),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Logout, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(if (language == "bn") "লগআউট" else "Logout")
+                        }
+                    }
+                }
+            }
+        }
+
+        // 7. About App Card
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),

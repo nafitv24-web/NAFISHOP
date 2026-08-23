@@ -62,7 +62,11 @@ fun InventoryScreen(
 
     var showBarcodeScannerModal by remember { mutableStateOf(false) }
 
-    val categories = listOf("সব", "মুদি সামগ্রী", "চাল ও ডাল", "তেল ও ঘি", "চা ও পানীয়", "ডিম ও দুগ্ধজাত", "প্রসাধন", "পরিষ্কারক", "অন্যান্য")
+    val defaultCategories = listOf("সব", "মুদি সামগ্রী", "চাল ও ডাল", "তেল ও ঘি", "চা ও পানীয়", "ডিম ও দুগ্ধজাত", "প্রসাধন", "পরিষ্কারক", "অন্যান্য")
+    val categories = remember(allProducts) {
+        val customCats = allProducts.map { it.category.trim() }.filter { it.isNotBlank() && it != "সব" }
+        (listOf("সব") + (customCats + defaultCategories.filter { it != "সব" }).distinct())
+    }
 
     Scaffold(
         floatingActionButton = {
@@ -654,9 +658,28 @@ fun AddEditProductDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Category Chips Selector
+                // Category Text Input & Chips
+                OutlinedTextField(
+                    value = category,
+                    onValueChange = { category = it },
+                    label = { Text(if (language == "bn") "ক্যাটাগরি লিখুন বা বাছাই করুন" else "Category Name (Type or Select)") },
+                    placeholder = { Text(if (language == "bn") "যেমন: মুদি, ফার্মেসি, প্রসাধন..." else "e.g. Grocery, Stationery...") },
+                    leadingIcon = { Icon(Icons.Default.Category, contentDescription = null, tint = EmeraldPrimary) },
+                    trailingIcon = {
+                        if (category.isNotBlank()) {
+                            IconButton(onClick = { category = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear")
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
                 Text(
-                    text = if (language == "bn") "ক্যাটাগরি" else "Category",
+                    text = if (language == "bn") "জনপ্রিয় ক্যাটাগরি তালিকা (ট্যাপ করুন):" else "Quick suggestions (Tap to select):",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -666,14 +689,14 @@ fun AddEditProductDialog(
                 ) {
                     items(categories) { cat ->
                         FilterChip(
-                            selected = category == cat,
+                            selected = category.trim().equals(cat.trim(), ignoreCase = true),
                             onClick = { category = cat },
                             label = { Text(cat, style = MaterialTheme.typography.labelSmall) }
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),

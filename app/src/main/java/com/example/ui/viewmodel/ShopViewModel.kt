@@ -49,6 +49,9 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     private val _language = MutableStateFlow(prefs.getString("app_language", "bn") ?: "bn")
     val language: StateFlow<String> = _language.asStateFlow()
 
+    private val _isLoggedIn = MutableStateFlow(prefs.getBoolean("is_logged_in", false))
+    val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
+
     private val _shopInfo = MutableStateFlow(
         ShopInfo(
             shopName = prefs.getString("shop_name", "আমার দোকান") ?: "আমার দোকান",
@@ -182,6 +185,37 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         prefs.edit()
             .putString("user_email", email)
             .putBoolean("is_google_linked", isLinked)
+            .apply()
+    }
+
+    fun loginUser(email: String, password: String, customShopName: String = "") {
+        val sName = if (customShopName.isNotBlank()) customShopName else _shopInfo.value.shopName
+        _shopInfo.value = _shopInfo.value.copy(
+            userEmail = email,
+            shopName = sName,
+            isGoogleLinked = true
+        )
+        _isLoggedIn.value = true
+        prefs.edit()
+            .putString("user_email", email)
+            .putString("user_password", password)
+            .putString("shop_name", sName)
+            .putBoolean("is_google_linked", true)
+            .putBoolean("is_logged_in", true)
+            .apply()
+    }
+
+    fun loginAsGuest() {
+        _isLoggedIn.value = true
+        prefs.edit()
+            .putBoolean("is_logged_in", true)
+            .apply()
+    }
+
+    fun logoutUser() {
+        _isLoggedIn.value = false
+        prefs.edit()
+            .putBoolean("is_logged_in", false)
             .apply()
     }
 

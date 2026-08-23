@@ -39,6 +39,16 @@ enum class ShopScreen(
 fun MainAppScaffold(
     viewModel: ShopViewModel
 ) {
+    val isLoggedIn by viewModel.isLoggedIn.collectAsState()
+
+    if (!isLoggedIn) {
+        LoginScreen(
+            viewModel = viewModel,
+            onLoginSuccess = { /* Logged in */ }
+        )
+        return
+    }
+
     var currentScreen by remember { mutableStateOf(ShopScreen.DASHBOARD) }
     val language by viewModel.language.collectAsState()
     val shopInfo by viewModel.shopInfo.collectAsState()

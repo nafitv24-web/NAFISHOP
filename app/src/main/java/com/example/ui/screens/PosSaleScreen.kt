@@ -53,7 +53,11 @@ fun PosSaleScreen(
     var selectedCategory by remember { mutableStateOf("সব") }
     var showCustomerPicker by remember { mutableStateOf(false) }
 
-    val categories = listOf("সব", "মুদি সামগ্রী", "চাল ও ডাল", "তেল ও ঘি", "চা ও পানীয়", "ডিম ও দুগ্ধজাত", "প্রসাধন", "পরিষ্কারক", "অন্যান্য")
+    val defaultCategories = listOf("সব", "মুদি সামগ্রী", "চাল ও ডাল", "তেল ও ঘি", "চা ও পানীয়", "ডিম ও দুগ্ধজাত", "প্রসাধন", "পরিষ্কারক", "অন্যান্য")
+    val categories = remember(products) {
+        val customCats = products.map { it.category.trim() }.filter { it.isNotBlank() && it != "সব" }
+        (listOf("সব") + (customCats + defaultCategories.filter { it != "সব" }).distinct())
+    }
 
     val filteredProducts = remember(products, searchQuery, selectedCategory) {
         products.filter { p ->
