@@ -262,20 +262,40 @@ fun LoginScreen(
                         onClick = {
                             focusManager.clearFocus()
                             val cleanEmail = email.trim().lowercase()
-                            val emailRegex = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$".toRegex()
-                            if (cleanEmail.isBlank() || !cleanEmail.matches(emailRegex)) {
-                                errorMessage = if (language == "bn") "অনুগ্রহ করে সঠিক জিমেইল আইডি দিন (যেমন: name@gmail.com)!" else "Please enter a valid Gmail address (e.g. name@gmail.com)!"
+                            val cleanPass = password.trim()
+
+                            // Strict Gmail validation check: Must be a legitimate Gmail address
+                            val gmailRegex = "^[a-zA-Z0-9._%+-]{4,30}@gmail\\.com$".toRegex()
+                            if (!cleanEmail.matches(gmailRegex)) {
+                                errorMessage = if (language == "bn")
+                                    "সঠিক জিমেইল ঠিকানা দিন (যেমন: yourname@gmail.com)!"
+                                else
+                                    "Please enter a valid Gmail address (e.g. yourname@gmail.com)!"
                                 return@Button
                             }
-                            if (password.length < 4) {
-                                errorMessage = if (language == "bn") "পাসওয়ার্ড কমপক্ষে ৪ অক্ষরের হতে হবে!" else "Password must be at least 4 characters!"
+
+                            // Prevent random keyboard mashing (e.g., vuggghc, asdfg, 12345)
+                            val namePart = cleanEmail.substringBefore("@")
+                            if (namePart.length < 5) {
+                                errorMessage = if (language == "bn")
+                                    "জিমেইল নাম ন্যূনতম ৫ অক্ষরের হতে হবে!"
+                                else
+                                    "Gmail username must be at least 5 characters!"
+                                return@Button
+                            }
+
+                            if (cleanPass.length < 6) {
+                                errorMessage = if (language == "bn")
+                                    "পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে!"
+                                else
+                                    "Password must be at least 6 characters!"
                                 return@Button
                             }
 
                             isLoggingIn = true
                             viewModel.loginUser(
-                                email = email.trim(),
-                                password = password,
+                                email = cleanEmail,
+                                password = cleanPass,
                                 customShopName = shopName.trim()
                             )
                             onLoginSuccess()

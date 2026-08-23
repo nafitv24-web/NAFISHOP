@@ -1097,6 +1097,17 @@ fun EditProfileDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                var emailError by remember { mutableStateOf<String?>(null) }
+
+                if (emailError != null) {
+                    Text(
+                        text = emailError!!,
+                        color = LossRed,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(8.dp))
 
                 OutlinedTextField(
@@ -1139,8 +1150,14 @@ fun EditProfileDialog(
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = {
+                            val cleanMail = userEmail.trim().lowercase()
+                            val gmailRegex = "^[a-zA-Z0-9._%+-]{4,30}@gmail\\.com$".toRegex()
+                            if (cleanMail.isNotBlank() && (!cleanMail.matches(gmailRegex) || cleanMail.substringBefore("@").length < 5)) {
+                                emailError = if (language == "bn") "সঠিক জিমেইল আইডি দিন (যেমন: yourname@gmail.com)!" else "Please enter a valid Gmail address!"
+                                return@Button
+                            }
                             if (shopName.isNotBlank()) {
-                                onSave(shopName, ownerName, phone, address, currency, userEmail)
+                                onSave(shopName, ownerName, phone, address, currency, cleanMail)
                             }
                         },
                         enabled = shopName.isNotBlank()
