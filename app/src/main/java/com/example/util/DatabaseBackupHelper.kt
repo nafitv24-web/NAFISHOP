@@ -120,15 +120,15 @@ object DatabaseBackupHelper {
         context: Context,
         file: File,
         recipientEmail: String = "",
-        subject: String = "Shop Database Backup / দোকান খাতা ব্যাকআপ",
+        subject: String = "দোকান খাতা ব্যাকআপ ফাইল",
         body: String = "দোকানের সকল পণ্যের হিসাব, বিক্রয় ও বাকি খাতার ডাটাবেস ব্যাকআপ ফাইল নিচে সংযুক্ত করা হয়েছে।"
     ) {
         try {
             val authority = "${context.packageName}.fileprovider"
             val fileUri: Uri = FileProvider.getUriForFile(context, authority, file)
 
-            val emailIntent = Intent(Intent.ACTION_SEND).apply {
-                type = "message/rfc822"
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "*/*"
                 if (recipientEmail.isNotBlank()) {
                     putExtra(Intent.EXTRA_EMAIL, arrayOf(recipientEmail))
                 }
@@ -138,7 +138,7 @@ object DatabaseBackupHelper {
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
 
-            val chooser = Intent.createChooser(emailIntent, "Gmail বা ইমেইলে ব্যাকআপ পাঠান")
+            val chooser = Intent.createChooser(intent, "Gmail বা ড্রাইভে ব্যাকআপ পাঠান")
             chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(chooser)
         } catch (e: Exception) {
