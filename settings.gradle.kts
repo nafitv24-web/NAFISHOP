@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "দোকান খাতা - Shop Khata"
+rootProject.name = "NAFI SHOP 24"
 
 include(":app")

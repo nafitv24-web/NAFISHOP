@@ -54,7 +54,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _shopInfo = MutableStateFlow(
         ShopInfo(
-            shopName = prefs.getString("shop_name", "আমার দোকান") ?: "আমার দোকান",
+            shopName = prefs.getString("shop_name", "NAFI SHOP 24") ?: "NAFI SHOP 24",
             ownerName = prefs.getString("shop_owner", "দোকানদার") ?: "দোকানদার",
             phone = prefs.getString("shop_phone", "") ?: "",
             address = prefs.getString("shop_address", "") ?: "",
