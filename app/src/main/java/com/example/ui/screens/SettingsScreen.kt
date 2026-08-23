@@ -352,9 +352,12 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Backup Now to Google Drive Button
+                    // Backup Now to Google Drive / Cloud Button
                     Button(
-                        onClick = { viewModel.backupToGoogleCloud() },
+                        onClick = {
+                            val timestamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
+                            saveJsonLauncher.launch("DokanKhata_Backup_$timestamp.json")
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !isSyncing,
                         shape = RoundedCornerShape(10.dp),
@@ -367,11 +370,11 @@ fun SettingsScreen(
                                 strokeWidth = 2.dp
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(if (language == "bn") "ক্লাউডে ব্যাকআপ হচ্ছে..." else "Backing up to Cloud...")
+                            Text(if (language == "bn") "ব্যাকআপ তৈরি হচ্ছে..." else "Generating Backup...")
                         } else {
-                            Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(if (language == "bn") "এখনই গুগল ড্রাইভে ব্যাকআপ নিন" else "Backup to Google Drive Now")
+                            Text(if (language == "bn") "গুগল ড্রাইভে ব্যাকআপ সেভ করুন" else "Save Backup to Google Drive")
                         }
                     }
                 }
