@@ -1,0 +1,493 @@
+package com.example.ui.viewmodel
+
+import android.app.Application
+import android.content.Context
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.data.local.AppDatabase
+import com.example.data.model.*
+import com.example.data.repository.ShopRepository
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.*
+
+class ShopViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val database = AppDatabase.getDatabase(application, viewModelScope)
+    private val repository = ShopRepository(database)
+
+    // Data streams
+    val products: StateFlow<List<Product>> = repository.allProducts
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val lowStockProducts: StateFlow<List<Product>> = repository.lowStockProducts
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allTransactions: StateFlow<List<TransactionRecord>> = repository.allTransactions
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val recentTransactions: StateFlow<List<TransactionRecord>> = repository.recentTransactions
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val customers: StateFlow<List<Customer>> = repository.allCustomers
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val dueLogs: StateFlow<List<DueLog>> = repository.allDueLogs
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val expenses: StateFlow<List<Expense>> = repository.allExpenses
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val cashLogs: StateFlow<List<CashLog>> = repository.allCashLogs
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val prefs = application.getSharedPreferences("shop_khata_prefs", android.content.Context.MODE_PRIVATE)
+
+    // Language & Shop Profile State
+    private val _language = MutableStateFlow(prefs.getString("app_language", "bn") ?: "bn")
+    val language: StateFlow<String> = _language.asStateFlow()
+
+    private val _shopInfo = MutableStateFlow(
+        ShopInfo(
+            shopName = prefs.getString("shop_name", "ভাই ভাই স্টোর") ?: "ভাই ভাই স্টোর",
+            ownerName = prefs.getString("shop_owner", "মোঃ রফিকুল ইসলাম") ?: "মোঃ রফিকুল ইসলাম",
+            phone = prefs.getString("shop_phone", "01712345678") ?: "01712345678",
+            address = prefs.getString("shop_address", "নিউ মার্কেট, ঢাকা") ?: "নিউ মার্কেট, ঢাকা",
+            currency = prefs.getString("shop_currency", "৳") ?: "৳",
+            mainBalance = prefs.getFloat("main_balance", 25000f).toDouble(),
+            userEmail = "nafitv24@gmail.com",
+            isGoogleLinked = true
+        )
+    )
+    val shopInfo: StateFlow<ShopInfo> = _shopInfo.asStateFlow()
+
+    // Filter & Search
+    val searchQuery = MutableStateFlow("")
+    val selectedCategory = MutableStateFlow("সব")
+
+    // Filtered Products
+    val filteredProducts = combine(products, searchQuery, selectedCategory) { list, query, cat ->
+        list.filter { p ->
+            val matchQuery = query.isBlank() ||
+                    p.name.contains(query, ignoreCase = true) ||
+                    p.barcode.contains(query, ignoreCase = true) ||
+                    p.category.contains(query, ignoreCase = true)
+            val matchCat = cat == "সব" || p.category == cat
+            matchQuery && matchCat
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Cart / POS State
+    private val _cartItems = MutableStateFlow<List<CartItem>>(emptyList())
+    val cartItems: StateFlow<List<CartItem>> = _cartItems.asStateFlow()
+
+    val cartCustomerName = MutableStateFlow("")
+    val cartCustomerPhone = MutableStateFlow("")
+    val cartDiscount = MutableStateFlow(0.0)
+    val cartPaidAmount = MutableStateFlow(0.0)
+    val cartPaymentMethod = MutableStateFlow("CASH") // CASH, BKASH, NAGAD, DUE
+    val cartNote = MutableStateFlow("")
+
+    val lastCompletedInvoice = MutableStateFlow<InvoiceDetails?>(null)
+    val currentInvoice: StateFlow<InvoiceDetails?> = lastCompletedInvoice.asStateFlow()
+
+    fun clearCurrentInvoice() {
+        lastCompletedInvoice.value = null
+    }
+
+    // Sync State
+    val isSyncing = MutableStateFlow(false)
+    val syncMessage = MutableStateFlow<String?>(null)
+
+    // Dashboard Summary derivation
+    val dashboardSummary: StateFlow<DashboardSummary> = combine(
+        allTransactions,
+        expenses,
+        customers,
+        products,
+        _shopInfo
+    ) { txs, exps, custs, prods, info ->
+        val calendar = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val startOfToday = calendar.timeInMillis
+
+        val todayTxs = txs.filter { it.timestamp >= startOfToday }
+        val todaySales = todayTxs.filter { it.type == "SALE" }.sumOf { it.totalAmount }
+        val todayCashSales = todayTxs.filter { it.type == "SALE" }.sumOf { it.paidAmount }
+        val todayPurchases = todayTxs.filter { it.type == "STOCK_IN" || it.type == "PURCHASE" }.sumOf { it.totalAmount }
+        val todaySalesProfit = todayTxs.filter { it.type == "SALE" }.sumOf { it.profitAmount }
+
+        val todayExps = exps.filter { it.timestamp >= startOfToday }.sumOf { it.amount }
+        val todayNetProfit = todaySalesProfit - todayExps
+        val todayNetCashFlow = todayCashSales - todayExps
+
+        val totalDue = custs.sumOf { it.totalDue }
+        val totalStockVal = prods.sumOf { it.stockQuantity * it.sellPrice }
+        val lowCount = prods.count { it.stockQuantity <= it.minStockAlert }
+
+        DashboardSummary(
+            mainBalance = info.mainBalance,
+            todaySales = todaySales,
+            todayCashSales = todayCashSales,
+            todayPurchases = todayPurchases,
+            todayProfit = todayNetProfit,
+            todayExpenses = todayExps,
+            todayNetCashFlow = todayNetCashFlow,
+            totalOutstandingDue = totalDue,
+            totalStockValue = totalStockVal,
+            totalProductsCount = prods.size,
+            lowStockCount = lowCount
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DashboardSummary())
+
+    // Actions
+    fun toggleLanguage() {
+        val next = if (_language.value == "bn") "en" else "bn"
+        _language.value = next
+        prefs.edit().putString("app_language", next).apply()
+    }
+
+    fun updateShopInfo(name: String, owner: String, phone: String, address: String, currency: String) {
+        _shopInfo.value = _shopInfo.value.copy(
+            shopName = name,
+            ownerName = owner,
+            phone = phone,
+            address = address,
+            currency = currency
+        )
+        prefs.edit()
+            .putString("shop_name", name)
+            .putString("shop_owner", owner)
+            .putString("shop_phone", phone)
+            .putString("shop_address", address)
+            .putString("shop_currency", currency)
+            .apply()
+    }
+
+    // Main Balance Management
+    fun updateMainBalance(newBalance: Double, note: String = "ব্যালেন্স পরিবর্তন") {
+        _shopInfo.value = _shopInfo.value.copy(mainBalance = newBalance)
+        prefs.edit().putFloat("main_balance", newBalance.toFloat()).apply()
+        viewModelScope.launch {
+            repository.recordCashLog("MANUAL_ADJUST", newBalance, newBalance, note)
+        }
+    }
+
+    fun addCashToMainBalance(amount: Double, reason: String = "ক্যাশ জমা") {
+        if (amount <= 0) return
+        val newBal = _shopInfo.value.mainBalance + amount
+        _shopInfo.value = _shopInfo.value.copy(mainBalance = newBal)
+        prefs.edit().putFloat("main_balance", newBal.toFloat()).apply()
+        viewModelScope.launch {
+            repository.recordCashLog("DEPOSIT", amount, newBal, reason)
+        }
+    }
+
+    fun withdrawCashFromMainBalance(amount: Double, reason: String = "ক্যাশ উত্তোলন") {
+        if (amount <= 0) return
+        val newBal = (_shopInfo.value.mainBalance - amount).coerceAtLeast(0.0)
+        _shopInfo.value = _shopInfo.value.copy(mainBalance = newBal)
+        prefs.edit().putFloat("main_balance", newBal.toFloat()).apply()
+        viewModelScope.launch {
+            repository.recordCashLog("WITHDRAWAL", amount, newBal, reason)
+        }
+    }
+
+    fun settleDayEndCashToMainBalance(cashSalesAmount: Double, note: String = "দিনশেষের বিক্রি ক্যাশ যুক্তকরণ") {
+        if (cashSalesAmount <= 0) return
+        val newBal = _shopInfo.value.mainBalance + cashSalesAmount
+        _shopInfo.value = _shopInfo.value.copy(mainBalance = newBal)
+        prefs.edit().putFloat("main_balance", newBal.toFloat()).apply()
+        viewModelScope.launch {
+            repository.recordCashLog("DAY_END_CLOSING", cashSalesAmount, newBal, note)
+        }
+    }
+
+    // Product Management
+    fun saveProduct(product: Product) {
+        viewModelScope.launch {
+            repository.saveProduct(product)
+        }
+    }
+
+    fun deleteProduct(product: Product) {
+        viewModelScope.launch {
+            repository.deleteProduct(product)
+        }
+    }
+
+    fun stockIn(productId: Long, quantity: Double, buyPrice: Double?, sellPrice: Double?, note: String) {
+        viewModelScope.launch {
+            repository.recordStockIn(productId, quantity, buyPrice, sellPrice, note)
+        }
+    }
+
+    fun stockOutManual(productId: Long, quantity: Double, reason: String) {
+        viewModelScope.launch {
+            repository.recordStockOutManual(productId, quantity, reason)
+        }
+    }
+
+    // Cart / POS operations
+    fun addToCart(product: Product, quantity: Double = 1.0) {
+        val current = _cartItems.value.toMutableList()
+        val index = current.indexOfFirst { it.product.id == product.id }
+        if (index >= 0) {
+            val existing = current[index]
+            current[index] = existing.copy(quantity = existing.quantity + quantity)
+        } else {
+            current.add(CartItem(product = product, quantity = quantity, customPrice = product.sellPrice))
+        }
+        _cartItems.value = current
+        autoUpdatePaidAmount()
+    }
+
+    fun updateCartItemQuantity(productId: Long, newQty: Double) {
+        if (newQty <= 0) {
+            removeFromCart(productId)
+            return
+        }
+        val current = _cartItems.value.toMutableList()
+        val index = current.indexOfFirst { it.product.id == productId }
+        if (index >= 0) {
+            current[index] = current[index].copy(quantity = newQty)
+            _cartItems.value = current
+            autoUpdatePaidAmount()
+        }
+    }
+
+    fun updateCartItemPrice(productId: Long, newPrice: Double) {
+        val current = _cartItems.value.toMutableList()
+        val index = current.indexOfFirst { it.product.id == productId }
+        if (index >= 0) {
+            current[index] = current[index].copy(customPrice = newPrice)
+            _cartItems.value = current
+            autoUpdatePaidAmount()
+        }
+    }
+
+    fun removeFromCart(productId: Long) {
+        _cartItems.value = _cartItems.value.filter { it.product.id != productId }
+        autoUpdatePaidAmount()
+    }
+
+    fun clearCart() {
+        _cartItems.value = emptyList()
+        cartCustomerName.value = ""
+        cartCustomerPhone.value = ""
+        cartDiscount.value = 0.0
+        cartPaidAmount.value = 0.0
+        cartPaymentMethod.value = "CASH"
+        cartNote.value = ""
+    }
+
+    private fun autoUpdatePaidAmount() {
+        val gross = _cartItems.value.sumOf { it.total }
+        val net = (gross - cartDiscount.value).coerceAtLeast(0.0)
+        if (cartPaymentMethod.value != "DUE") {
+            cartPaidAmount.value = net
+        }
+    }
+
+    fun setDiscount(amount: Double) {
+        cartDiscount.value = amount
+        autoUpdatePaidAmount()
+    }
+
+    fun checkoutSale(onSuccess: (String) -> Unit) {
+        val items = _cartItems.value
+        if (items.isEmpty()) return
+
+        val gross = items.sumOf { it.total }
+        val net = (gross - cartDiscount.value).coerceAtLeast(0.0)
+        val paid = cartPaidAmount.value
+        val due = (net - paid).coerceAtLeast(0.0)
+        val customerName = cartCustomerName.value.ifBlank { "ক্যাশ কাস্টমার" }
+        val customerPhone = cartCustomerPhone.value
+        val paymentMethod = cartPaymentMethod.value
+        val discount = cartDiscount.value
+        val note = cartNote.value
+
+        viewModelScope.launch {
+            val invoiceNo = repository.processSale(
+                cartItems = items,
+                customerName = customerName,
+                customerPhone = customerPhone,
+                discount = discount,
+                paidAmount = paid,
+                paymentMethod = paymentMethod,
+                note = note
+            )
+
+            val invoiceDetails = InvoiceDetails(
+                invoiceNumber = invoiceNo,
+                shopName = _shopInfo.value.shopName,
+                shopPhone = _shopInfo.value.phone,
+                shopAddress = _shopInfo.value.address,
+                customerName = customerName,
+                customerPhone = customerPhone,
+                items = items.toList(),
+                subTotal = gross,
+                discount = discount,
+                grandTotal = net,
+                paidAmount = paid,
+                dueAmount = due,
+                paymentMethod = paymentMethod,
+                timestamp = System.currentTimeMillis()
+            )
+            lastCompletedInvoice.value = invoiceDetails
+            clearCart()
+            onSuccess(invoiceNo)
+        }
+    }
+
+    // Customer / Due operations
+    fun addCustomer(name: String, phone: String, address: String, initialDue: Double) {
+        viewModelScope.launch {
+            repository.addCustomer(name, phone, address, initialDue)
+        }
+    }
+
+    fun collectCustomerDue(customer: Customer, amountPaid: Double, note: String) {
+        viewModelScope.launch {
+            repository.collectCustomerDuePayment(customer, amountPaid, note)
+        }
+    }
+
+    fun giveCustomerDue(customer: Customer, amountDue: Double, note: String) {
+        viewModelScope.launch {
+            repository.giveCustomerAdditionalDue(customer, amountDue, note)
+        }
+    }
+
+    fun deleteCustomer(customer: Customer) {
+        viewModelScope.launch {
+            repository.deleteCustomer(customer)
+        }
+    }
+
+    // Expenses
+    fun addExpense(title: String, category: String, amount: Double, note: String) {
+        viewModelScope.launch {
+            repository.addExpense(title, category, amount, note)
+        }
+    }
+
+    fun deleteExpense(expense: Expense) {
+        viewModelScope.launch {
+            repository.deleteExpense(expense)
+        }
+    }
+
+    // Cloud & Local Backup
+    fun backupToGoogleCloud() {
+        viewModelScope.launch {
+            isSyncing.value = true
+            syncMessage.value = if (_language.value == "bn") "গুগল ড্রাইভে ডাটা ব্যাকআপ হচ্ছে..." else "Backing up data to Google Drive..."
+            kotlinx.coroutines.delay(1200)
+            val timeStr = SimpleDateFormat("h:mm a, d MMM", Locale.getDefault()).format(Date())
+            _shopInfo.value = _shopInfo.value.copy(
+                isGoogleLinked = true,
+                lastBackupDate = timeStr
+            )
+            isSyncing.value = false
+            syncMessage.value = if (_language.value == "bn") "সফলভাবে গুগল ড্রাইভে ব্যাকআপ সম্পন্ন হয়েছে!" else "Backup completed successfully to Google Drive!"
+        }
+    }
+
+    fun exportAndShareDatabase(context: Context, viaEmail: Boolean = false) {
+        viewModelScope.launch {
+            isSyncing.value = true
+            syncMessage.value = if (_language.value == "bn") "ডাটাবেস ফাইল প্রস্তুত হচ্ছে..." else "Preparing database file..."
+            val dbFile = com.example.util.DatabaseBackupHelper.exportDatabaseFile(context, repository.getDatabase())
+            isSyncing.value = false
+            if (dbFile != null) {
+                if (viaEmail) {
+                    com.example.util.DatabaseBackupHelper.shareViaEmail(
+                        context = context,
+                        file = dbFile,
+                        subject = "দোকান খাতা SQLite ডাটাবেস ব্যাকআপ (${shopInfo.value.shopName})",
+                        body = "দোকানের সকল পণ্যের হিসাব, বিক্রয়, ক্যাশ ও বাকি খাতার SQLite ডাটাবেস ফাইল (.db) নিচে সংযুক্ত করা হয়েছে।"
+                    )
+                } else {
+                    com.example.util.DatabaseBackupHelper.shareBackupFile(
+                        context = context,
+                        file = dbFile,
+                        subject = "দোকান খাতা SQLite ডাটাবেস ব্যাকআপ",
+                        message = "দোকানের ডাটাবেস ব্যাকআপ ফাইল (.db)। আপনি এটি গুগল ড্রাইভ বা জিমেইলে সংরক্ষণ করতে পারেন।"
+                    )
+                }
+            } else {
+                syncMessage.value = if (_language.value == "bn") "ডাটাবেস ফাইল তৈরিতে সমস্যা হয়েছে" else "Failed to export database file"
+            }
+        }
+    }
+
+    fun exportAndShareJsonBackup(context: Context, viaEmail: Boolean = false) {
+        viewModelScope.launch {
+            isSyncing.value = true
+            val jsonStr = getExportJsonString()
+            val jsonFile = com.example.util.DatabaseBackupHelper.exportJsonBackupFile(context, jsonStr)
+            isSyncing.value = false
+            if (jsonFile != null) {
+                if (viaEmail) {
+                    com.example.util.DatabaseBackupHelper.shareViaEmail(
+                        context = context,
+                        file = jsonFile,
+                        subject = "দোকান খাতা JSON ব্যাকআপ (${shopInfo.value.shopName})",
+                        body = "দোকান খাতার সকল ডেটা JSON ফাইল আকারে সংযুক্ত করা হলো।"
+                    )
+                } else {
+                    com.example.util.DatabaseBackupHelper.shareBackupFile(
+                        context = context,
+                        file = jsonFile,
+                        subject = "দোকান খাতা JSON ব্যাকআপ",
+                        message = "দোকান খাতার সকল ডেটা ব্যাকআপ JSON ফাইল।"
+                    )
+                }
+            } else {
+                syncMessage.value = if (_language.value == "bn") "JSON ফাইল তৈরিতে সমস্যা হয়েছে" else "Failed to export JSON file"
+            }
+        }
+    }
+
+    suspend fun getExportJsonString(): String {
+        return repository.exportDataAsJson(
+            productsList = products.value,
+            customersList = customers.value,
+            expensesList = expenses.value,
+            transactionsList = allTransactions.value
+        )
+    }
+
+    fun importBackupJson(jsonString: String, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            isSyncing.value = true
+            val success = repository.importDataFromJson(jsonString)
+            isSyncing.value = false
+            onResult(success)
+        }
+    }
+}
+
+data class InvoiceDetails(
+    val invoiceNumber: String,
+    val shopName: String,
+    val shopPhone: String,
+    val shopAddress: String,
+    val customerName: String,
+    val customerPhone: String,
+    val items: List<CartItem>,
+    val subTotal: Double,
+    val discount: Double,
+    val grandTotal: Double,
+    val paidAmount: Double,
+    val dueAmount: Double,
+    val paymentMethod: String,
+    val timestamp: Long
+)

@@ -1,0 +1,38 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Storefront Canopy & Counter -->
+    <!-- Shop Roof/Awning -->
+    <path
+        android:fillColor="#FBBF24"
+        android:pathData="M30,36 L78,36 L84,48 L24,48 Z" />
+    <!-- Shop Awning Stripes -->
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M38,36 L46,36 L43,48 L35,48 Z M54,36 L62,36 L59,48 L51,48 Z M70,36 L78,36 L75,48 L67,48 Z" />
+    <!-- Store Base Building -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M28,48 L80,48 L80,78 L28,78 Z" />
+    <!-- Shop Doorway / Counter -->
+    <path
+        android:fillColor="#064E3B"
+        android:pathData="M48,56 L60,56 L60,78 L48,78 Z" />
+    <!-- Shop Window Left -->
+    <path
+        android:fillColor="#A7F3D0"
+        android:pathData="M33,54 L43,54 L43,66 L33,66 Z" />
+    <!-- Shop Window Right / Register -->
+    <path
+        android:fillColor="#A7F3D0"
+        android:pathData="M65,54 L75,54 L75,66 L65,66 Z" />
+    <!-- Cash / Coin Badge -->
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M54,28 A6,6 0 1,0 54.01,28 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M53,25 L55,25 L55,31 L53,31 Z M51.5,27 L56.5,27" />
+</vector>
