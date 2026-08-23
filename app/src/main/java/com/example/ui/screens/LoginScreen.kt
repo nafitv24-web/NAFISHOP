@@ -261,8 +261,10 @@ fun LoginScreen(
                     Button(
                         onClick = {
                             focusManager.clearFocus()
-                            if (email.isBlank() || !email.contains("@")) {
-                                errorMessage = if (language == "bn") "অনুগ্রহ করে সঠিক জিমেইল আইডি দিন!" else "Please enter a valid Gmail address!"
+                            val cleanEmail = email.trim().lowercase()
+                            val emailRegex = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$".toRegex()
+                            if (cleanEmail.isBlank() || !cleanEmail.matches(emailRegex)) {
+                                errorMessage = if (language == "bn") "অনুগ্রহ করে সঠিক জিমেইল আইডি দিন (যেমন: name@gmail.com)!" else "Please enter a valid Gmail address (e.g. name@gmail.com)!"
                                 return@Button
                             }
                             if (password.length < 4) {

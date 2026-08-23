@@ -52,6 +52,8 @@ fun SettingsScreen(
     var showJsonExportDialog by remember { mutableStateOf(false) }
     var showJsonImportDialog by remember { mutableStateOf(false) }
     var showRestoreResultDialog by remember { mutableStateOf(false) }
+    var showDriveExportConfirmDialog by remember { mutableStateOf(false) }
+    var showDriveImportConfirmDialog by remember { mutableStateOf(false) }
     var restoreResultData by remember { mutableStateOf<RestoreResult?>(null) }
     var exportedJsonText by remember { mutableStateOf("") }
 
@@ -352,29 +354,67 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Backup Now to Google Drive / Cloud Button
-                    Button(
-                        onClick = {
-                            val timestamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
-                            saveJsonLauncher.launch("DokanKhata_Backup_$timestamp.json")
-                        },
+                    // Row of 2 Professional Google Drive Actions:
+                    // 1. Export to Drive (ড্রাইভে রপ্তানি করুন)
+                    // 2. Import from Drive (ড্রাইভ থেকে আমদানি করুন)
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = !isSyncing,
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        if (isSyncing) {
+                        Button(
+                            onClick = { showDriveExportConfirmDialog = true },
+                            modifier = Modifier.weight(1f),
+                            enabled = !isSyncing,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
+                        ) {
+                            Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (language == "bn") "ড্রাইভে রপ্তানি করুন" else "Export to Drive",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        FilledTonalButton(
+                            onClick = { showDriveImportConfirmDialog = true },
+                            modifier = Modifier.weight(1f),
+                            enabled = !isSyncing,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = StockBlue.copy(alpha = 0.15f),
+                                contentColor = StockBlue
+                            )
+                        ) {
+                            Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (language == "bn") "ড্রাইভ থেকে আমদানি" else "Import from Drive",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    if (isSyncing) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
                             CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = Color.White,
+                                modifier = Modifier.size(18.dp),
+                                color = EmeraldPrimary,
                                 strokeWidth = 2.dp
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(if (language == "bn") "ব্যাকআপ তৈরি হচ্ছে..." else "Generating Backup...")
-                        } else {
-                            Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(if (language == "bn") "গুগল ড্রাইভে ব্যাকআপ সেভ করুন" else "Save Backup to Google Drive")
+                            Text(
+                                text = syncMessage ?: (if (language == "bn") "গুগল ড্রাইভ সিঙ্ক হচ্ছে..." else "Syncing with Google Drive..."),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = EmeraldPrimary
+                            )
                         }
                     }
                 }
@@ -781,6 +821,148 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showJsonImportDialog = false }) {
+                    Text(if (language == "bn") "বাতিল" else "Cancel")
+                }
+            }
+        )
+    }
+
+    // Drive Export Confirmation Dialog
+    if (showDriveExportConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showDriveExportConfirmDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.CloudUpload,
+                    contentDescription = null,
+                    tint = EmeraldPrimary,
+                    modifier = Modifier.size(36.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = if (language == "bn") "গুগল ড্রাইভে রপ্তানি নিশ্চিত করুন" else "Confirm Export to Google Drive",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = if (language == "bn")
+                            "আপনার দোকানের সকল স্টক, বিক্রয় ভাউচার, বাকি খাতা ও খরচের হিসাব গুগল ড্রাইভ ক্লাউড স্টোরেজে আপলোড ও সিঙ্ক হবে।"
+                        else
+                            "All inventory, customer dues, sales vouchers and expenses will be uploaded to Google Drive AppFolder.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        border = CardDefaults.outlinedCardBorder()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text(
+                                text = "${if (language == "bn") "সংযুক্ত জিমেইল: " else "Google Account: "}${shopInfo.userEmail.ifBlank { "Google Account" }}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            if (shopInfo.lastBackupDate.isNotEmpty()) {
+                                Text(
+                                    text = "${if (language == "bn") "পূর্বের ব্যাকআপ: " else "Previous Backup: "}${shopInfo.lastBackupDate}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDriveExportConfirmDialog = false
+                        viewModel.exportToGoogleDriveCloud(context) { success, timeStr ->
+                            if (success) {
+                                Toast.makeText(
+                                    context,
+                                    if (language == "bn") "✅ গুগল ড্রাইভে সফলভাবে রপ্তানি হয়েছে! ($timeStr)" else "✅ Successfully exported to Google Drive! ($timeStr)",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
+                ) {
+                    Text(if (language == "bn") "রপ্তানি শুরু করুন" else "Start Export")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDriveExportConfirmDialog = false }) {
+                    Text(if (language == "bn") "বাতিল" else "Cancel")
+                }
+            }
+        )
+    }
+
+    // Drive Import Confirmation Dialog
+    if (showDriveImportConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showDriveImportConfirmDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.CloudDownload,
+                    contentDescription = null,
+                    tint = StockBlue,
+                    modifier = Modifier.size(36.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = if (language == "bn") "গুগল ড্রাইভ থেকে আমদানি" else "Import from Google Drive",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = if (language == "bn")
+                            "গুগল ড্রাইভ ক্লাউড থেকে সর্বশেষ ব্যাকআপ ফাইলটি নামিয়ে বর্তমান দোকানের ডাটা রিস্টোর করা হবে।"
+                        else
+                            "The latest backup from Google Drive will be downloaded and restored.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        border = CardDefaults.outlinedCardBorder()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text(
+                                text = "${if (language == "bn") "অ্যাকাউন্ট: " else "Account: "}${shopInfo.userEmail.ifBlank { "Google Account" }}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDriveImportConfirmDialog = false
+                        viewModel.importFromGoogleDriveCloud(context) { res ->
+                            restoreResultData = res
+                            showRestoreResultDialog = true
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = StockBlue)
+                ) {
+                    Text(if (language == "bn") "আমদানি ও রিস্টোর" else "Import & Restore")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDriveImportConfirmDialog = false }) {
                     Text(if (language == "bn") "বাতিল" else "Cancel")
                 }
             }

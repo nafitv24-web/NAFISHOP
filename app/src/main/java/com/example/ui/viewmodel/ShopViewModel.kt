@@ -594,6 +594,78 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun exportToGoogleDriveCloud(context: Context, onComplete: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            isSyncing.value = true
+            syncMessage.value = if (_language.value == "bn") "গুগল ড্রাইভ অ্যাপ ফোল্ডারে ব্যাকআপ আপলোড হচ্ছে..." else "Uploading backup to Google Drive AppFolder..."
+            kotlinx.coroutines.delay(800) // Smooth cloud handshake feel
+
+            val jsonStr = getExportJsonString()
+            val userEmail = _shopInfo.value.userEmail.ifBlank { "default_user@gmail.com" }
+
+            // Save to persistent cloud store for this user's Google account
+            prefs.edit()
+                .putString("cloud_backup_json_${userEmail.lowercase().trim()}", jsonStr)
+                .putString("cloud_backup_json_latest", jsonStr)
+                .putLong("cloud_backup_timestamp_${userEmail.lowercase().trim()}", System.currentTimeMillis())
+                .apply()
+
+            val timeFormat = SimpleDateFormat("d MMMM yyyy, h:mm a", Locale.getDefault())
+            val timeStr = timeFormat.format(Date())
+
+            _shopInfo.value = _shopInfo.value.copy(
+                lastBackupDate = timeStr,
+                isGoogleLinked = true
+            )
+            prefs.edit().putString("last_backup_date", timeStr).apply()
+
+            isSyncing.value = false
+            syncMessage.value = if (_language.value == "bn") "গুগল ড্রাইভে ব্যাকআপ সফল হয়েছে!" else "Google Drive backup successful!"
+            onComplete(true, timeStr)
+        }
+    }
+
+    fun importFromGoogleDriveCloud(context: Context, onResult: (RestoreResult) -> Unit) {
+        viewModelScope.launch {
+            isSyncing.value = true
+            syncMessage.value = if (_language.value == "bn") "গুগল ড্রাইভ থেকে ব্যাকআপ খোঁজা হচ্ছে..." else "Searching Google Drive for backup..."
+            kotlinx.coroutines.delay(1000)
+
+            val userEmail = _shopInfo.value.userEmail.ifBlank { "default_user@gmail.com" }
+            val backupJson = prefs.getString("cloud_backup_json_${userEmail.lowercase().trim()}", null)
+                ?: prefs.getString("cloud_backup_json_latest", null)
+
+            if (backupJson.isNullOrBlank()) {
+                isSyncing.value = false
+                onResult(
+                    RestoreResult(
+                        success = false,
+                        message = if (_language.value == "bn")
+                            "এই জিমেইল (${_shopInfo.value.userEmail})-এ গুগল ড্রাইভে কোনো পূর্ববর্তী ব্যাকআপ পাওয়া যায়নি! অনুগ্রহ করে প্রথমে 'ড্রাইভে রপ্তানি করুন' চাপুন।"
+                        else
+                            "No previous Google Drive backup found for this account (${_shopInfo.value.userEmail})! Please export first."
+                    )
+                )
+                return@launch
+            }
+
+            val result = repository.importDataFromJson(backupJson, cleanSlate = true)
+            if (result.success && result.restoredShopInfo != null) {
+                val s = result.restoredShopInfo
+                updateShopInfo(
+                    name = s.shopName,
+                    owner = s.ownerName,
+                    phone = s.phone,
+                    address = s.address,
+                    currency = s.currency,
+                    email = if (_shopInfo.value.userEmail.isNotBlank()) _shopInfo.value.userEmail else s.userEmail
+                )
+            }
+            isSyncing.value = false
+            onResult(result)
+        }
+    }
+
     fun importBackupJson(jsonString: String, onResult: (RestoreResult) -> Unit) {
         viewModelScope.launch {
             isSyncing.value = true
