@@ -10,6 +10,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -223,7 +225,7 @@ fun SettingsScreen(
                             border = CardDefaults.outlinedCardBorder()
                         ) {
                             Text(
-                                text = if (language == "bn") "সার্ভার ছাড়া সুরক্ষিত" else "Serverless & Private",
+                                text = if (language == "bn") "ব্যক্তিগত ও সুরক্ষিত" else "Private & Secure",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = ProfitGreen,
                                 fontWeight = FontWeight.Bold,
@@ -238,38 +240,50 @@ fun SettingsScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(Color(0xFFF1F5F9), RoundedCornerShape(12.dp))
+                            .clickable { showEditProfileDialog = true }
                             .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier = Modifier
                                 .size(40.dp)
-                                .background(Color(0xFFE2E8F0), CircleShape),
+                                .background(if (shopInfo.userEmail.isNotBlank()) Color(0xFFDCFCE7) else Color(0xFFE2E8F0), CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.AccountCircle, contentDescription = null, tint = Color(0xFF475569), modifier = Modifier.size(28.dp))
+                            Icon(
+                                if (shopInfo.userEmail.isNotBlank()) Icons.Default.Mail else Icons.Default.AccountCircle,
+                                contentDescription = null,
+                                tint = if (shopInfo.userEmail.isNotBlank()) ProfitGreen else Color(0xFF475569),
+                                modifier = Modifier.size(24.dp)
+                            )
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = shopInfo.userEmail,
+                                text = if (shopInfo.userEmail.isNotBlank()) shopInfo.userEmail else (if (language == "bn") "আপনার জিমেইল যুক্ত করুন" else "Add your Gmail Account"),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF1E293B)
+                                color = if (shopInfo.userEmail.isNotBlank()) Color(0xFF1E293B) else MaterialTheme.colorScheme.primary
                             )
                             Text(
-                                text = "${if (language == "bn") "সর্বশেষ ক্লাউড ব্যাকআপ: " else "Last Backup: "}${shopInfo.lastBackupDate}",
+                                text = if (shopInfo.lastBackupDate.isNotEmpty()) {
+                                    "${if (language == "bn") "সর্বশেষ ক্লাউড ব্যাকআপ: " else "Last Backup: "}${shopInfo.lastBackupDate}"
+                                } else {
+                                    if (language == "bn") "ট্যাপ করে আপনার নিজস্ব জিমেইল সেট করুন" else "Tap to set your Gmail for Drive backup"
+                                },
                                 style = MaterialTheme.typography.labelSmall,
-                                color = ProfitGreen,
+                                color = if (shopInfo.lastBackupDate.isNotEmpty()) ProfitGreen else Color(0xFF64748B),
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
-                        Icon(
-                            Icons.Default.CheckCircle,
-                            contentDescription = "Connected",
-                            tint = ProfitGreen,
-                            modifier = Modifier.size(20.dp)
-                        )
+                        IconButton(onClick = { showEditProfileDialog = true }) {
+                            Icon(
+                                Icons.Default.Edit,
+                                contentDescription = "Edit Email",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -289,7 +303,7 @@ fun SettingsScreen(
                                 strokeWidth = 2.dp
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(if (language == "bn") "ব্যাকআপ হচ্ছে..." else "Backing up...")
+                            Text(if (language == "bn") "ড্রাইভে ব্যাকআপ হচ্ছে..." else "Backing up to Drive...")
                         } else {
                             Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(8.dp))
@@ -437,8 +451,8 @@ fun SettingsScreen(
             shopInfo = shopInfo,
             language = language,
             onDismiss = { showEditProfileDialog = false },
-            onSave = { name, owner, phone, address, curr ->
-                viewModel.updateShopInfo(name, owner, phone, address, curr)
+            onSave = { name, owner, phone, address, curr, email ->
+                viewModel.updateShopInfo(name, owner, phone, address, curr, email)
                 showEditProfileDialog = false
             }
         )
@@ -539,10 +553,11 @@ fun EditProfileDialog(
     shopInfo: com.example.data.model.ShopInfo,
     language: String,
     onDismiss: () -> Unit,
-    onSave: (String, String, String, String, String) -> Unit
+    onSave: (String, String, String, String, String, String) -> Unit
 ) {
     var shopName by remember { mutableStateOf(shopInfo.shopName) }
     var ownerName by remember { mutableStateOf(shopInfo.ownerName) }
+    var userEmail by remember { mutableStateOf(shopInfo.userEmail) }
     var phone by remember { mutableStateOf(shopInfo.phone) }
     var address by remember { mutableStateOf(shopInfo.address) }
     var currency by remember { mutableStateOf(shopInfo.currency) }
@@ -552,9 +567,13 @@ fun EditProfileDialog(
             shape = RoundedCornerShape(18.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
-            Column(modifier = Modifier.padding(20.dp)) {
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
                 Text(
-                    text = if (language == "bn") "দোকানের প্রোফাইল সম্পাদনা" else "Edit Shop Profile",
+                    text = if (language == "bn") "দোকান ও প্রোফাইল তথ্য" else "Shop & Profile Details",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -575,8 +594,22 @@ fun EditProfileDialog(
                 OutlinedTextField(
                     value = ownerName,
                     onValueChange = { ownerName = it },
-                    label = { Text(if (language == "bn") "মালিকের নাম" else "Owner Name") },
+                    label = { Text(if (language == "bn") "আপনার নাম / মালিকের নাম" else "Your / Owner Name") },
                     singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = userEmail,
+                    onValueChange = { userEmail = it },
+                    label = { Text(if (language == "bn") "আপনার নিজস্ব জিমেইল (Gmail)" else "Your Gmail (for Backup)") },
+                    placeholder = { Text("example@gmail.com") },
+                    singleLine = true,
+                    leadingIcon = {
+                        Icon(Icons.Default.Mail, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    },
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -623,7 +656,7 @@ fun EditProfileDialog(
                     Button(
                         onClick = {
                             if (shopName.isNotBlank()) {
-                                onSave(shopName, ownerName, phone, address, currency)
+                                onSave(shopName, ownerName, phone, address, currency, userEmail)
                             }
                         },
                         enabled = shopName.isNotBlank()

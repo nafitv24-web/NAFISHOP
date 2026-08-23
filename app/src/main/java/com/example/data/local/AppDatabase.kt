@@ -54,11 +54,7 @@ abstract class AppDatabase : RoomDatabase() {
         ) : RoomDatabase.Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
                 super.onCreate(db)
-                INSTANCE?.let { database ->
-                    scope.launch(Dispatchers.IO) {
-                        populateInitialData(database)
-                    }
-                }
+                // Start with a clean slate (no mock or demo data)
             }
         }
 

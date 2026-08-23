@@ -114,11 +114,12 @@ object DatabaseBackupHelper {
     }
 
     /**
-     * Directly opens Gmail or Mail client with the backup file attached.
+     * Directly opens Gmail or Mail client with the backup file attached to user's email.
      */
     fun shareViaEmail(
         context: Context,
         file: File,
+        recipientEmail: String = "",
         subject: String = "Shop Database Backup / দোকান খাতা ব্যাকআপ",
         body: String = "দোকানের সকল পণ্যের হিসাব, বিক্রয় ও বাকি খাতার ডাটাবেস ব্যাকআপ ফাইল নিচে সংযুক্ত করা হয়েছে।"
     ) {
@@ -128,6 +129,9 @@ object DatabaseBackupHelper {
 
             val emailIntent = Intent(Intent.ACTION_SEND).apply {
                 type = "message/rfc822"
+                if (recipientEmail.isNotBlank()) {
+                    putExtra(Intent.EXTRA_EMAIL, arrayOf(recipientEmail))
+                }
                 putExtra(Intent.EXTRA_SUBJECT, subject)
                 putExtra(Intent.EXTRA_TEXT, body)
                 putExtra(Intent.EXTRA_STREAM, fileUri)

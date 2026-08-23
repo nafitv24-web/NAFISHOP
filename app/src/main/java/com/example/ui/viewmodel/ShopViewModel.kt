@@ -50,14 +50,14 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _shopInfo = MutableStateFlow(
         ShopInfo(
-            shopName = prefs.getString("shop_name", "ভাই ভাই স্টোর") ?: "ভাই ভাই স্টোর",
-            ownerName = prefs.getString("shop_owner", "মোঃ রফিকুল ইসলাম") ?: "মোঃ রফিকুল ইসলাম",
-            phone = prefs.getString("shop_phone", "01712345678") ?: "01712345678",
-            address = prefs.getString("shop_address", "নিউ মার্কেট, ঢাকা") ?: "নিউ মার্কেট, ঢাকা",
+            shopName = prefs.getString("shop_name", "আমার দোকান") ?: "আমার দোকান",
+            ownerName = prefs.getString("shop_owner", "দোকানদার") ?: "দোকানদার",
+            phone = prefs.getString("shop_phone", "") ?: "",
+            address = prefs.getString("shop_address", "") ?: "",
             currency = prefs.getString("shop_currency", "৳") ?: "৳",
-            mainBalance = prefs.getFloat("main_balance", 25000f).toDouble(),
-            userEmail = "nafitv24@gmail.com",
-            isGoogleLinked = true
+            mainBalance = prefs.getFloat("main_balance", 0f).toDouble(),
+            userEmail = prefs.getString("user_email", "") ?: "",
+            isGoogleLinked = prefs.getBoolean("is_google_linked", false)
         )
     )
     val shopInfo: StateFlow<ShopInfo> = _shopInfo.asStateFlow()
@@ -152,13 +152,15 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         prefs.edit().putString("app_language", next).apply()
     }
 
-    fun updateShopInfo(name: String, owner: String, phone: String, address: String, currency: String) {
+    fun updateShopInfo(name: String, owner: String, phone: String, address: String, currency: String, email: String? = null) {
+        val userEmail = email ?: _shopInfo.value.userEmail
         _shopInfo.value = _shopInfo.value.copy(
             shopName = name,
             ownerName = owner,
             phone = phone,
             address = address,
-            currency = currency
+            currency = currency,
+            userEmail = userEmail
         )
         prefs.edit()
             .putString("shop_name", name)
@@ -166,6 +168,19 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             .putString("shop_phone", phone)
             .putString("shop_address", address)
             .putString("shop_currency", currency)
+            .putString("user_email", userEmail)
+            .apply()
+    }
+
+    fun updateUserEmail(email: String) {
+        val isLinked = email.isNotBlank()
+        _shopInfo.value = _shopInfo.value.copy(
+            userEmail = email,
+            isGoogleLinked = isLinked
+        )
+        prefs.edit()
+            .putString("user_email", email)
+            .putBoolean("is_google_linked", isLinked)
             .apply()
     }
 
@@ -411,7 +426,8 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                     com.example.util.DatabaseBackupHelper.shareViaEmail(
                         context = context,
                         file = dbFile,
-                        subject = "দোকান খাতা SQLite ডাটাবেস ব্যাকআপ (${shopInfo.value.shopName})",
+                        recipientEmail = _shopInfo.value.userEmail,
+                        subject = "দোকান খাতা SQLite ডাটাবেস ব্যাকআপ (${_shopInfo.value.shopName})",
                         body = "দোকানের সকল পণ্যের হিসাব, বিক্রয়, ক্যাশ ও বাকি খাতার SQLite ডাটাবেস ফাইল (.db) নিচে সংযুক্ত করা হয়েছে।"
                     )
                 } else {
@@ -439,7 +455,8 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                     com.example.util.DatabaseBackupHelper.shareViaEmail(
                         context = context,
                         file = jsonFile,
-                        subject = "দোকান খাতা JSON ব্যাকআপ (${shopInfo.value.shopName})",
+                        recipientEmail = _shopInfo.value.userEmail,
+                        subject = "দোকান খাতা JSON ব্যাকআপ (${_shopInfo.value.shopName})",
                         body = "দোকান খাতার সকল ডেটা JSON ফাইল আকারে সংযুক্ত করা হলো।"
                     )
                 } else {
