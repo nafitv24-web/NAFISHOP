@@ -147,4 +147,98 @@ object DatabaseBackupHelper {
             shareBackupFile(context, file, subject, body)
         }
     }
+
+    /**
+     * Writes text (JSON) to a user-selected SAF Document Uri (e.g. Downloads or Google Drive folder).
+     */
+    suspend fun writeTextToUri(context: Context, uri: Uri, text: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            context.contentResolver.openOutputStream(uri)?.use { output ->
+                output.write(text.toByteArray(Charsets.UTF_8))
+                output.flush()
+            }
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    /**
+     * Writes SQLite DB binary to a user-selected SAF Document Uri.
+     */
+    suspend fun writeDatabaseToUri(context: Context, database: AppDatabase, uri: Uri): Boolean = withContext(Dispatchers.IO) {
+        try {
+            try {
+                val db = database.openHelper.writableDatabase
+                val cursor = db.query("PRAGMA wal_checkpoint(FULL)")
+                cursor.close()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+
+            val originDbFile = context.getDatabasePath(DB_NAME)
+            if (!originDbFile.exists()) return@withContext false
+
+            context.contentResolver.openOutputStream(uri)?.use { output ->
+                FileInputStream(originDbFile).use { input ->
+                    input.copyTo(output)
+                }
+                output.flush()
+            }
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    /**
+     * Reads text from any user-selected Document Uri (e.g. from Google Drive, Downloads, WhatsApp).
+     */
+    suspend fun readTextFromUri(context: Context, uri: Uri): String? = withContext(Dispatchers.IO) {
+        try {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                input.bufferedReader(Charsets.UTF_8).use { reader ->
+                    reader.readText()
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    /**
+     * Restores SQLite DB file directly from a user-selected Uri.
+     */
+    suspend fun restoreDatabaseFromFileUri(context: Context, database: AppDatabase, uri: Uri): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val targetDb = context.getDatabasePath(DB_NAME)
+
+            // Close current Room database helper if possible
+            try {
+                database.close()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+
+            // Clean up temporary WAL files
+            val walFile = File(targetDb.parentFile, "$DB_NAME-wal")
+            val shmFile = File(targetDb.parentFile, "$DB_NAME-shm")
+            if (walFile.exists()) walFile.delete()
+            if (shmFile.exists()) shmFile.delete()
+
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(targetDb).use { output ->
+                    input.copyTo(output)
+                    output.flush()
+                }
+            }
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
 }

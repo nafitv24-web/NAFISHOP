@@ -120,3 +120,16 @@ data class ShopInfo(
     val isGoogleLinked: Boolean = true,
     val lastBackupDate: String = "আজ, ৩:৪৫ PM"
 )
+
+data class RestoreResult(
+    val success: Boolean,
+    val message: String,
+    val productCount: Int = 0,
+    val customerCount: Int = 0,
+    val transactionCount: Int = 0,
+    val expenseCount: Int = 0,
+    val dueLogCount: Int = 0,
+    val cashLogCount: Int = 0,
+    val restoredShopInfo: ShopInfo? = null
+)
+

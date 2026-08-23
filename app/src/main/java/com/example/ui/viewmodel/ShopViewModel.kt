@@ -2,6 +2,7 @@ package com.example.ui.viewmodel
 
 import android.app.Application
 import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.local.AppDatabase
@@ -478,16 +479,104 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             productsList = products.value,
             customersList = customers.value,
             expensesList = expenses.value,
-            transactionsList = allTransactions.value
+            transactionsList = allTransactions.value,
+            dueLogsList = dueLogs.value,
+            cashLogsList = cashLogs.value,
+            shopInfo = _shopInfo.value
         )
     }
 
-    fun importBackupJson(jsonString: String, onResult: (Boolean) -> Unit) {
+    fun saveJsonBackupToUri(context: Context, uri: Uri, onResult: (Boolean) -> Unit) {
         viewModelScope.launch {
             isSyncing.value = true
-            val success = repository.importDataFromJson(jsonString)
+            val jsonStr = getExportJsonString()
+            val success = com.example.util.DatabaseBackupHelper.writeTextToUri(context, uri, jsonStr)
             isSyncing.value = false
+            if (success) {
+                val timeStr = SimpleDateFormat("h:mm a, d MMM", Locale.getDefault()).format(Date())
+                _shopInfo.value = _shopInfo.value.copy(lastBackupDate = timeStr)
+                prefs.edit().putString("last_backup_date", timeStr).apply()
+            }
             onResult(success)
+        }
+    }
+
+    fun saveDatabaseBackupToUri(context: Context, uri: Uri, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            isSyncing.value = true
+            val success = com.example.util.DatabaseBackupHelper.writeDatabaseToUri(context, repository.getDatabase(), uri)
+            isSyncing.value = false
+            if (success) {
+                val timeStr = SimpleDateFormat("h:mm a, d MMM", Locale.getDefault()).format(Date())
+                _shopInfo.value = _shopInfo.value.copy(lastBackupDate = timeStr)
+                prefs.edit().putString("last_backup_date", timeStr).apply()
+            }
+            onResult(success)
+        }
+    }
+
+    fun restoreFromUri(context: Context, uri: Uri, onResult: (RestoreResult) -> Unit) {
+        viewModelScope.launch {
+            isSyncing.value = true
+            syncMessage.value = if (_language.value == "bn") "ব্যাকআপ ফাইল বিশ্লেষণ করা হচ্ছে..." else "Analyzing backup file..."
+
+            // Try reading as text first to see if it's JSON
+            val textContent = com.example.util.DatabaseBackupHelper.readTextFromUri(context, uri)
+            if (textContent != null && textContent.trim().startsWith("{") && textContent.contains("appName")) {
+                val result = repository.importDataFromJson(textContent, cleanSlate = true)
+                if (result.success && result.restoredShopInfo != null) {
+                    val s = result.restoredShopInfo
+                    updateShopInfo(
+                        name = s.shopName,
+                        owner = s.ownerName,
+                        phone = s.phone,
+                        address = s.address,
+                        currency = s.currency,
+                        email = s.userEmail
+                    )
+                }
+                isSyncing.value = false
+                onResult(result)
+            } else {
+                // Try as SQLite binary DB file
+                val dbSuccess = com.example.util.DatabaseBackupHelper.restoreDatabaseFromFileUri(context, repository.getDatabase(), uri)
+                isSyncing.value = false
+                if (dbSuccess) {
+                    onResult(
+                        RestoreResult(
+                            success = true,
+                            message = if (_language.value == "bn") "SQLite ডাটাবেস ফাইল সফলভাবে রিস্টোর হয়েছে!" else "SQLite database restored successfully!"
+                        )
+                    )
+                } else {
+                    onResult(
+                        RestoreResult(
+                            success = false,
+                            message = if (_language.value == "bn") "ফাইলটি পড়া সম্ভব হয়নি। সঠিক .json বা .db ফাইল নির্বাচন করুন।" else "Failed to read file. Please select a valid .json or .db backup file."
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    fun importBackupJson(jsonString: String, onResult: (RestoreResult) -> Unit) {
+        viewModelScope.launch {
+            isSyncing.value = true
+            val result = repository.importDataFromJson(jsonString, cleanSlate = true)
+            if (result.success && result.restoredShopInfo != null) {
+                val s = result.restoredShopInfo
+                updateShopInfo(
+                    name = s.shopName,
+                    owner = s.ownerName,
+                    phone = s.phone,
+                    address = s.address,
+                    currency = s.currency,
+                    email = s.userEmail
+                )
+            }
+            isSyncing.value = false
+            onResult(result)
         }
     }
 }

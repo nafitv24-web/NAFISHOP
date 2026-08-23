@@ -300,12 +300,28 @@ class ShopRepository(private val database: AppDatabase) {
         productsList: List<Product>,
         customersList: List<Customer>,
         expensesList: List<Expense>,
-        transactionsList: List<TransactionRecord>
+        transactionsList: List<TransactionRecord>,
+        dueLogsList: List<DueLog> = emptyList(),
+        cashLogsList: List<CashLog> = emptyList(),
+        shopInfo: ShopInfo? = null
     ): String = withContext(Dispatchers.Default) {
         val root = JSONObject()
         root.put("appName", "ShopKhata")
-        root.put("version", "1.0")
+        root.put("version", "2.0")
         root.put("exportTime", System.currentTimeMillis())
+
+        shopInfo?.let { s ->
+            val sObj = JSONObject().apply {
+                put("shopName", s.shopName)
+                put("ownerName", s.ownerName)
+                put("phone", s.phone)
+                put("address", s.address)
+                put("currency", s.currency)
+                put("mainBalance", s.mainBalance)
+                put("userEmail", s.userEmail)
+            }
+            root.put("shopInfo", sObj)
+        }
 
         val pArray = JSONArray()
         productsList.forEach { p ->
@@ -319,6 +335,7 @@ class ShopRepository(private val database: AppDatabase) {
             o.put("unit", p.unit)
             o.put("minStockAlert", p.minStockAlert)
             o.put("imageUri", p.imageUri)
+            o.put("createdAt", p.createdAt)
             pArray.put(o)
         }
         root.put("products", pArray)
@@ -331,9 +348,24 @@ class ShopRepository(private val database: AppDatabase) {
             o.put("address", c.address)
             o.put("totalDue", c.totalDue)
             o.put("totalPurchased", c.totalPurchased)
+            o.put("lastTransactionDate", c.lastTransactionDate)
             cArray.put(o)
         }
         root.put("customers", cArray)
+
+        val dArray = JSONArray()
+        dueLogsList.forEach { d ->
+            val o = JSONObject()
+            o.put("customerId", d.customerId)
+            o.put("customerName", d.customerName)
+            o.put("customerPhone", d.customerPhone)
+            o.put("type", d.type)
+            o.put("amount", d.amount)
+            o.put("note", d.note)
+            o.put("timestamp", d.timestamp)
+            dArray.put(o)
+        }
+        root.put("dueLogs", dArray)
 
         val eArray = JSONArray()
         expensesList.forEach { e ->
@@ -347,12 +379,79 @@ class ShopRepository(private val database: AppDatabase) {
         }
         root.put("expenses", eArray)
 
+        val tArray = JSONArray()
+        transactionsList.forEach { t ->
+            val o = JSONObject()
+            o.put("type", t.type)
+            o.put("invoiceNumber", t.invoiceNumber)
+            o.put("productId", t.productId)
+            o.put("productName", t.productName)
+            o.put("quantity", t.quantity)
+            o.put("unit", t.unit)
+            o.put("unitPrice", t.unitPrice)
+            o.put("costPrice", t.costPrice)
+            o.put("totalAmount", t.totalAmount)
+            o.put("profitAmount", t.profitAmount)
+            o.put("customerName", t.customerName)
+            o.put("customerPhone", t.customerPhone)
+            o.put("paidAmount", t.paidAmount)
+            o.put("dueAmount", t.dueAmount)
+            o.put("paymentMethod", t.paymentMethod)
+            o.put("note", t.note)
+            o.put("timestamp", t.timestamp)
+            tArray.put(o)
+        }
+        root.put("transactions", tArray)
+
+        val clArray = JSONArray()
+        cashLogsList.forEach { cl ->
+            val o = JSONObject()
+            o.put("type", cl.type)
+            o.put("amount", cl.amount)
+            o.put("balanceAfter", cl.balanceAfter)
+            o.put("note", cl.note)
+            o.put("timestamp", cl.timestamp)
+            clArray.put(o)
+        }
+        root.put("cashLogs", clArray)
+
         root.toString(2)
     }
 
-    suspend fun importDataFromJson(jsonStr: String): Boolean = withContext(Dispatchers.IO) {
+    suspend fun importDataFromJson(jsonStr: String, cleanSlate: Boolean = true): RestoreResult = withContext(Dispatchers.IO) {
         try {
             val root = JSONObject(jsonStr)
+            var pCount = 0
+            var cCount = 0
+            var tCount = 0
+            var eCount = 0
+            var dCount = 0
+            var clCount = 0
+
+            var restoredShopInfo: ShopInfo? = null
+            if (root.has("shopInfo")) {
+                val sObj = root.getJSONObject("shopInfo")
+                restoredShopInfo = ShopInfo(
+                    shopName = sObj.optString("shopName", "আমার দোকান"),
+                    ownerName = sObj.optString("ownerName", "দোকানদার"),
+                    phone = sObj.optString("phone", ""),
+                    address = sObj.optString("address", ""),
+                    currency = sObj.optString("currency", "৳"),
+                    mainBalance = sObj.optDouble("mainBalance", 0.0),
+                    userEmail = sObj.optString("userEmail", ""),
+                    isGoogleLinked = sObj.optString("userEmail", "").isNotBlank()
+                )
+            }
+
+            if (cleanSlate) {
+                productDao.clearAll()
+                customerDao.clearAll()
+                dueLogDao.clearAll()
+                expenseDao.clearAll()
+                transactionDao.clearAll()
+                cashLogDao.clearAll()
+            }
+
             if (root.has("products")) {
                 val pArray = root.getJSONArray("products")
                 val products = mutableListOf<Product>()
@@ -368,12 +467,14 @@ class ShopRepository(private val database: AppDatabase) {
                             stockQuantity = o.optDouble("stockQuantity", 0.0),
                             unit = o.optString("unit", "পিস"),
                             minStockAlert = o.optDouble("minStockAlert", 5.0),
-                            imageUri = o.optString("imageUri", "")
+                            imageUri = o.optString("imageUri", ""),
+                            createdAt = o.optLong("createdAt", System.currentTimeMillis())
                         )
                     )
                 }
                 if (products.isNotEmpty()) {
                     productDao.insertAll(products)
+                    pCount = products.size
                 }
             }
 
@@ -388,19 +489,132 @@ class ShopRepository(private val database: AppDatabase) {
                             phone = o.optString("phone", ""),
                             address = o.optString("address", ""),
                             totalDue = o.optDouble("totalDue", 0.0),
-                            totalPurchased = o.optDouble("totalPurchased", 0.0)
+                            totalPurchased = o.optDouble("totalPurchased", 0.0),
+                            lastTransactionDate = o.optLong("lastTransactionDate", System.currentTimeMillis())
                         )
                     )
                 }
                 if (customers.isNotEmpty()) {
                     customerDao.insertAll(customers)
+                    cCount = customers.size
                 }
             }
 
-            true
+            if (root.has("dueLogs")) {
+                val dArray = root.getJSONArray("dueLogs")
+                val dueLogs = mutableListOf<DueLog>()
+                for (i in 0 until dArray.length()) {
+                    val o = dArray.getJSONObject(i)
+                    dueLogs.add(
+                        DueLog(
+                            customerId = o.optLong("customerId", 0L),
+                            customerName = o.optString("customerName", ""),
+                            customerPhone = o.optString("customerPhone", ""),
+                            type = o.optString("type", "DUE_GIVEN"),
+                            amount = o.optDouble("amount", 0.0),
+                            note = o.optString("note", ""),
+                            timestamp = o.optLong("timestamp", System.currentTimeMillis())
+                        )
+                    )
+                }
+                if (dueLogs.isNotEmpty()) {
+                    dueLogDao.insertAll(dueLogs)
+                    dCount = dueLogs.size
+                }
+            }
+
+            if (root.has("expenses")) {
+                val eArray = root.getJSONArray("expenses")
+                val expenses = mutableListOf<Expense>()
+                for (i in 0 until eArray.length()) {
+                    val o = eArray.getJSONObject(i)
+                    expenses.add(
+                        Expense(
+                            title = o.optString("title", "Expense"),
+                            category = o.optString("category", "অন্যান্য"),
+                            amount = o.optDouble("amount", 0.0),
+                            timestamp = o.optLong("timestamp", System.currentTimeMillis()),
+                            note = o.optString("note", "")
+                        )
+                    )
+                }
+                if (expenses.isNotEmpty()) {
+                    expenseDao.insertAll(expenses)
+                    eCount = expenses.size
+                }
+            }
+
+            if (root.has("transactions")) {
+                val tArray = root.getJSONArray("transactions")
+                val transactions = mutableListOf<TransactionRecord>()
+                for (i in 0 until tArray.length()) {
+                    val o = tArray.getJSONObject(i)
+                    transactions.add(
+                        TransactionRecord(
+                            type = o.optString("type", "SALE"),
+                            invoiceNumber = o.optString("invoiceNumber", ""),
+                            productId = o.optLong("productId", 0L),
+                            productName = o.optString("productName", ""),
+                            quantity = o.optDouble("quantity", 1.0),
+                            unit = o.optString("unit", "পিস"),
+                            unitPrice = o.optDouble("unitPrice", 0.0),
+                            costPrice = o.optDouble("costPrice", 0.0),
+                            totalAmount = o.optDouble("totalAmount", 0.0),
+                            profitAmount = o.optDouble("profitAmount", 0.0),
+                            customerName = o.optString("customerName", ""),
+                            customerPhone = o.optString("customerPhone", ""),
+                            paidAmount = o.optDouble("paidAmount", 0.0),
+                            dueAmount = o.optDouble("dueAmount", 0.0),
+                            paymentMethod = o.optString("paymentMethod", "CASH"),
+                            note = o.optString("note", ""),
+                            timestamp = o.optLong("timestamp", System.currentTimeMillis())
+                        )
+                    )
+                }
+                if (transactions.isNotEmpty()) {
+                    transactionDao.insertAllTransactions(transactions)
+                    tCount = transactions.size
+                }
+            }
+
+            if (root.has("cashLogs")) {
+                val clArray = root.getJSONArray("cashLogs")
+                val cashLogs = mutableListOf<CashLog>()
+                for (i in 0 until clArray.length()) {
+                    val o = clArray.getJSONObject(i)
+                    cashLogs.add(
+                        CashLog(
+                            type = o.optString("type", "DAY_END_CLOSING"),
+                            amount = o.optDouble("amount", 0.0),
+                            balanceAfter = o.optDouble("balanceAfter", 0.0),
+                            note = o.optString("note", ""),
+                            timestamp = o.optLong("timestamp", System.currentTimeMillis())
+                        )
+                    )
+                }
+                if (cashLogs.isNotEmpty()) {
+                    cashLogDao.insertAll(cashLogs)
+                    clCount = cashLogs.size
+                }
+            }
+
+            RestoreResult(
+                success = true,
+                message = "সফলভাবে রিস্টোর হয়েছে!",
+                productCount = pCount,
+                customerCount = cCount,
+                transactionCount = tCount,
+                expenseCount = eCount,
+                dueLogCount = dCount,
+                cashLogCount = clCount,
+                restoredShopInfo = restoredShopInfo
+            )
         } catch (e: Exception) {
             e.printStackTrace()
-            false
+            RestoreResult(
+                success = false,
+                message = "রিস্টোর ব্যর্থ: ${e.localizedMessage ?: "ফাইলের তথ্য সঠিক নয়"}"
+            )
         }
     }
 }

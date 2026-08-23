@@ -41,6 +41,9 @@ interface ProductDao {
 
     @Query("UPDATE products SET stockQuantity = stockQuantity - :qty WHERE id = :productId")
     suspend fun decreaseStock(productId: Long, qty: Double)
+
+    @Query("DELETE FROM products")
+    suspend fun clearAll()
 }
 
 @Dao
@@ -95,6 +98,9 @@ interface CustomerDao {
 
     @Query("UPDATE customers SET totalDue = :newDue, lastTransactionDate = :time WHERE id = :customerId")
     suspend fun setCustomerDue(customerId: Long, newDue: Double, time: Long)
+
+    @Query("DELETE FROM customers")
+    suspend fun clearAll()
 }
 
 @Dao
@@ -110,6 +116,9 @@ interface DueLogDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(list: List<DueLog>)
+
+    @Query("DELETE FROM due_logs")
+    suspend fun clearAll()
 }
 
 @Dao
@@ -128,6 +137,9 @@ interface ExpenseDao {
 
     @Delete
     suspend fun deleteExpense(expense: Expense)
+
+    @Query("DELETE FROM expenses")
+    suspend fun clearAll()
 }
 
 @Dao
@@ -140,5 +152,8 @@ interface CashLogDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(list: List<CashLog>)
+
+    @Query("DELETE FROM cash_logs")
+    suspend fun clearAll()
 }
 

@@ -4,7 +4,10 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -27,9 +30,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.example.data.model.RestoreResult
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.ShopViewModel
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.*
 
 @Composable
 fun SettingsScreen(
@@ -45,7 +51,49 @@ fun SettingsScreen(
     var showEditProfileDialog by remember { mutableStateOf(false) }
     var showJsonExportDialog by remember { mutableStateOf(false) }
     var showJsonImportDialog by remember { mutableStateOf(false) }
+    var showRestoreResultDialog by remember { mutableStateOf(false) }
+    var restoreResultData by remember { mutableStateOf<RestoreResult?>(null) }
     var exportedJsonText by remember { mutableStateOf("") }
+
+    // File Pickers
+    val saveJsonLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri: Uri? ->
+        uri?.let {
+            viewModel.saveJsonBackupToUri(context, it) { success ->
+                if (success) {
+                    Toast.makeText(context, if (language == "bn") "JSON ব্যাকআপ সফলভাবে সেভ হয়েছে!" else "JSON backup saved successfully!", Toast.LENGTH_LONG).show()
+                } else {
+                    Toast.makeText(context, if (language == "bn") "ব্যাকআপ সেভ ব্যর্থ হয়েছে!" else "Failed to save backup!", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    val saveDbLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri: Uri? ->
+        uri?.let {
+            viewModel.saveDatabaseBackupToUri(context, it) { success ->
+                if (success) {
+                    Toast.makeText(context, if (language == "bn") "SQLite ডাটাবেস ব্যাকআপ সফলভাবে সেভ হয়েছে!" else "SQLite database backup saved successfully!", Toast.LENGTH_LONG).show()
+                } else {
+                    Toast.makeText(context, if (language == "bn") "ডাটাবেস ব্যাকআপ সেভ ব্যর্থ হয়েছে!" else "Failed to save database backup!", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    val pickRestoreFileLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            viewModel.restoreFromUri(context, it) { res ->
+                restoreResultData = res
+                showRestoreResultDialog = true
+            }
+        }
+    }
 
     LaunchedEffect(syncMessage) {
         syncMessage?.let {
@@ -213,19 +261,23 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = if (language == "bn") "গুগল ড্রাইভ ও জিমেইল ব্যাকআপ" else "Google Drive & Gmail Backup",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CloudUpload, contentDescription = null, tint = EmeraldPrimary, modifier = Modifier.size(24.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (language == "bn") "গুগল ক্লাউড ও অটো ব্যাকআপ" else "Google Cloud & Auto Backup",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                         Surface(
                             shape = RoundedCornerShape(50),
                             color = Color(0xFFDCFCE7),
                             border = CardDefaults.outlinedCardBorder()
                         ) {
                             Text(
-                                text = if (language == "bn") "ব্যক্তিগত ও সুরক্ষিত" else "Private & Secure",
+                                text = if (language == "bn") "সুরক্ষিত" else "Protected",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = ProfitGreen,
                                 fontWeight = FontWeight.Bold,
@@ -236,10 +288,11 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
+                    // User Email Row
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(Color(0xFFF1F5F9), RoundedCornerShape(12.dp))
+                            .background(Color(0xFFF8FAFC), RoundedCornerShape(12.dp))
                             .clickable { showEditProfileDialog = true }
                             .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -260,16 +313,16 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = if (shopInfo.userEmail.isNotBlank()) shopInfo.userEmail else (if (language == "bn") "আপনার জিমেইল যুক্ত করুন" else "Add your Gmail Account"),
+                                text = if (shopInfo.userEmail.isNotBlank()) shopInfo.userEmail else (if (language == "bn") "আপনার জিমেইল অ্যাকাউন্ট যুক্ত করুন" else "Add your Gmail Account"),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = if (shopInfo.userEmail.isNotBlank()) Color(0xFF1E293B) else MaterialTheme.colorScheme.primary
                             )
                             Text(
                                 text = if (shopInfo.lastBackupDate.isNotEmpty()) {
-                                    "${if (language == "bn") "সর্বশেষ ক্লাউড ব্যাকআপ: " else "Last Backup: "}${shopInfo.lastBackupDate}"
+                                    "${if (language == "bn") "সর্বশেষ ব্যাকআপ: " else "Last Backup: "}${shopInfo.lastBackupDate}"
                                 } else {
-                                    if (language == "bn") "ট্যাপ করে আপনার নিজস্ব জিমেইল সেট করুন" else "Tap to set your Gmail for Drive backup"
+                                    if (language == "bn") "ট্যাপ করে নিজস্ব জিমেইল সেট করুন" else "Tap to set your Gmail address"
                                 },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = if (shopInfo.lastBackupDate.isNotEmpty()) ProfitGreen else Color(0xFF64748B),
@@ -286,9 +339,20 @@ fun SettingsScreen(
                         }
                     }
 
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = if (language == "bn")
+                            "ℹ️ অ্যান্ড্রয়েড অটো ব্যাকআপ চালু আছে। গুগল অ্যাকাউন্টের মাধ্যমে ডাটা নিরাপদ থাকে এবং ফোন পরিবর্তন করলেও স্বয়ংক্রিয়ভাবে ফিরে আসে।"
+                        else
+                            "ℹ️ Android Auto-Backup is active. Your data stays linked to your Google Account for safe keeping.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF475569)
+                    )
+
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // 1. Google Drive Cloud Sync Button
+                    // Backup Now to Google Drive Button
                     Button(
                         onClick = { viewModel.backupToGoogleCloud() },
                         modifier = Modifier.fillMaxWidth(),
@@ -303,52 +367,18 @@ fun SettingsScreen(
                                 strokeWidth = 2.dp
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(if (language == "bn") "ড্রাইভে ব্যাকআপ হচ্ছে..." else "Backing up to Drive...")
+                            Text(if (language == "bn") "ক্লাউডে ব্যাকআপ হচ্ছে..." else "Backing up to Cloud...")
                         } else {
-                            Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(if (language == "bn") "গুগল ড্রাইভে ডাটা ব্যাকআপ নিন" else "Backup Data to Google Drive")
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // 2. Export & Share SQLite .db Database directly to Gmail / Drive
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = { viewModel.exportAndShareDatabase(context, viaEmail = true) },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(Icons.Default.Mail, contentDescription = null, modifier = Modifier.size(18.dp), tint = LossRed)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (language == "bn") "Gmail এ .db পাঠান" else "Send .db via Gmail",
-                                style = MaterialTheme.typography.labelMedium
-                            )
-                        }
-
-                        OutlinedButton(
-                            onClick = { viewModel.exportAndShareDatabase(context, viaEmail = false) },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (language == "bn") "ডাটাবেস .db শেয়ার" else "Share .db File",
-                                style = MaterialTheme.typography.labelMedium
-                            )
+                            Text(if (language == "bn") "এখনই গুগল ড্রাইভে ব্যাকআপ নিন" else "Backup to Google Drive Now")
                         }
                     }
                 }
             }
         }
 
-        // 4. Local JSON Backup & Restore
+        // 4. Save & Export Manual Backup Card
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -357,15 +387,64 @@ fun SettingsScreen(
                 border = CardDefaults.outlinedCardBorder()
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.FileDownload, contentDescription = null, tint = StockBlue, modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (language == "bn") "ম্যানুয়াল ব্যাকআপ ফাইল সংরক্ষণ ও শেয়ার" else "Manual Backup & Export",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = if (language == "bn") "JSON ফাইল ব্যাকআপ ও রিস্টোর" else "JSON Backup & Restore",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        text = if (language == "bn")
+                            "আপনার ফোনের মেমোরি, গুগল ড্রাইভ বা জিমেইলে ব্যাকআপ ফাইল সংরক্ষণ করে রাখুন।"
+                        else
+                            "Save backup files directly to phone storage, Google Drive or Email.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
                     )
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
+                    // Row 1: Save JSON & Save DB to Drive/Device via SAF
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilledTonalButton(
+                            onClick = {
+                                val timestamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
+                                saveJsonLauncher.launch("DokanKhata_Backup_$timestamp.json")
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(Icons.Default.SaveAlt, contentDescription = null, modifier = Modifier.size(18.dp), tint = EmeraldPrimary)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(if (language == "bn") "JSON ফাইল সেভ" else "Save JSON File", style = MaterialTheme.typography.labelMedium)
+                        }
+
+                        FilledTonalButton(
+                            onClick = {
+                                val timestamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
+                                saveDbLauncher.launch("DokanKhata_DB_$timestamp.db")
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(Icons.Default.Storage, contentDescription = null, modifier = Modifier.size(18.dp), tint = StockBlue)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(if (language == "bn") "ডাটাবেস .db সেভ" else "Save .db File", style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Row 2: Send via Gmail & Share
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -375,41 +454,131 @@ fun SettingsScreen(
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(10.dp)
                         ) {
-                            Icon(Icons.Default.Email, contentDescription = null, modifier = Modifier.size(18.dp), tint = StockBlue)
+                            Icon(Icons.Default.Mail, contentDescription = null, modifier = Modifier.size(18.dp), tint = LossRed)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text(if (language == "bn") "Gmail এ JSON" else "Email JSON", style = MaterialTheme.typography.labelMedium)
+                            Text(if (language == "bn") "Gmail এ পাঠান" else "Send via Gmail", style = MaterialTheme.typography.labelMedium)
                         }
 
                         OutlinedButton(
-                            onClick = {
-                                scope.launch {
-                                    exportedJsonText = viewModel.getExportJsonString()
-                                    showJsonExportDialog = true
-                                }
-                            },
+                            onClick = { viewModel.exportAndShareJsonBackup(context, viaEmail = false) },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(10.dp)
                         ) {
-                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text(if (language == "bn") "JSON দেখুন" else "View JSON", style = MaterialTheme.typography.labelMedium)
+                            Text(if (language == "bn") "ফাইল শেয়ার" else "Share File", style = MaterialTheme.typography.labelMedium)
                         }
+                    }
 
-                        OutlinedButton(
-                            onClick = { showJsonImportDialog = true },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(Icons.Default.Upload, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(if (language == "bn") "রিস্টোর" else "Restore", style = MaterialTheme.typography.labelMedium)
-                        }
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // View JSON text button
+                    OutlinedButton(
+                        onClick = {
+                            scope.launch {
+                                exportedJsonText = viewModel.getExportJsonString()
+                                showJsonExportDialog = true
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(Icons.Default.Code, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(if (language == "bn") "ব্যাকআপ JSON কোড দেখুন ও কপি করুন" else "View & Copy Backup JSON Code", style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }
         }
 
-        // 5. About App Card
+        // 5. RESTORE DATA (রিস্টোর করুন - নতুন ফোন বা রি-ইন্সটল এর পর)
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = CardDefaults.outlinedCardBorder()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.SettingsBackupRestore, contentDescription = null, tint = EmeraldPrimary, modifier = Modifier.size(26.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (language == "bn") "ডাটা ফিরিয়ে আনুন (Restore Data)" else "Restore Data",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFFEFF6FF),
+                        border = CardDefaults.outlinedCardBorder()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Icon(Icons.Default.Info, contentDescription = null, tint = StockBlue, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (language == "bn")
+                                    "অ্যাপ আনইন্সটল করার পর পুনরায় ইন্সটল করলে অথবা নতুন ফোনে আগের ডাটা ফেরত আনতে পূর্বের সংরক্ষিত .json বা .db ব্যাকআপ ফাইলটি নির্বাচন করুন।"
+                                else
+                                    "To restore all products, customers, transactions and settings after re-installing the app or on a new phone, pick your backup file (.json or .db).",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF1E3A8A)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Primary Restore Button - Pick File from Storage / Drive
+                    Button(
+                        onClick = { pickRestoreFileLauncher.launch("*/*") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
+                    ) {
+                        Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(22.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (language == "bn") "📁 ব্যাকআপ ফাইল নির্বাচন করুন (.json / .db)" else "📁 Select Backup File (.json / .db)",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Secondary Restore Button - Paste JSON Text
+                    OutlinedButton(
+                        onClick = { showJsonImportDialog = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (language == "bn") "📋 JSON টেক্সট পেস্ট করে রিস্টোর" else "📋 Paste JSON Backup Text",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            }
+        }
+
+        // 6. About App Card
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -436,7 +605,7 @@ fun SettingsScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "সংস্করণ ১.০ • অফলাইন-ফার্স্ট এবং ক্লাউড রেডি",
+                        text = "সংস্করণ ২.০ • সম্পূর্ণ নিরাপদ ও ক্লাউড ব্যাকআপ সমর্থিত",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline
                     )
@@ -466,7 +635,7 @@ fun SettingsScreen(
             text = {
                 Column {
                     Text(
-                        text = if (language == "bn") "আপনার সব পণ্য, কাস্টমার এবং খরচের হিসাবের কপি নিচে তৈরি হয়েছে:" else "Copy this backup text to keep safe:",
+                        text = if (language == "bn") "আপনার সব পণ্য, কাস্টমার, হিসাব ও বিক্রয়ের ব্যাকআপ কোড তৈরি হয়েছে:" else "Copy this backup text to keep safe:",
                         style = MaterialTheme.typography.bodySmall
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -504,7 +673,7 @@ fun SettingsScreen(
         var importInputText by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { showJsonImportDialog = false },
-            title = { Text(if (language == "bn") "ব্যাকআপ থেকে রিস্টোর" else "Restore from JSON") },
+            title = { Text(if (language == "bn") "JSON টেক্সট থেকে রিস্টোর" else "Restore from JSON Text") },
             text = {
                 Column {
                     Text(
@@ -515,7 +684,7 @@ fun SettingsScreen(
                     OutlinedTextField(
                         value = importInputText,
                         onValueChange = { importInputText = it },
-                        placeholder = { Text("{\"products\": [...]}") },
+                        placeholder = { Text("{\"appName\": \"ShopKhata\", \"products\": [...]}") },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(180.dp)
@@ -525,13 +694,10 @@ fun SettingsScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.importBackupJson(importInputText) { success ->
-                            if (success) {
-                                Toast.makeText(context, if (language == "bn") "ডাটা সফলভাবে রিস্টোর হয়েছে!" else "Data restored successfully!", Toast.LENGTH_SHORT).show()
-                                showJsonImportDialog = false
-                            } else {
-                                Toast.makeText(context, if (language == "bn") "ভুল ফরম্যাট! অনুগ্রহ করে সঠিক JSON দিন।" else "Invalid JSON format!", Toast.LENGTH_SHORT).show()
-                            }
+                        viewModel.importBackupJson(importInputText) { res ->
+                            showJsonImportDialog = false
+                            restoreResultData = res
+                            showRestoreResultDialog = true
                         }
                     },
                     enabled = importInputText.isNotBlank()
@@ -542,6 +708,68 @@ fun SettingsScreen(
             dismissButton = {
                 TextButton(onClick = { showJsonImportDialog = false }) {
                     Text(if (language == "bn") "বাতিল" else "Cancel")
+                }
+            }
+        )
+    }
+
+    // Restore Result Dialog
+    if (showRestoreResultDialog && restoreResultData != null) {
+        val result = restoreResultData!!
+        AlertDialog(
+            onDismissRequest = { showRestoreResultDialog = false },
+            icon = {
+                Icon(
+                    imageVector = if (result.success) Icons.Default.CheckCircle else Icons.Default.Error,
+                    contentDescription = null,
+                    tint = if (result.success) ProfitGreen else LossRed,
+                    modifier = Modifier.size(36.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = if (result.success)
+                        (if (language == "bn") "ডাটা রিস্টোর সম্পন্ন!" else "Restore Successful!")
+                    else
+                        (if (language == "bn") "রিস্টোর ব্যর্থ হয়েছে" else "Restore Failed")
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = result.message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    if (result.success && (result.productCount > 0 || result.customerCount > 0 || result.transactionCount > 0)) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+                        Text(
+                            text = if (language == "bn") "উদ্ধারকৃত তথ্যের বিবরণ:" else "Restored Items Summary:",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        if (result.productCount > 0) {
+                            Text(text = "• ${if (language == "bn") "পণ্য তালিকা: " else "Products: "}${result.productCount} টি")
+                        }
+                        if (result.customerCount > 0) {
+                            Text(text = "• ${if (language == "bn") "গ্রাহক/বাকি খাতা: " else "Customers: "}${result.customerCount} জন")
+                        }
+                        if (result.transactionCount > 0) {
+                            Text(text = "• ${if (language == "bn") "বিক্রয় ও লেনদেন: " else "Transactions: "}${result.transactionCount} টি")
+                        }
+                        if (result.expenseCount > 0) {
+                            Text(text = "• ${if (language == "bn") "খরচের হিসাব: " else "Expenses: "}${result.expenseCount} টি")
+                        }
+                        if (result.dueLogCount > 0) {
+                            Text(text = "• ${if (language == "bn") "বাকির খতিয়ান: " else "Due Records: "}${result.dueLogCount} টি")
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { showRestoreResultDialog = false }) {
+                    Text(if (language == "bn") "ঠিক আছে" else "OK")
                 }
             }
         )
