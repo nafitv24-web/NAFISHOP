@@ -16,7 +16,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.Product
+import com.example.ui.components.AppPermissionDialog
 import com.example.ui.components.InvoiceDialog
+import com.example.ui.components.PermissionHelper
+import androidx.compose.ui.platform.LocalContext
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.ShopViewModel
 
@@ -57,6 +60,11 @@ fun MainAppScaffold(
     var showQuickStockInDialog by remember { mutableStateOf(false) }
     var showQuickAddExpenseDialog by remember { mutableStateOf(false) }
     val products by viewModel.products.collectAsState()
+
+    val context = LocalContext.current
+    var showPermissionDialog by remember {
+        mutableStateOf(!PermissionHelper.areAllPermissionsGranted(context))
+    }
 
     Scaffold(
         topBar = {
@@ -243,6 +251,17 @@ fun MainAppScaffold(
             onSave = { title, category, amount, note ->
                 viewModel.addExpense(title, category, amount, note)
                 showQuickAddExpenseDialog = false
+            }
+        )
+    }
+
+    // App Permissions Dialog on install / launch
+    if (showPermissionDialog) {
+        AppPermissionDialog(
+            language = language,
+            onDismiss = { showPermissionDialog = false },
+            onPermissionsResult = { granted ->
+                showPermissionDialog = false
             }
         )
     }

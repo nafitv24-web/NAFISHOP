@@ -31,6 +31,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.data.model.RestoreResult
+import com.example.ui.components.AppPermissionDialog
+import com.example.ui.components.PermissionHelper
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.ShopViewModel
 import kotlinx.coroutines.launch
@@ -54,6 +56,7 @@ fun SettingsScreen(
     var showRestoreResultDialog by remember { mutableStateOf(false) }
     var showDriveExportConfirmDialog by remember { mutableStateOf(false) }
     var showDriveImportConfirmDialog by remember { mutableStateOf(false) }
+    var showPermissionDialog by remember { mutableStateOf(false) }
     var restoreResultData by remember { mutableStateOf<RestoreResult?>(null) }
     var exportedJsonText by remember { mutableStateOf("") }
 
@@ -362,7 +365,13 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Button(
-                            onClick = { showDriveExportConfirmDialog = true },
+                            onClick = {
+                                if (!PermissionHelper.areAllPermissionsGranted(context)) {
+                                    showPermissionDialog = true
+                                } else {
+                                    showDriveExportConfirmDialog = true
+                                }
+                            },
                             modifier = Modifier.weight(1f),
                             enabled = !isSyncing,
                             shape = RoundedCornerShape(12.dp),
@@ -378,7 +387,13 @@ fun SettingsScreen(
                         }
 
                         FilledTonalButton(
-                            onClick = { showDriveImportConfirmDialog = true },
+                            onClick = {
+                                if (!PermissionHelper.areAllPermissionsGranted(context)) {
+                                    showPermissionDialog = true
+                                } else {
+                                    showDriveImportConfirmDialog = true
+                                }
+                            },
                             modifier = Modifier.weight(1f),
                             enabled = !isSyncing,
                             shape = RoundedCornerShape(12.dp),
@@ -692,7 +707,89 @@ fun SettingsScreen(
             }
         }
 
-        // 7. About App Card
+        // 7. App Permissions & Security Card
+        item {
+            val allGranted = PermissionHelper.areAllPermissionsGranted(context)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = CardDefaults.outlinedCardBorder()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.Security,
+                                contentDescription = null,
+                                tint = if (allGranted) EmeraldPrimary else Color(0xFFF59E0B),
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (language == "bn") "অ্যাপ পারমিশন ও নিরাপত্তা" else "App Permissions & Access",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (allGranted) EmeraldPrimary.copy(alpha = 0.15f) else Color(0xFFF59E0B).copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = if (allGranted)
+                                    (if (language == "bn") "অনুমোদিত" else "Granted")
+                                else
+                                    (if (language == "bn") "অনুমতি বাকি" else "Action Needed"),
+                                color = if (allGranted) EmeraldPrimary else Color(0xFFD97706),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = if (allGranted)
+                            (if (language == "bn") "✅ গুগল ড্রাইভ ক্লাউড ব্যাকআপ ও স্টোরেজ এক্সেসের সকল প্রয়োজনীয় পারমিশন সক্রিয় আছে।" else "✅ All storage and Google Drive permissions are granted.")
+                        else
+                            (if (language == "bn") "⚠️ গুগল ড্রাইভে ফাইল সেভ ও রিস্টোর করার জন্য স্টোরেজ ও নেটওয়ার্ক পারমিশন সক্রিয় করুন।" else "⚠️ Please grant permissions to enable smooth Google Drive backup & restore."),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    if (!allGranted) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Button(
+                            onClick = { showPermissionDialog = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
+                        ) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (language == "bn") "পারমিশন অনুমোদন করুন" else "Grant App Permissions",
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 8. About App Card
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1027,6 +1124,17 @@ fun SettingsScreen(
                 Button(onClick = { showRestoreResultDialog = false }) {
                     Text(if (language == "bn") "ঠিক আছে" else "OK")
                 }
+            }
+        )
+    }
+
+    // App Permission Dialog
+    if (showPermissionDialog) {
+        AppPermissionDialog(
+            language = language,
+            onDismiss = { showPermissionDialog = false },
+            onPermissionsResult = { granted ->
+                showPermissionDialog = false
             }
         )
     }
