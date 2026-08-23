@@ -2,5 +2,7 @@
   "name": "দোকান খাতা - Shop Khata",
   "description": "স্মার্ট দোকান ও ইনভেন্টরি স্টক খাতা, বিক্রয় হিসাব, লাভ-ক্ষতি, বাকি খাতা ও ক্যাশ মেমো অ্যাপ",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
