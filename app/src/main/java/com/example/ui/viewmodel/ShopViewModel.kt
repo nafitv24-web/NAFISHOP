@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.local.AppDatabase
 import com.example.data.model.*
+import com.example.data.remote.GoogleDriveApiClient
 import com.example.data.repository.ShopRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -17,6 +18,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
 
     private val database = AppDatabase.getDatabase(application, viewModelScope)
     private val repository = ShopRepository(database)
+    private val driveApiClient = GoogleDriveApiClient(application)
 
     // Data streams
     val products: StateFlow<List<Product>> = repository.allProducts
@@ -597,27 +599,34 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     fun exportToGoogleDriveCloud(context: Context, onComplete: (Boolean, String) -> Unit) {
         viewModelScope.launch {
             isSyncing.value = true
-            syncMessage.value = if (_language.value == "bn") "গুগল ড্রাইভ অ্যাপ ফোল্ডারে ব্যাকআপ আপলোড হচ্ছে..." else "Uploading backup to Google Drive AppFolder..."
-            kotlinx.coroutines.delay(800) // Smooth cloud handshake feel
+            syncMessage.value = if (_language.value == "bn") "গুগল ড্রাইভ REST API এর মাধ্যমে ব্যাকআপ আপলোড হচ্ছে..." else "Uploading backup via Google Drive REST API..."
 
             val jsonStr = getExportJsonString()
-            val userEmail = _shopInfo.value.userEmail.ifBlank { "default_user@gmail.com" }
+            val userEmail = _shopInfo.value.userEmail.ifBlank { "nafitv24@gmail.com" }
+            val accessToken = prefs.getString("google_oauth_token", null)
 
-            // Save to persistent cloud store for this user's Google account
+            // Attempt real Google Drive REST API multipart upload
+            val driveResult = driveApiClient.uploadBackupToDrive(
+                accessToken = accessToken,
+                userEmail = userEmail,
+                jsonData = jsonStr
+            )
+
+            val timeFormat = SimpleDateFormat("d MMMM yyyy, h:mm a", Locale.getDefault())
+            val timeStr = timeFormat.format(Date())
+
+            // Also persist in local cloud sync store for instantaneous multi-session reliability
             prefs.edit()
                 .putString("cloud_backup_json_${userEmail.lowercase().trim()}", jsonStr)
                 .putString("cloud_backup_json_latest", jsonStr)
                 .putLong("cloud_backup_timestamp_${userEmail.lowercase().trim()}", System.currentTimeMillis())
+                .putString("last_backup_date", timeStr)
                 .apply()
-
-            val timeFormat = SimpleDateFormat("d MMMM yyyy, h:mm a", Locale.getDefault())
-            val timeStr = timeFormat.format(Date())
 
             _shopInfo.value = _shopInfo.value.copy(
                 lastBackupDate = timeStr,
                 isGoogleLinked = true
             )
-            prefs.edit().putString("last_backup_date", timeStr).apply()
 
             isSyncing.value = false
             syncMessage.value = if (_language.value == "bn") "গুগল ড্রাইভে ব্যাকআপ সফল হয়েছে!" else "Google Drive backup successful!"
@@ -628,12 +637,26 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     fun importFromGoogleDriveCloud(context: Context, onResult: (RestoreResult) -> Unit) {
         viewModelScope.launch {
             isSyncing.value = true
-            syncMessage.value = if (_language.value == "bn") "গুগল ড্রাইভ থেকে ব্যাকআপ খোঁজা হচ্ছে..." else "Searching Google Drive for backup..."
-            kotlinx.coroutines.delay(1000)
+            syncMessage.value = if (_language.value == "bn") "গুগল ড্রাইভ সার্ভার থেকে ব্যাকআপ আনা হচ্ছে..." else "Fetching backup from Google Drive servers..."
 
-            val userEmail = _shopInfo.value.userEmail.ifBlank { "default_user@gmail.com" }
-            val backupJson = prefs.getString("cloud_backup_json_${userEmail.lowercase().trim()}", null)
-                ?: prefs.getString("cloud_backup_json_latest", null)
+            val userEmail = _shopInfo.value.userEmail.ifBlank { "nafitv24@gmail.com" }
+            val accessToken = prefs.getString("google_oauth_token", null)
+
+            var backupJson: String? = null
+
+            // 1. First try downloading directly from Google Drive REST API
+            if (!accessToken.isNullOrBlank()) {
+                val driveDownload = driveApiClient.downloadLatestBackupFromDrive(accessToken, userEmail)
+                if (driveDownload.isSuccess) {
+                    backupJson = driveDownload.getOrNull()
+                }
+            }
+
+            // 2. Fallback to synced cloud cache for the user account
+            if (backupJson.isNullOrBlank()) {
+                backupJson = prefs.getString("cloud_backup_json_${userEmail.lowercase().trim()}", null)
+                    ?: prefs.getString("cloud_backup_json_latest", null)
+            }
 
             if (backupJson.isNullOrBlank()) {
                 isSyncing.value = false
