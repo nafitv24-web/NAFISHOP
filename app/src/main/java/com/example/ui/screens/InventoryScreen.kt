@@ -242,8 +242,6 @@ fun InventoryScreen(
         }
     }
 
-    val context = LocalContext.current
-
     // Add / Edit Product Dialog
     if (showAddEditDialog) {
         AddEditProductDialog(
@@ -254,11 +252,6 @@ fun InventoryScreen(
             onSave = { savedProd ->
                 viewModel.saveProduct(savedProd)
                 showAddEditDialog = false
-                android.widget.Toast.makeText(
-                    context,
-                    if (language == "bn") "পণ্য সফলভাবে সংরক্ষণ করা হয়েছে!" else "Product saved successfully!",
-                    android.widget.Toast.LENGTH_SHORT
-                ).show()
             }
         )
     }
@@ -274,11 +267,6 @@ fun InventoryScreen(
             onConfirm = { targetProd, qty, buyP, sellP, note ->
                 viewModel.stockIn(targetProd.id, qty, buyP, sellP, note)
                 showStockInDialog = false
-                android.widget.Toast.makeText(
-                    context,
-                    if (language == "bn") "${qty} ${targetProd.unit} স্টক যুক্ত হয়েছে!" else "Stock in recorded successfully!",
-                    android.widget.Toast.LENGTH_SHORT
-                ).show()
             }
         )
     }
@@ -292,11 +280,6 @@ fun InventoryScreen(
             onConfirm = { qty, reason ->
                 viewModel.stockOutManual(stockOutProduct!!.id, qty, reason)
                 showStockOutDialog = false
-                android.widget.Toast.makeText(
-                    context,
-                    if (language == "bn") "স্টক আউট সম্পন্ন হয়েছে!" else "Stock out recorded successfully!",
-                    android.widget.Toast.LENGTH_SHORT
-                ).show()
             }
         )
     }
