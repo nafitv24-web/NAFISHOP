@@ -191,31 +191,32 @@ class FirebaseRealtimeManager {
     }
 
     /**
-     * Backup complete shop data to Firebase Realtime Database
+     * Backup complete shop data to Firebase Realtime Database strictly isolated per user email
      */
     suspend fun backupShopData(
         email: String,
         backupJsonString: String
     ): FirebaseOperationResult = withContext(Dispatchers.IO) {
         try {
-            val sanitized = sanitizeEmail(email.ifBlank { "default_shop" })
+            if (email.isBlank()) {
+                return@withContext FirebaseOperationResult(
+                    success = false,
+                    message = "ইউজার ইমেইল পাওয়া যায়নি। অনুগ্রহ করে লগইন করুন।"
+                )
+            }
+            val sanitized = sanitizeEmail(email)
             val userBackupUrl = "$DATABASE_URL/shops/$sanitized/backup.json"
-            val latestBackupUrl = "$DATABASE_URL/latest_backup.json"
 
             val body = backupJsonString.toRequestBody(jsonMediaType)
 
-            // Save to user path
+            // Strictly save to this user's isolated path only (No global/shared fallback)
             val req1 = Request.Builder().url(userBackupUrl).put(body).build()
             val resp1 = client.newCall(req1).execute()
-
-            // Also update global latest
-            val req2 = Request.Builder().url(latestBackupUrl).put(backupJsonString.toRequestBody(jsonMediaType)).build()
-            client.newCall(req2).execute()
 
             if (resp1.isSuccessful) {
                 FirebaseOperationResult(
                     success = true,
-                    message = "Firebase Realtime ক্লাউড ডাটাবেসে সম্পূর্ণ ব্যাকআপ সফলভাবে সংরক্ষিত হয়েছে!"
+                    message = "আপনার অ্যাকাউন্ট (${email})-এর নিজস্ব ক্লাউডে ব্যাকআপ সফলভাবে সংরক্ষিত হয়েছে!"
                 )
             } else {
                 FirebaseOperationResult(
@@ -230,37 +231,35 @@ class FirebaseRealtimeManager {
     }
 
     /**
-     * Restore complete shop data from Firebase Realtime Database
+     * Restore complete shop data from Firebase Realtime Database strictly for this user
      */
     suspend fun restoreShopData(
         email: String
     ): FirebaseOperationResult = withContext(Dispatchers.IO) {
         try {
-            val sanitized = sanitizeEmail(email.ifBlank { "default_shop" })
+            if (email.isBlank()) {
+                return@withContext FirebaseOperationResult(
+                    success = false,
+                    message = "ইউজার ইমেইল পাওয়া যায়নি। অনুগ্রহ করে লগইন করুন।"
+                )
+            }
+            val sanitized = sanitizeEmail(email)
             val userBackupUrl = "$DATABASE_URL/shops/$sanitized/backup.json"
 
-            var req = Request.Builder().url(userBackupUrl).get().build()
-            var resp = client.newCall(req).execute()
-            var body = resp.body?.string()
-
-            // Fallback to latest_backup if user specific is empty
-            if (body.isNullOrBlank() || body == "null") {
-                val latestUrl = "$DATABASE_URL/latest_backup.json"
-                req = Request.Builder().url(latestUrl).get().build()
-                resp = client.newCall(req).execute()
-                body = resp.body?.string()
-            }
+            val req = Request.Builder().url(userBackupUrl).get().build()
+            val resp = client.newCall(req).execute()
+            val body = resp.body?.string()
 
             if (!resp.isSuccessful || body.isNullOrBlank() || body == "null") {
                 return@withContext FirebaseOperationResult(
                     success = false,
-                    message = "Firebase ক্লাউডে এই অ্যাকাউন্টের কোনো পূর্ববর্তী ব্যাকআপ পাওয়া যায়নি!"
+                    message = "আপনার অ্যাকাউন্ট (${email})-এর জন্য Firebase ক্লাউডে কোনো পূর্ববর্তী ব্যাকআপ পাওয়া যায়নি! অনুগ্রহ করে প্রথমে ব্যাকআপ রাখুন।"
                 )
             }
 
             FirebaseOperationResult(
                 success = true,
-                message = "Firebase ক্লাউড থেকে ব্যাকআপ সফলভাবে পাওয়া গেছে!",
+                message = "আপনার অ্যাকাউন্ট (${email})-এর ব্যাকআপ সফলভাবে পাওয়া গেছে!",
                 data = body
             )
         } catch (e: Exception) {

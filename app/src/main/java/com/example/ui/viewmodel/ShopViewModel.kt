@@ -345,12 +345,23 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun getAccountIdentifier(): String {
+        val email = _shopInfo.value.userEmail.trim().lowercase()
+        if (email.isNotBlank()) return email
+        var localId = prefs.getString("unique_shop_account_id", null)
+        if (localId.isNullOrBlank()) {
+            localId = "shop_" + java.util.UUID.randomUUID().toString().replace("-", "").take(12)
+            prefs.edit().putString("unique_shop_account_id", localId).apply()
+        }
+        return localId
+    }
+
     fun backupToFirebaseRealtimeCloud(onComplete: (Boolean, String) -> Unit) {
         viewModelScope.launch {
             isSyncing.value = true
             syncMessage.value = if (_language.value == "bn") "Firebase ক্লাউড ডাটাবেসে ব্যাকআপ আপলোড হচ্ছে..." else "Uploading backup to Firebase Realtime Database..."
             val jsonStr = getExportJsonString()
-            val userEmail = _shopInfo.value.userEmail.ifBlank { "nafitv24@gmail.com" }
+            val userEmail = getAccountIdentifier()
 
             val result = firebaseRealtime.backupShopData(userEmail, jsonStr)
             isSyncing.value = false
@@ -378,7 +389,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             isSyncing.value = true
             syncMessage.value = if (_language.value == "bn") "Firebase ক্লাউড থেকে ব্যাকআপ আনা হচ্ছে..." else "Fetching backup from Firebase Realtime Database..."
-            val userEmail = _shopInfo.value.userEmail.ifBlank { "nafitv24@gmail.com" }
+            val userEmail = getAccountIdentifier()
 
             val result = firebaseRealtime.restoreShopData(userEmail)
             if (!result.success || result.data.isNullOrBlank()) {
@@ -832,14 +843,20 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             kotlinx.coroutines.delay(800) // Smooth cloud handshake feel
 
             val jsonStr = getExportJsonString()
-            val userEmail = _shopInfo.value.userEmail.ifBlank { "default_user@gmail.com" }
+            val accountId = getAccountIdentifier()
 
-            // Save to persistent cloud store for this user's Google account
+            // Save strictly to isolated cloud store for this user's specific account
             prefs.edit()
-                .putString("cloud_backup_json_${userEmail.lowercase().trim()}", jsonStr)
-                .putString("cloud_backup_json_latest", jsonStr)
-                .putLong("cloud_backup_timestamp_${userEmail.lowercase().trim()}", System.currentTimeMillis())
+                .putString("cloud_backup_json_${accountId}", jsonStr)
+                .putLong("cloud_backup_timestamp_${accountId}", System.currentTimeMillis())
                 .apply()
+
+            // Also automatically sync to Firebase Realtime DB under this user's isolated path for extra redundancy
+            try {
+                firebaseRealtime.backupShopData(accountId, jsonStr)
+            } catch (e: Exception) {
+                // non-blocking
+            }
 
             val timeFormat = SimpleDateFormat("d MMMM yyyy, h:mm a", Locale.getDefault())
             val timeStr = timeFormat.format(Date())
@@ -862,19 +879,27 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             syncMessage.value = if (_language.value == "bn") "গুগল ড্রাইভ থেকে ব্যাকআপ খোঁজা হচ্ছে..." else "Searching Google Drive for backup..."
             kotlinx.coroutines.delay(1000)
 
-            val userEmail = _shopInfo.value.userEmail.ifBlank { "default_user@gmail.com" }
-            val backupJson = prefs.getString("cloud_backup_json_${userEmail.lowercase().trim()}", null)
-                ?: prefs.getString("cloud_backup_json_latest", null)
+            val accountId = getAccountIdentifier()
+            var backupJson = prefs.getString("cloud_backup_json_${accountId}", null)
+
+            // If not found in local cached store, check Firebase Realtime DB user cloud for this exact account
+            if (backupJson.isNullOrBlank()) {
+                val cloudRes = firebaseRealtime.restoreShopData(accountId)
+                if (cloudRes.success && !cloudRes.data.isNullOrBlank()) {
+                    backupJson = cloudRes.data
+                }
+            }
 
             if (backupJson.isNullOrBlank()) {
                 isSyncing.value = false
+                val displayAcc = if (_shopInfo.value.userEmail.isNotBlank()) _shopInfo.value.userEmail else accountId
                 onResult(
                     RestoreResult(
                         success = false,
                         message = if (_language.value == "bn")
-                            "এই জিমেইল (${_shopInfo.value.userEmail})-এ গুগল ড্রাইভে কোনো পূর্ববর্তী ব্যাকআপ পাওয়া যায়নি! অনুগ্রহ করে প্রথমে 'ড্রাইভে রপ্তানি করুন' চাপুন।"
+                            "এই অ্যাকাউন্ট (${displayAcc})-এর গুগল ড্রাইভ/ক্লাউডে কোনো পূর্ববর্তী ব্যাকআপ পাওয়া যায়নি! অনুগ্রহ করে প্রথমে 'ড্রাইভে ব্যাকআপ রাখুন' চাপুন।"
                         else
-                            "No previous Google Drive backup found for this account (${_shopInfo.value.userEmail})! Please export first."
+                            "No previous Google Drive backup found for this account (${displayAcc})! Please backup first."
                     )
                 )
                 return@launch

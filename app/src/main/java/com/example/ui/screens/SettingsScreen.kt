@@ -1115,7 +1115,12 @@ fun SettingsScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "${if (language == "bn") "অ্যাকাউন্ট: " else "Account: "}${shopInfo.userEmail.ifBlank { "nafitv24@gmail.com" }}",
+                                text = "${if (language == "bn") "দোকান: " else "Shop: "}${shopInfo.shopName}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "${if (language == "bn") "অ্যাকাউন্ট: " else "Account: "}${shopInfo.userEmail.ifBlank { viewModel.getAccountIdentifier() }}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = EmeraldPrimary
                             )
@@ -1192,7 +1197,12 @@ fun SettingsScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "${if (language == "bn") "টার্গেট অ্যাকাউন্ট: " else "Target: "}${shopInfo.userEmail.ifBlank { "nafitv24@gmail.com" }}",
+                                text = "${if (language == "bn") "দোকান: " else "Shop: "}${shopInfo.shopName}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "${if (language == "bn") "টার্গেট অ্যাকাউন্ট: " else "Target: "}${shopInfo.userEmail.ifBlank { viewModel.getAccountIdentifier() }}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = StockBlue
                             )
