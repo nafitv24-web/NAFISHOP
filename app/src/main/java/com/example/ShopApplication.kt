@@ -23,6 +23,7 @@ class ShopApplication : Application() {
                         .setApplicationId("1:652224811291:android:23f864c558df82113603be")
                         .setApiKey("AIzaSyAruRSCBucfPlKVgSN6rBC6H8Pajq8rGdM")
                         .setProjectId("nafishop-54e99")
+                        .setDatabaseUrl("https://nafishop-54e99-default-rtdb.firebaseio.com/")
                         .setStorageBucket("nafishop-54e99.firebasestorage.app")
                         .setGcmSenderId("652224811291")
                         .build()

@@ -50,6 +50,8 @@ fun SettingsScreen(
     val isSyncing by viewModel.isSyncing.collectAsState()
     val syncMessage by viewModel.syncMessage.collectAsState()
 
+    var showFirebaseBackupConfirmDialog by remember { mutableStateOf(false) }
+    var showFirebaseRestoreConfirmDialog by remember { mutableStateOf(false) }
     var showEditProfileDialog by remember { mutableStateOf(false) }
     var showJsonExportDialog by remember { mutableStateOf(false) }
     var showJsonImportDialog by remember { mutableStateOf(false) }
@@ -346,16 +348,130 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
+                    // Firebase Realtime Database Live Cloud Card
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = Color(0xFF0F172A),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.CloudSync,
+                                        contentDescription = null,
+                                        tint = EmeraldPrimary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = if (language == "bn") "Firebase ক্লাউড ডাটাবেজ (Realtime DB)" else "Firebase Cloud Database (Realtime DB)",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = EmeraldPrimary.copy(alpha = 0.2f)
+                                ) {
+                                    Text(
+                                        text = "nafishop-54e99",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = EmeraldPrimary,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+
+                            Text(
+                                text = "URL: https://nafishop-54e99-default-rtdb.firebaseio.com",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF94A3B8),
+                                fontSize = 11.sp
+                            )
+
+                            // 2 Live Firebase Actions
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Button(
+                                    onClick = { showFirebaseBackupConfirmDialog = true },
+                                    modifier = Modifier.weight(1f),
+                                    enabled = !isSyncing,
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
+                                ) {
+                                    Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (language == "bn") "Firebase ক্লাউড ব্যাকআপ" else "Firebase Backup",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                FilledTonalButton(
+                                    onClick = { showFirebaseRestoreConfirmDialog = true },
+                                    modifier = Modifier.weight(1f),
+                                    enabled = !isSyncing,
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.filledTonalButtonColors(
+                                        containerColor = Color(0xFF334155),
+                                        contentColor = Color.White
+                                    )
+                                ) {
+                                    Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (language == "bn") "Firebase রিস্টোর" else "Firebase Restore",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+
+                            // Connection Test Button
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.checkFirebaseConnection { success, msg ->
+                                        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF38BDF8))
+                            ) {
+                                Icon(Icons.Default.Wifi, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (language == "bn") "Firebase ক্লাউড কানেকশন টেস্ট করুন" else "Test Firebase Cloud Connection",
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
                     Text(
-                        text = if (language == "bn")
-                            "ℹ️ অ্যান্ড্রয়েড অটো ব্যাকআপ চালু আছে। গুগল অ্যাকাউন্টের মাধ্যমে ডাটা নিরাপদ থাকে এবং ফোন পরিবর্তন করলেও স্বয়ংক্রিয়ভাবে ফিরে আসে।"
-                        else
-                            "ℹ️ Android Auto-Backup is active. Your data stays linked to your Google Account for safe keeping.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF475569)
+                        text = if (language == "bn") "গুগল ড্রাইভ ও অফলাইন ব্যাকআপ ফাইল:" else "Google Drive & Local File Backup:",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
 
                     // Row of 2 Professional Google Drive Actions:
                     // 1. Export to Drive (ড্রাইভে রপ্তানি করুন)
@@ -375,7 +491,7 @@ fun SettingsScreen(
                             modifier = Modifier.weight(1f),
                             enabled = !isSyncing,
                             shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
+                            colors = ButtonDefaults.buttonColors(containerColor = StockBlue)
                         ) {
                             Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(6.dp))
@@ -954,6 +1070,153 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showJsonImportDialog = false }) {
+                    Text(if (language == "bn") "বাতিল" else "Cancel")
+                }
+            }
+        )
+    }
+
+    // Firebase Realtime DB Cloud Backup Confirmation Dialog
+    if (showFirebaseBackupConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showFirebaseBackupConfirmDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.CloudSync,
+                    contentDescription = null,
+                    tint = EmeraldPrimary,
+                    modifier = Modifier.size(36.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = if (language == "bn") "Firebase ক্লাউড ব্যাকআপ" else "Firebase Cloud Backup",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = if (language == "bn")
+                            "আপনার দোকানের সমস্ত পণ্যের তালিকা, বাকি খাতা, কাস্টমার এবং বিক্রয় হিসাব সরাসরি Firebase Realtime Database ক্লাউডে (nafishop-54e99) সংরক্ষিত হবে।"
+                        else
+                            "All products, customers, dues and sales records will be saved to Firebase Realtime Database cloud (nafishop-54e99).",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        border = CardDefaults.outlinedCardBorder()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text(
+                                text = "Firebase Project: nafishop-54e99",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "${if (language == "bn") "অ্যাকাউন্ট: " else "Account: "}${shopInfo.userEmail.ifBlank { "nafitv24@gmail.com" }}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = EmeraldPrimary
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showFirebaseBackupConfirmDialog = false
+                        viewModel.backupToFirebaseRealtimeCloud { success, msg ->
+                            if (success) {
+                                Toast.makeText(
+                                    context,
+                                    if (language == "bn") "✅ Firebase ক্লাউডে ব্যাকআপ সম্পন্ন হয়েছে! ($msg)" else "✅ Firebase Backup successful! ($msg)",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            } else {
+                                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
+                ) {
+                    Text(if (language == "bn") "ক্লাউডে সেভ করুন" else "Save to Cloud")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFirebaseBackupConfirmDialog = false }) {
+                    Text(if (language == "bn") "বাতিল" else "Cancel")
+                }
+            }
+        )
+    }
+
+    // Firebase Realtime DB Cloud Restore Confirmation Dialog
+    if (showFirebaseRestoreConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showFirebaseRestoreConfirmDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.CloudDownload,
+                    contentDescription = null,
+                    tint = StockBlue,
+                    modifier = Modifier.size(36.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = if (language == "bn") "Firebase থেকে রিস্টোর" else "Restore from Firebase",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = if (language == "bn")
+                            "Firebase Realtime ক্লাউড ডাটাবেজ (nafishop-54e99) থেকে পূর্ববর্তী ব্যাকআপ ডাউনলোড করে আপনার দোকানের সব তথ্য রিস্টোর করা হবে।"
+                        else
+                            "Restore all shop data from Firebase Realtime Database cloud (nafishop-54e99).",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        border = CardDefaults.outlinedCardBorder()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text(
+                                text = "Firebase Project: nafishop-54e99",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "${if (language == "bn") "টার্গেট অ্যাকাউন্ট: " else "Target: "}${shopInfo.userEmail.ifBlank { "nafitv24@gmail.com" }}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = StockBlue
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showFirebaseRestoreConfirmDialog = false
+                        viewModel.restoreFromFirebaseRealtimeCloud { res ->
+                            restoreResultData = res
+                            showRestoreResultDialog = true
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = StockBlue)
+                ) {
+                    Text(if (language == "bn") "রিস্টোর শুরু করুন" else "Start Restore")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFirebaseRestoreConfirmDialog = false }) {
                     Text(if (language == "bn") "বাতিল" else "Cancel")
                 }
             }

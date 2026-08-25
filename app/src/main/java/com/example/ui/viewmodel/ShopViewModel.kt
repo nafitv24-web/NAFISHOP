@@ -7,12 +7,15 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.auth.FirebaseAuthManager
 import com.example.data.auth.AuthResult
+import com.example.data.firebase.FirebaseRealtimeManager
+import com.example.data.firebase.FirebaseOperationResult
 import com.google.firebase.auth.FirebaseUser
 import com.example.data.local.AppDatabase
 import com.example.data.model.*
 import com.example.data.repository.ShopRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -47,8 +50,13 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val firebaseAuth = FirebaseAuthManager(application)
+    val firebaseRealtime = FirebaseRealtimeManager()
+
     private val _firebaseUser = MutableStateFlow<FirebaseUser?>(firebaseAuth.currentUser)
     val firebaseUser: StateFlow<FirebaseUser?> = _firebaseUser.asStateFlow()
+
+    private val _firebaseCloudStatus = MutableStateFlow<String?>("সংযুক্ত (nafishop-54e99)")
+    val firebaseCloudStatus: StateFlow<String?> = _firebaseCloudStatus.asStateFlow()
 
     private val prefs = application.getSharedPreferences("shop_khata_prefs", android.content.Context.MODE_PRIVATE)
 
@@ -203,11 +211,13 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         onResult: (AuthResult) -> Unit
     ) {
         viewModelScope.launch {
-            val result = firebaseAuth.signUpWithEmail(email, pass, displayName = ownerName.ifBlank { shopName })
-            if (result is AuthResult.Success) {
-                _firebaseUser.value = result.user
-                val sName = if (shopName.isNotBlank()) shopName else _shopInfo.value.shopName
-                val oName = if (ownerName.isNotBlank()) ownerName else _shopInfo.value.ownerName
+            val sName = if (shopName.isNotBlank()) shopName else _shopInfo.value.shopName
+            val oName = if (ownerName.isNotBlank()) ownerName else _shopInfo.value.ownerName
+
+            // 1. Try Firebase Authentication first
+            val authResult = firebaseAuth.signUpWithEmail(email, pass, displayName = oName)
+            if (authResult is AuthResult.Success) {
+                _firebaseUser.value = authResult.user
                 _shopInfo.value = _shopInfo.value.copy(
                     userEmail = email,
                     shopName = sName,
@@ -217,13 +227,42 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                 _isLoggedIn.value = true
                 prefs.edit()
                     .putString("user_email", email)
+                    .putString("user_password", pass)
                     .putString("shop_name", sName)
                     .putString("shop_owner", oName)
                     .putBoolean("is_google_linked", true)
                     .putBoolean("is_logged_in", true)
                     .apply()
+
+                // Also create entry in Firebase Realtime DB
+                firebaseRealtime.registerAccount(email, pass, sName, oName)
+                onResult(authResult)
+                return@launch
             }
-            onResult(result)
+
+            // 2. If Firebase Auth has configuration issues (like CONFIGURATION_NOT_FOUND), use Firebase Realtime DB
+            val rtResult = firebaseRealtime.registerAccount(email, pass, sName, oName)
+            if (rtResult.success) {
+                _shopInfo.value = _shopInfo.value.copy(
+                    userEmail = email,
+                    shopName = sName,
+                    ownerName = oName,
+                    isGoogleLinked = true
+                )
+                _isLoggedIn.value = true
+                prefs.edit()
+                    .putString("user_email", email)
+                    .putString("user_password", pass)
+                    .putString("shop_name", sName)
+                    .putString("shop_owner", oName)
+                    .putBoolean("is_google_linked", true)
+                    .putBoolean("is_logged_in", true)
+                    .apply()
+
+                onResult(AuthResult.Success(null, "অ্যাকাউন্ট সফলভাবে তৈরি হয়েছে"))
+            } else {
+                onResult(AuthResult.Error(rtResult.message))
+            }
         }
     }
 
@@ -233,9 +272,10 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         onResult: (AuthResult) -> Unit
     ) {
         viewModelScope.launch {
-            val result = firebaseAuth.signInWithEmail(email, pass)
-            if (result is AuthResult.Success) {
-                _firebaseUser.value = result.user
+            // 1. Try Firebase Authentication first
+            val authResult = firebaseAuth.signInWithEmail(email, pass)
+            if (authResult is AuthResult.Success) {
+                _firebaseUser.value = authResult.user
                 _shopInfo.value = _shopInfo.value.copy(
                     userEmail = email,
                     isGoogleLinked = true
@@ -243,11 +283,58 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                 _isLoggedIn.value = true
                 prefs.edit()
                     .putString("user_email", email)
+                    .putString("user_password", pass)
                     .putBoolean("is_google_linked", true)
                     .putBoolean("is_logged_in", true)
                     .apply()
+
+                onResult(authResult)
+                return@launch
             }
-            onResult(result)
+
+            // 2. Fallback to Firebase Realtime DB login
+            val rtResult = firebaseRealtime.loginAccount(email, pass)
+            if (rtResult.success) {
+                var sName = _shopInfo.value.shopName
+                var oName = _shopInfo.value.ownerName
+                if (rtResult.data != null) {
+                    try {
+                        val obj = JSONObject(rtResult.data)
+                        val sn = obj.optString("shopName", "")
+                        val on = obj.optString("ownerName", "")
+                        if (sn.isNotBlank()) sName = sn
+                        if (on.isNotBlank()) oName = on
+                    } catch (e: Exception) {
+                        // ignore
+                    }
+                }
+
+                _shopInfo.value = _shopInfo.value.copy(
+                    userEmail = email,
+                    shopName = sName,
+                    ownerName = oName,
+                    isGoogleLinked = true
+                )
+                _isLoggedIn.value = true
+                prefs.edit()
+                    .putString("user_email", email)
+                    .putString("user_password", pass)
+                    .putString("shop_name", sName)
+                    .putString("shop_owner", oName)
+                    .putBoolean("is_google_linked", true)
+                    .putBoolean("is_logged_in", true)
+                    .apply()
+
+                onResult(AuthResult.Success(null, "সফলভাবে লগইন হয়েছে"))
+            } else {
+                // If both failed, return readable message
+                val err = if (authResult is AuthResult.Error && !authResult.errorMessage.contains("CONFIGURATION_NOT_FOUND")) {
+                    authResult.errorMessage
+                } else {
+                    rtResult.message
+                }
+                onResult(AuthResult.Error(err))
+            }
         }
     }
 
@@ -255,6 +342,78 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val result = firebaseAuth.sendPasswordReset(email)
             onResult(result)
+        }
+    }
+
+    fun backupToFirebaseRealtimeCloud(onComplete: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            isSyncing.value = true
+            syncMessage.value = if (_language.value == "bn") "Firebase ক্লাউড ডাটাবেসে ব্যাকআপ আপলোড হচ্ছে..." else "Uploading backup to Firebase Realtime Database..."
+            val jsonStr = getExportJsonString()
+            val userEmail = _shopInfo.value.userEmail.ifBlank { "nafitv24@gmail.com" }
+
+            val result = firebaseRealtime.backupShopData(userEmail, jsonStr)
+            isSyncing.value = false
+
+            if (result.success) {
+                val timeFormat = SimpleDateFormat("d MMMM yyyy, h:mm a", Locale.getDefault())
+                val timeStr = timeFormat.format(Date())
+                _shopInfo.value = _shopInfo.value.copy(
+                    lastBackupDate = timeStr,
+                    isGoogleLinked = true
+                )
+                prefs.edit().putString("last_backup_date", timeStr).apply()
+                _firebaseCloudStatus.value = "🟢 ক্লাউড সিঙ্ক সম্পন্ন"
+                syncMessage.value = if (_language.value == "bn") "Firebase ক্লাউডে ব্যাকআপ সফল হয়েছে!" else "Firebase cloud backup successful!"
+                onComplete(true, timeStr)
+            } else {
+                _firebaseCloudStatus.value = "⚠️ সিঙ্ক সমস্যা"
+                syncMessage.value = result.message
+                onComplete(false, result.message)
+            }
+        }
+    }
+
+    fun restoreFromFirebaseRealtimeCloud(onResult: (RestoreResult) -> Unit) {
+        viewModelScope.launch {
+            isSyncing.value = true
+            syncMessage.value = if (_language.value == "bn") "Firebase ক্লাউড থেকে ব্যাকআপ আনা হচ্ছে..." else "Fetching backup from Firebase Realtime Database..."
+            val userEmail = _shopInfo.value.userEmail.ifBlank { "nafitv24@gmail.com" }
+
+            val result = firebaseRealtime.restoreShopData(userEmail)
+            if (!result.success || result.data.isNullOrBlank()) {
+                isSyncing.value = false
+                onResult(
+                    RestoreResult(
+                        success = false,
+                        message = result.message
+                    )
+                )
+                return@launch
+            }
+
+            val importResult = repository.importDataFromJson(result.data, cleanSlate = true)
+            if (importResult.success && importResult.restoredShopInfo != null) {
+                val s = importResult.restoredShopInfo
+                updateShopInfo(
+                    name = s.shopName,
+                    owner = s.ownerName,
+                    phone = s.phone,
+                    address = s.address,
+                    currency = s.currency,
+                    email = if (_shopInfo.value.userEmail.isNotBlank()) _shopInfo.value.userEmail else s.userEmail
+                )
+            }
+            isSyncing.value = false
+            onResult(importResult)
+        }
+    }
+
+    fun checkFirebaseConnection(onComplete: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            val res = firebaseRealtime.testConnection()
+            _firebaseCloudStatus.value = if (res.success) "🟢 অনলাইন (nafishop-54e99)" else "⚠️ ডিসকানেক্টেড"
+            onComplete(res.success, res.message)
         }
     }
 
