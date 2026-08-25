@@ -348,15 +348,15 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // Firebase Realtime Database Live Cloud Card
+                    // HERO: Google Drive Cloud Backup & Restore Card (Primary Cloud Solution)
                     Surface(
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(16.dp),
                         color = Color(0xFF0F172A),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(
-                            modifier = Modifier.padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -365,107 +365,127 @@ fun SettingsScreen(
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
-                                        Icons.Default.CloudSync,
+                                        Icons.Default.CloudUpload,
                                         contentDescription = null,
-                                        tint = EmeraldPrimary,
-                                        modifier = Modifier.size(20.dp)
+                                        tint = Color(0xFF38BDF8),
+                                        modifier = Modifier.size(24.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = if (language == "bn") "Firebase ক্লাউড ডাটাবেজ (Realtime DB)" else "Firebase Cloud Database (Realtime DB)",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White
-                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text(
+                                            text = if (language == "bn") "গুগল ড্রাইভ ক্লাউড ব্যাকআপ" else "Google Drive Cloud Backup",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                        Text(
+                                            text = if (language == "bn") "মোবাইল পরিবর্তন করলেও সব ডাটা ফেরত পান" else "Recover all data anytime when changing phone",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color(0xFF94A3B8),
+                                            fontSize = 11.sp
+                                        )
+                                    }
                                 }
 
                                 Surface(
                                     shape = RoundedCornerShape(20.dp),
-                                    color = EmeraldPrimary.copy(alpha = 0.2f)
+                                    color = Color(0xFF38BDF8).copy(alpha = 0.2f)
                                 ) {
                                     Text(
-                                        text = "nafishop-54e99",
+                                        text = "Google Drive",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = EmeraldPrimary,
+                                        color = Color(0xFF38BDF8),
                                         fontWeight = FontWeight.Bold,
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                                     )
                                 }
                             }
 
-                            Text(
-                                text = "URL: https://nafishop-54e99-default-rtdb.firebaseio.com",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF94A3B8),
-                                fontSize = 11.sp
-                            )
-
-                            // 2 Live Firebase Actions
+                            // 2 Main Google Drive Actions:
+                            // 1. Export to Drive (ড্রাইভে ব্যাকআপ রাখুন)
+                            // 2. Import from Drive (ড্রাইভ থেকে রিস্টোর)
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 Button(
-                                    onClick = { showFirebaseBackupConfirmDialog = true },
+                                    onClick = {
+                                        if (!PermissionHelper.areAllPermissionsGranted(context)) {
+                                            showPermissionDialog = true
+                                        } else {
+                                            showDriveExportConfirmDialog = true
+                                        }
+                                    },
                                     modifier = Modifier.weight(1f),
                                     enabled = !isSyncing,
-                                    shape = RoundedCornerShape(10.dp),
+                                    shape = RoundedCornerShape(12.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
                                 ) {
-                                    Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = if (language == "bn") "Firebase ক্লাউড ব্যাকআপ" else "Firebase Backup",
-                                        style = MaterialTheme.typography.labelMedium,
+                                        text = if (language == "bn") "ড্রাইভে ব্যাকআপ রাখুন" else "Export to Drive",
+                                        style = MaterialTheme.typography.labelLarge,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
 
                                 FilledTonalButton(
-                                    onClick = { showFirebaseRestoreConfirmDialog = true },
+                                    onClick = {
+                                        if (!PermissionHelper.areAllPermissionsGranted(context)) {
+                                            showPermissionDialog = true
+                                        } else {
+                                            showDriveImportConfirmDialog = true
+                                        }
+                                    },
                                     modifier = Modifier.weight(1f),
                                     enabled = !isSyncing,
-                                    shape = RoundedCornerShape(10.dp),
+                                    shape = RoundedCornerShape(12.dp),
                                     colors = ButtonDefaults.filledTonalButtonColors(
                                         containerColor = Color(0xFF334155),
                                         contentColor = Color.White
                                     )
                                 ) {
-                                    Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = if (language == "bn") "Firebase রিস্টোর" else "Firebase Restore",
-                                        style = MaterialTheme.typography.labelMedium,
+                                        text = if (language == "bn") "ড্রাইভ থেকে রিস্টোর" else "Import from Drive",
+                                        style = MaterialTheme.typography.labelLarge,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
                             }
 
-                            // Connection Test Button
-                            OutlinedButton(
-                                onClick = {
-                                    viewModel.checkFirebaseConnection { success, msg ->
-                                        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth(),
+                            Surface(
                                 shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF38BDF8))
+                                color = Color(0xFF1E293B),
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Icon(Icons.Default.Wifi, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = if (language == "bn") "Firebase ক্লাউড কানেকশন টেস্ট করুন" else "Test Firebase Cloud Connection",
-                                    style = MaterialTheme.typography.labelMedium
-                                )
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.VerifiedUser, contentDescription = null, tint = EmeraldPrimary, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = if (language == "bn")
+                                            "আপনার গুগল একাউন্টের ড্রাইভে ফাইল নিরাপদে সংরক্ষিত হয়। অন্য যেকোনো নতুন মোবাইলে এই একাউন্ট দিয়ে এক ক্লিকে সম্পূর্ণ দোকান রিস্টোর করতে পারবেন।"
+                                        else
+                                            "Data is safely backed up to your Google Drive account. When switching devices, simply log in and restore with one tap.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color(0xFFCBD5E1),
+                                        fontSize = 12.sp
+                                    )
+                                }
                             }
                         }
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))
 
+                    // Secondary Cloud & Offline Options
                     Text(
-                        text = if (language == "bn") "গুগল ড্রাইভ ও অফলাইন ব্যাকআপ ফাইল:" else "Google Drive & Local File Backup:",
+                        text = if (language == "bn") "বিকল্প ক্লাউড ডাটাবেজ (Firebase RTDB):" else "Alternative Cloud (Firebase RTDB):",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -473,57 +493,36 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(6.dp))
 
-                    // Row of 2 Professional Google Drive Actions:
-                    // 1. Export to Drive (ড্রাইভে রপ্তানি করুন)
-                    // 2. Import from Drive (ড্রাইভ থেকে আমদানি করুন)
+                    // Firebase Realtime Database Live Cloud Row
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Button(
-                            onClick = {
-                                if (!PermissionHelper.areAllPermissionsGranted(context)) {
-                                    showPermissionDialog = true
-                                } else {
-                                    showDriveExportConfirmDialog = true
-                                }
-                            },
+                        OutlinedButton(
+                            onClick = { showFirebaseBackupConfirmDialog = true },
                             modifier = Modifier.weight(1f),
                             enabled = !isSyncing,
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = StockBlue)
+                            shape = RoundedCornerShape(10.dp)
                         ) {
-                            Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = if (language == "bn") "ড্রাইভে রপ্তানি করুন" else "Export to Drive",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold
+                                text = if (language == "bn") "Firebase ব্যাকআপ" else "Firebase Backup",
+                                style = MaterialTheme.typography.labelMedium
                             )
                         }
 
-                        FilledTonalButton(
-                            onClick = {
-                                if (!PermissionHelper.areAllPermissionsGranted(context)) {
-                                    showPermissionDialog = true
-                                } else {
-                                    showDriveImportConfirmDialog = true
-                                }
-                            },
+                        OutlinedButton(
+                            onClick = { showFirebaseRestoreConfirmDialog = true },
                             modifier = Modifier.weight(1f),
                             enabled = !isSyncing,
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.filledTonalButtonColors(
-                                containerColor = StockBlue.copy(alpha = 0.15f),
-                                contentColor = StockBlue
-                            )
+                            shape = RoundedCornerShape(10.dp)
                         ) {
-                            Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = if (language == "bn") "ড্রাইভ থেকে আমদানি" else "Import from Drive",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold
+                                text = if (language == "bn") "Firebase রিস্টোর" else "Firebase Restore",
+                                style = MaterialTheme.typography.labelMedium
                             )
                         }
                     }
