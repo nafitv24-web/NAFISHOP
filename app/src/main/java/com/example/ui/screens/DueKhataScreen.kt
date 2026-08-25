@@ -381,14 +381,6 @@ fun DueKhataScreen(
                 editingDueLog = null
             },
             onDelete = {
-                // Revert effect on customer before deleting
-                var adjustedDue = cust.totalDue
-                if (logToEdit.type == "DUE_GIVEN") {
-                    adjustedDue = (adjustedDue - logToEdit.amount).coerceAtLeast(0.0)
-                } else if (logToEdit.type == "DUE_COLLECTED") {
-                    adjustedDue += logToEdit.amount
-                }
-                viewModel.updateCustomer(cust.copy(totalDue = adjustedDue, lastTransactionDate = System.currentTimeMillis()))
                 viewModel.deleteDueLog(logToEdit)
                 editingDueLog = null
             }

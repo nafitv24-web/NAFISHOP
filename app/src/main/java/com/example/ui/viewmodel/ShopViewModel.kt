@@ -169,6 +169,9 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     init {
         loadSavedNotices()
         checkForUpdates(manualCheck = false)
+        viewModelScope.launch {
+            repository.deduplicateAndMergeCustomers()
+        }
     }
 
     // Dashboard Summary derivation
@@ -680,6 +683,10 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                 note = note
             )
 
+            if (paid > 0 && paymentMethod == "CASH") {
+                addCashToMainBalance(paid, "বিক্রয় নগদ আদায় (#$invoiceNo)")
+            }
+
             val invoiceDetails = InvoiceDetails(
                 invoiceNumber = invoiceNo,
                 shopName = _shopInfo.value.shopName,
@@ -718,6 +725,9 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     fun collectCustomerDue(customer: Customer, amountPaid: Double, note: String) {
         viewModelScope.launch {
             repository.collectCustomerDuePayment(customer, amountPaid, note)
+            if (amountPaid > 0) {
+                addCashToMainBalance(amountPaid, "বাকি আদায় (${customer.name})")
+            }
         }
     }
 
@@ -742,6 +752,9 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteTransaction(tx: TransactionRecord) {
         viewModelScope.launch {
+            if (tx.type == "SALE" && tx.paidAmount > 0 && tx.paymentMethod == "CASH") {
+                withdrawCashFromMainBalance(tx.paidAmount, "বিক্রয় বাতিল ক্যাশ ফেরত (${tx.productName})")
+            }
             repository.deleteTransaction(tx)
         }
     }
@@ -754,6 +767,9 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteDueLog(dueLog: DueLog) {
         viewModelScope.launch {
+            if (dueLog.type == "DUE_COLLECTED" && dueLog.amount > 0) {
+                withdrawCashFromMainBalance(dueLog.amount, "বাকি আদায় বাতিল (${dueLog.customerName})")
+            }
             repository.deleteDueLog(dueLog)
         }
     }
@@ -766,6 +782,17 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         customer: Customer
     ) {
         viewModelScope.launch {
+            // Cash balance adjustment if collected amount changed
+            if (oldLog.type == "DUE_COLLECTED" && newType == "DUE_COLLECTED") {
+                val diff = newAmount - oldLog.amount
+                if (diff > 0) addCashToMainBalance(diff, "বাকি আদায় সংশোধন (${customer.name})")
+                else if (diff < 0) withdrawCashFromMainBalance(-diff, "বাকি আদায় সংশোধন (${customer.name})")
+            } else if (oldLog.type == "DUE_COLLECTED" && newType != "DUE_COLLECTED") {
+                withdrawCashFromMainBalance(oldLog.amount, "বাকি আদায় বাতিল (${customer.name})")
+            } else if (oldLog.type != "DUE_COLLECTED" && newType == "DUE_COLLECTED") {
+                addCashToMainBalance(newAmount, "বাকি আদায় (${customer.name})")
+            }
+
             // 1. Revert effect of old log on customer due
             var adjustedDue = customer.totalDue
             if (oldLog.type == "DUE_GIVEN") {
@@ -803,6 +830,9 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     fun addExpense(title: String, category: String, amount: Double, note: String) {
         viewModelScope.launch {
             repository.addExpense(title, category, amount, note)
+            if (amount > 0) {
+                withdrawCashFromMainBalance(amount, "খরচ: $title ($category)")
+            }
         }
     }
 
@@ -815,6 +845,9 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteExpense(expense: Expense) {
         viewModelScope.launch {
             repository.deleteExpense(expense)
+            if (expense.amount > 0) {
+                addCashToMainBalance(expense.amount, "খরচ বাতিল/ক্যাশ ফেরত: ${expense.title}")
+            }
         }
     }
 

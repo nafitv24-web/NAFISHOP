@@ -132,10 +132,14 @@ fun CustomerLedgerScreen(
             )
         }
 
-        // 2. Add POS Transactions that have due or are credit sales not logged in dueLogs
+        // 2. Add POS Transactions that have due and are not already in dueLogs
+        val loggedInvoices = customerDueLogs.mapNotNull { log ->
+            val match = "INV-\\d+".toRegex().find(log.note)
+            match?.value
+        }.toSet()
+
         customerTransactions.forEach { tx ->
-            if (tx.dueAmount > 0) {
-                // If it was a sale with due
+            if (tx.dueAmount > 0 && !loggedInvoices.contains(tx.invoiceNumber)) {
                 rawList.add(
                     LedgerEntry(
                         id = tx.id * 10 + 2,

@@ -104,6 +104,52 @@ class ShopRepository(private val database: AppDatabase) {
         transactionDao.insertTransaction(tx)
     }
 
+    suspend fun findCustomerByNameOrPhone(name: String, phone: String): Customer? = withContext(Dispatchers.IO) {
+        customerDao.findExistingCustomer(name, phone)
+    }
+
+    suspend fun deduplicateAndMergeCustomers() = withContext(Dispatchers.IO) {
+        val all = customerDao.getAllCustomersList()
+        if (all.isEmpty()) return@withContext
+
+        // Group customers by normalized phone if available, or normalized name
+        val groups = all.groupBy { c ->
+            val cleanPhone = c.phone.trim()
+            val cleanName = c.name.trim().lowercase()
+            if (cleanPhone.isNotBlank()) "PHONE:$cleanPhone" else "NAME:$cleanName"
+        }
+
+        for ((_, group) in groups) {
+            if (group.size > 1) {
+                val survivor = group.first()
+                val totalCombinedDue = group.sumOf { it.totalDue }
+                val totalCombinedPurchased = group.sumOf { it.totalPurchased }
+                val bestPhone = group.firstOrNull { it.phone.isNotBlank() }?.phone ?: survivor.phone
+                val bestAddress = group.firstOrNull { it.address.isNotBlank() }?.address ?: survivor.address
+                val bestImage = group.firstOrNull { it.imageUri.isNotBlank() }?.imageUri ?: survivor.imageUri
+
+                val mergedSurvivor = survivor.copy(
+                    totalDue = totalCombinedDue,
+                    totalPurchased = totalCombinedPurchased,
+                    phone = bestPhone,
+                    address = bestAddress,
+                    imageUri = bestImage,
+                    lastTransactionDate = group.maxOf { it.lastTransactionDate }
+                )
+                customerDao.updateCustomer(mergedSurvivor)
+
+                // Reassign due logs and delete duplicate customer rows
+                for (duplicate in group) {
+                    if (duplicate.id != survivor.id) {
+                        customerDao.reassignDueLogs(duplicate.id, survivor.id, survivor.name)
+                        customerDao.reassignTransactionsByName(duplicate.name, survivor.name)
+                        customerDao.deleteCustomer(duplicate)
+                    }
+                }
+            }
+        }
+    }
+
     suspend fun processSale(
         cartItems: List<CartItem>,
         customerName: String,
@@ -156,11 +202,11 @@ class ShopRepository(private val database: AppDatabase) {
             transactionDao.insertTransaction(tx)
         }
 
-        // 2. If customer has due or is identified, update/create customer ledger
-        if (customerName.isNotBlank() && (calculatedDue > 0 || customerPhone.isNotBlank())) {
-            var existingCustomer = if (customerPhone.isNotBlank()) {
-                customerDao.getCustomerByPhone(customerPhone)
-            } else null
+        // 2. If customer has due or is identified, update/create customer ledger (No Duplicates!)
+        val cleanName = customerName.trim()
+        val cleanPhone = customerPhone.trim()
+        if (cleanName.isNotBlank() && cleanName != "ক্যাশ কাস্টমার" || cleanPhone.isNotBlank() || calculatedDue > 0) {
+            var existingCustomer = customerDao.findExistingCustomer(cleanName, cleanPhone)
 
             if (existingCustomer != null) {
                 customerDao.updateCustomerBalance(
@@ -172,23 +218,28 @@ class ShopRepository(private val database: AppDatabase) {
             } else {
                 val newCustomerId = customerDao.insertCustomer(
                     Customer(
-                        name = customerName,
-                        phone = customerPhone,
+                        name = if (cleanName.isNotBlank()) cleanName else "কাস্টমার",
+                        phone = cleanPhone,
                         address = "",
                         totalDue = calculatedDue,
                         totalPurchased = netTotal,
                         lastTransactionDate = now
                     )
                 )
-                existingCustomer = Customer(id = newCustomerId, name = customerName, phone = customerPhone, totalDue = calculatedDue)
+                existingCustomer = Customer(
+                    id = newCustomerId,
+                    name = if (cleanName.isNotBlank()) cleanName else "কাস্টমার",
+                    phone = cleanPhone,
+                    totalDue = calculatedDue
+                )
             }
 
             if (calculatedDue > 0) {
                 dueLogDao.insertDueLog(
                     DueLog(
                         customerId = existingCustomer.id,
-                        customerName = customerName,
-                        customerPhone = customerPhone,
+                        customerName = existingCustomer.name,
+                        customerPhone = existingCustomer.phone,
                         type = "DUE_GIVEN",
                         amount = calculatedDue,
                         note = "মেমো #$invoiceNumber বাবদ বাকি",
@@ -203,10 +254,45 @@ class ShopRepository(private val database: AppDatabase) {
 
     suspend fun addCustomer(name: String, phone: String, address: String, initialDue: Double, imageUri: String = "") = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
+        val cleanName = name.trim()
+        val cleanPhone = phone.trim()
+
+        // Check if customer with this name or phone already exists
+        val existing = customerDao.findExistingCustomer(cleanName, cleanPhone)
+        if (existing != null) {
+            val updatedDue = existing.totalDue + initialDue
+            val updatedPurchased = existing.totalPurchased + initialDue
+            customerDao.updateCustomer(
+                existing.copy(
+                    name = if (cleanName.isNotBlank()) cleanName else existing.name,
+                    phone = if (cleanPhone.isNotBlank()) cleanPhone else existing.phone,
+                    address = if (address.isNotBlank()) address else existing.address,
+                    totalDue = updatedDue,
+                    totalPurchased = updatedPurchased,
+                    imageUri = if (imageUri.isNotBlank()) imageUri else existing.imageUri,
+                    lastTransactionDate = now
+                )
+            )
+            if (initialDue > 0) {
+                dueLogDao.insertDueLog(
+                    DueLog(
+                        customerId = existing.id,
+                        customerName = existing.name,
+                        customerPhone = existing.phone,
+                        type = "DUE_GIVEN",
+                        amount = initialDue,
+                        note = "বাকি যুক্ত করা হয়েছে",
+                        timestamp = now
+                    )
+                )
+            }
+            return@withContext
+        }
+
         val customerId = customerDao.insertCustomer(
             Customer(
-                name = name,
-                phone = phone,
+                name = cleanName,
+                phone = cleanPhone,
                 address = address,
                 totalDue = initialDue,
                 totalPurchased = initialDue,
@@ -218,8 +304,8 @@ class ShopRepository(private val database: AppDatabase) {
             dueLogDao.insertDueLog(
                 DueLog(
                     customerId = customerId,
-                    customerName = name,
-                    customerPhone = phone,
+                    customerName = cleanName,
+                    customerPhone = cleanPhone,
                     type = "DUE_GIVEN",
                     amount = initialDue,
                     note = "পূর্বের বাকি হিসাব শুরু",
@@ -254,7 +340,8 @@ class ShopRepository(private val database: AppDatabase) {
     suspend fun giveCustomerAdditionalDue(customer: Customer, amountDue: Double, note: String) = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         val updatedDue = customer.totalDue + amountDue
-        customerDao.setCustomerDue(customer.id, updatedDue, now)
+        val updatedPurchased = customer.totalPurchased + amountDue
+        customerDao.updateCustomerBalance(customer.id, amountDue, amountDue, now)
 
         dueLogDao.insertDueLog(
             DueLog(
@@ -274,6 +361,36 @@ class ShopRepository(private val database: AppDatabase) {
     }
 
     suspend fun deleteDueLog(dueLog: DueLog) = withContext(Dispatchers.IO) {
+        // 1. Revert customer balance
+        val customer = customerDao.getCustomerById(dueLog.customerId)
+            ?: customerDao.findExistingCustomer(dueLog.customerName, dueLog.customerPhone)
+
+        if (customer != null) {
+            val updatedDue = if (dueLog.type == "DUE_GIVEN") {
+                (customer.totalDue - dueLog.amount).coerceAtLeast(0.0)
+            } else {
+                customer.totalDue + dueLog.amount
+            }
+            customerDao.setCustomerDue(customer.id, updatedDue, System.currentTimeMillis())
+        }
+
+        // 2. If this due log was tied to an invoice, restore the product stocks!
+        if (dueLog.note.contains("INV-")) {
+            val regex = "INV-\\d+".toRegex()
+            val match = regex.find(dueLog.note)
+            if (match != null) {
+                val invoiceNo = match.value
+                val invoiceTxs = transactionDao.getTransactionsByInvoice(invoiceNo)
+                for (tx in invoiceTxs) {
+                    if (tx.type == "SALE" && tx.productId > 0) {
+                        // Restore product stock
+                        productDao.increaseStock(tx.productId, tx.quantity)
+                    }
+                }
+                transactionDao.deleteTransactionsByInvoice(invoiceNo)
+            }
+        }
+
         dueLogDao.deleteDueLog(dueLog)
     }
 
@@ -282,6 +399,28 @@ class ShopRepository(private val database: AppDatabase) {
     }
 
     suspend fun deleteTransaction(tx: TransactionRecord) = withContext(Dispatchers.IO) {
+        // 1. Restore product stock
+        if (tx.type == "SALE" && tx.productId > 0) {
+            productDao.increaseStock(tx.productId, tx.quantity)
+        } else if (tx.type == "STOCK_IN" && tx.productId > 0) {
+            productDao.decreaseStock(tx.productId, tx.quantity)
+        } else if (tx.type == "STOCK_OUT_DAMAGE" && tx.productId > 0) {
+            productDao.increaseStock(tx.productId, tx.quantity)
+        }
+
+        // 2. Adjust customer due if this transaction had due
+        if (tx.dueAmount > 0) {
+            val customer = customerDao.findExistingCustomer(tx.customerName, tx.customerPhone)
+            if (customer != null) {
+                val updatedDue = (customer.totalDue - tx.dueAmount).coerceAtLeast(0.0)
+                customerDao.setCustomerDue(customer.id, updatedDue, System.currentTimeMillis())
+            }
+            // Remove associated DueLog if matching invoice
+            if (tx.invoiceNumber.isNotBlank()) {
+                dueLogDao.deleteDueLogsByNotePattern("%${tx.invoiceNumber}%")
+            }
+        }
+
         transactionDao.deleteTransaction(tx)
     }
 

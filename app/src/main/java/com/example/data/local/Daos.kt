@@ -60,6 +60,15 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE customerName = :name OR (customerPhone != '' AND customerPhone = :phone) ORDER BY timestamp DESC")
     fun getTransactionsForCustomer(name: String, phone: String): Flow<List<TransactionRecord>>
 
+    @Query("SELECT * FROM transactions WHERE id = :id LIMIT 1")
+    suspend fun getTransactionById(id: Long): TransactionRecord?
+
+    @Query("SELECT * FROM transactions WHERE invoiceNumber = :invoiceNo")
+    suspend fun getTransactionsByInvoice(invoiceNo: String): List<TransactionRecord>
+
+    @Query("DELETE FROM transactions WHERE invoiceNumber = :invoiceNo")
+    suspend fun deleteTransactionsByInvoice(invoiceNo: String)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTransaction(tx: TransactionRecord): Long
 
@@ -87,6 +96,15 @@ interface CustomerDao {
     @Query("SELECT * FROM customers WHERE phone = :phone LIMIT 1")
     suspend fun getCustomerByPhone(phone: String): Customer?
 
+    @Query("SELECT * FROM customers WHERE LOWER(TRIM(name)) = LOWER(TRIM(:name)) LIMIT 1")
+    suspend fun getCustomerByName(name: String): Customer?
+
+    @Query("SELECT * FROM customers WHERE (phone != '' AND phone = :phone) OR (LOWER(TRIM(name)) = LOWER(TRIM(:name))) LIMIT 1")
+    suspend fun findExistingCustomer(name: String, phone: String): Customer?
+
+    @Query("SELECT * FROM customers ORDER BY id ASC")
+    suspend fun getAllCustomersList(): List<Customer>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCustomer(customer: Customer): Long
 
@@ -105,6 +123,12 @@ interface CustomerDao {
     @Query("UPDATE customers SET totalDue = :newDue, lastTransactionDate = :time WHERE id = :customerId")
     suspend fun setCustomerDue(customerId: Long, newDue: Double, time: Long)
 
+    @Query("UPDATE due_logs SET customerId = :newCustomerId, customerName = :newName WHERE customerId = :oldCustomerId")
+    suspend fun reassignDueLogs(oldCustomerId: Long, newCustomerId: Long, newName: String)
+
+    @Query("UPDATE transactions SET customerName = :newName WHERE customerName = :oldName")
+    suspend fun reassignTransactionsByName(oldName: String, newName: String)
+
     @Query("DELETE FROM customers")
     suspend fun clearAll()
 }
@@ -117,6 +141,12 @@ interface DueLogDao {
     @Query("SELECT * FROM due_logs WHERE customerId = :customerId ORDER BY timestamp DESC")
     fun getDueLogsForCustomer(customerId: Long): Flow<List<DueLog>>
 
+    @Query("SELECT * FROM due_logs WHERE id = :id LIMIT 1")
+    suspend fun getDueLogById(id: Long): DueLog?
+
+    @Query("SELECT * FROM due_logs WHERE customerId = :customerId")
+    suspend fun getDueLogsListForCustomer(customerId: Long): List<DueLog>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDueLog(dueLog: DueLog): Long
 
@@ -128,6 +158,12 @@ interface DueLogDao {
 
     @Delete
     suspend fun deleteDueLog(dueLog: DueLog)
+
+    @Query("DELETE FROM due_logs WHERE customerId = :customerId")
+    suspend fun deleteDueLogsForCustomer(customerId: Long)
+
+    @Query("DELETE FROM due_logs WHERE note LIKE :pattern")
+    suspend fun deleteDueLogsByNotePattern(pattern: String)
 
     @Query("DELETE FROM due_logs")
     suspend fun clearAll()
