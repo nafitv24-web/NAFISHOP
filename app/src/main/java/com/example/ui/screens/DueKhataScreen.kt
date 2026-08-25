@@ -38,6 +38,7 @@ import java.util.*
 fun DueKhataScreen(
     viewModel: ShopViewModel
 ) {
+    val context = LocalContext.current
     val customers by viewModel.customers.collectAsState()
     val dueLogs by viewModel.dueLogs.collectAsState()
     val shopInfo by viewModel.shopInfo.collectAsState()
@@ -141,6 +142,61 @@ fun DueKhataScreen(
                                 color = Color(0xFF9A3412)
                             )
                         }
+                    }
+                }
+
+                // PDF Download button for All Dues
+                HorizontalDivider(color = Color(0xFFFED7AA), thickness = 1.dp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (language == "bn") "সম্পূর্ণ বাকি খাতার স্টেটমেন্ট" else "Full Due Statement",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF9A3412),
+                        fontWeight = FontWeight.Medium
+                    )
+                    FilledTonalButton(
+                        onClick = {
+                            val pdfFile = PdfGenerator.generateAllDuesPdf(
+                                context = context,
+                                shopName = shopInfo.shopName,
+                                customers = customers,
+                                totalDue = totalDueSum,
+                                currency = currency
+                            )
+                            if (pdfFile != null) {
+                                PdfGenerator.openOrSharePdf(
+                                    context = context,
+                                    file = pdfFile,
+                                    chooserTitle = if (language == "bn") "বাকি খাতা PDF ডাউনলোড / শেয়ার করুন" else "Download / Share Dues PDF"
+                                )
+                            } else {
+                                android.widget.Toast.makeText(
+                                    context,
+                                    if (language == "bn") "PDF তৈরি করতে সমস্যা হয়েছে" else "Failed to generate PDF",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = DueOrange,
+                            contentColor = Color.White
+                        ),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (language == "bn") "বাকি PDF ডাউনলোড" else "Download Due PDF",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }

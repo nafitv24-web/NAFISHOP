@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -36,6 +37,7 @@ import com.example.data.model.Product
 import com.example.ui.components.toIntOrNull
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.ShopViewModel
+import com.example.util.PdfGenerator
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,6 +45,7 @@ fun InventoryScreen(
     viewModel: ShopViewModel,
     onNavigateToPos: () -> Unit
 ) {
+    val context = LocalContext.current
     val products by viewModel.filteredProducts.collectAsState()
     val allProducts by viewModel.products.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
@@ -154,27 +157,68 @@ fun InventoryScreen(
                 }
             }
 
-            // Products Count & Summary Bar
+            // Products Count & Summary Bar with PDF download button
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "${if (language == "bn") "মোট প্রদর্শিত: " else "Showing: "}${products.size} ${if (language == "bn") "টি পণ্য" else "items"}",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                val totalVal = products.sumOf { it.stockQuantity * it.sellPrice }
-                Text(
-                    text = "${if (language == "bn") "মোট মূল্য: " else "Value: "}$currency${totalVal.toIntOrNull() ?: totalVal}",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                Column {
+                    Text(
+                        text = "${if (language == "bn") "মোট প্রদর্শিত: " else "Showing: "}${products.size} ${if (language == "bn") "টি পণ্য" else "items"}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    val totalVal = products.sumOf { it.stockQuantity * it.sellPrice }
+                    Text(
+                        text = "${if (language == "bn") "মোট মূল্য: " else "Value: "}$currency${totalVal.toIntOrNull() ?: totalVal}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                // Download Products PDF Button
+                FilledTonalButton(
+                    onClick = {
+                        val pdfFile = PdfGenerator.generateAllProductsPdf(
+                            context = context,
+                            shopName = shopInfo.shopName,
+                            products = products,
+                            currency = currency
+                        )
+                        if (pdfFile != null) {
+                            PdfGenerator.openOrSharePdf(
+                                context = context,
+                                file = pdfFile,
+                                chooserTitle = if (language == "bn") "পণ্য তালিকা PDF ডাউনলোড / শেয়ার করুন" else "Download / Share Products PDF"
+                            )
+                        } else {
+                            Toast.makeText(
+                                context,
+                                if (language == "bn") "PDF তৈরি করতে সমস্যা হয়েছে" else "Failed to generate PDF",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    },
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    ),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Icon(Icons.Default.PictureAsPdf, contentDescription = "Download PDF", modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (language == "bn") "পণ্য PDF" else "Product PDF",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
 
             // Product List

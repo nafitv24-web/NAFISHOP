@@ -24,6 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -35,6 +36,7 @@ import com.example.data.model.TransactionRecord
 import com.example.ui.components.toIntOrNull
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.ShopViewModel
+import com.example.util.PdfGenerator
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -48,6 +50,7 @@ fun DashboardScreen(
     onOpenStockInDialog: () -> Unit,
     onOpenAddExpenseDialog: () -> Unit
 ) {
+    val context = LocalContext.current
     val summary by viewModel.dashboardSummary.collectAsState()
     val lowStockItems by viewModel.lowStockProducts.collectAsState()
     val recentTxs by viewModel.recentTransactions.collectAsState()
@@ -539,11 +542,47 @@ fun DashboardScreen(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground
                 )
-                Text(
-                    text = "${recentTxs.size} ${if (language == "bn") "টি" else "items"}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
+
+                if (recentTxs.isNotEmpty()) {
+                    FilledTonalButton(
+                        onClick = {
+                            val pdfFile = PdfGenerator.generateTransactionsListPdf(
+                                context = context,
+                                shopName = shopInfo.shopName,
+                                title = if (language == "bn") "দোকানের লেনদেন রিপোর্ট (Transactions Record)" else "Shop Transactions Record",
+                                transactions = recentTxs,
+                                currency = currency
+                            )
+                            if (pdfFile != null) {
+                                PdfGenerator.openOrSharePdf(
+                                    context = context,
+                                    file = pdfFile,
+                                    chooserTitle = if (language == "bn") "লেনদেন PDF ডাউনলোড / শেয়ার" else "Download / Share Transactions PDF"
+                                )
+                            }
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        ),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (language == "bn") "লেনদেন PDF" else "Transactions PDF",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "${recentTxs.size} ${if (language == "bn") "টি" else "items"}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
             }
         }
 

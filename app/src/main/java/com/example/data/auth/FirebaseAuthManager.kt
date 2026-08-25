@@ -1,6 +1,9 @@
 package com.example.data.auth
 
+import android.content.Context
+import com.example.ShopApplication
 import com.google.android.gms.tasks.Task
+import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.UserProfileChangeRequest
@@ -25,8 +28,21 @@ suspend fun <T> Task<T>.awaitTask(): T = suspendCancellableCoroutine { cont ->
     }
 }
 
-class FirebaseAuthManager {
-    private val auth: FirebaseAuth by lazy { FirebaseAuth.getInstance() }
+class FirebaseAuthManager(private val context: Context? = null) {
+    private val auth: FirebaseAuth
+        get() {
+            context?.let { ShopApplication.ensureFirebaseInitialized(it) }
+            return try {
+                FirebaseAuth.getInstance()
+            } catch (e: Exception) {
+                if (context != null) {
+                    ShopApplication.ensureFirebaseInitialized(context)
+                    FirebaseAuth.getInstance()
+                } else {
+                    throw e
+                }
+            }
+        }
 
     val currentUser: FirebaseUser?
         get() = try {

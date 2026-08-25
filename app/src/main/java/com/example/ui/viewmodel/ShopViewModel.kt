@@ -46,7 +46,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     val cashLogs: StateFlow<List<CashLog>> = repository.allCashLogs
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val firebaseAuth = FirebaseAuthManager()
+    val firebaseAuth = FirebaseAuthManager(application)
     private val _firebaseUser = MutableStateFlow<FirebaseUser?>(firebaseAuth.currentUser)
     val firebaseUser: StateFlow<FirebaseUser?> = _firebaseUser.asStateFlow()
 
