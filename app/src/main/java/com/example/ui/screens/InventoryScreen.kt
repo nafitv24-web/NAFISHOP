@@ -1,10 +1,12 @@
 package com.example.ui.screens
 
+import android.app.DatePickerDialog
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -38,6 +40,8 @@ import com.example.ui.components.toIntOrNull
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.ShopViewModel
 import com.example.util.PdfGenerator
+import java.text.SimpleDateFormat
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,11 +52,15 @@ fun InventoryScreen(
     val context = LocalContext.current
     val products by viewModel.filteredProducts.collectAsState()
     val allProducts by viewModel.products.collectAsState()
+    val expiringProducts by viewModel.expiringProducts.collectAsState()
+    val expiredProducts by viewModel.expiredProducts.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val selectedCategory by viewModel.selectedCategory.collectAsState()
     val shopInfo by viewModel.shopInfo.collectAsState()
     val language by viewModel.language.collectAsState()
     val currency = shopInfo.currency
+
+    var currentViewTab by remember { mutableStateOf(0) } // 0: All Products, 1: Low Stock, 2: Expiring & Expired
 
     var showAddEditDialog by remember { mutableStateOf(false) }
     var editingProduct by remember { mutableStateOf<Product?>(null) }
@@ -69,6 +77,22 @@ fun InventoryScreen(
     val categories = remember(allProducts) {
         val customCats = allProducts.map { it.category.trim() }.filter { it.isNotBlank() && it != "সব" }
         (listOf("সব") + (customCats + defaultCategories.filter { it != "সব" }).distinct())
+    }
+
+    val lowStockProducts = remember(allProducts) {
+        allProducts.filter { it.stockQuantity <= it.minStockAlert }
+    }
+
+    val allExpiringCombined = remember(expiringProducts, expiredProducts) {
+        (expiredProducts + expiringProducts).distinctBy { it.id }.sortedBy { it.expiryDate }
+    }
+
+    val displayedProducts = remember(currentViewTab, products, lowStockProducts, allExpiringCombined) {
+        when (currentViewTab) {
+            1 -> lowStockProducts
+            2 -> allExpiringCombined
+            else -> products
+        }
     }
 
     Scaffold(
@@ -139,90 +163,207 @@ fun InventoryScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
-                    // Horizontal Category Chips
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    // Primary View Mode Filter Tabs (All, Low Stock, Expiring/Expired)
+                    TabRow(
+                        selectedTabIndex = currentViewTab,
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        divider = {}
                     ) {
-                        items(categories) { cat ->
-                            FilterChip(
-                                selected = selectedCategory == cat,
-                                onClick = { viewModel.selectedCategory.value = cat },
-                                label = { Text(cat) },
-                                shape = RoundedCornerShape(8.dp)
-                            )
+                        Tab(
+                            selected = currentViewTab == 0,
+                            onClick = { currentViewTab = 0 },
+                            text = {
+                                Text(
+                                    text = if (language == "bn") "সব পণ্য (${allProducts.size})" else "All (${allProducts.size})",
+                                    fontWeight = if (currentViewTab == 0) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        )
+                        Tab(
+                            selected = currentViewTab == 1,
+                            onClick = { currentViewTab = 1 },
+                            text = {
+                                Text(
+                                    text = if (language == "bn") "কম স্টক (${lowStockProducts.size})" else "Low Stock (${lowStockProducts.size})",
+                                    color = if (lowStockProducts.isNotEmpty()) DueOrange else MaterialTheme.colorScheme.onSurface,
+                                    fontWeight = if (currentViewTab == 1) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        )
+                        Tab(
+                            selected = currentViewTab == 2,
+                            onClick = { currentViewTab = 2 },
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = if (language == "bn") "মেয়াদ শেষ (${allExpiringCombined.size})" else "Expiring (${allExpiringCombined.size})",
+                                        color = if (allExpiringCombined.isNotEmpty()) LossRed else MaterialTheme.colorScheme.onSurface,
+                                        fontWeight = if (currentViewTab == 2) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                }
+                            }
+                        )
+                    }
+
+                    if (currentViewTab == 0) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        // Horizontal Category Chips
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(categories) { cat ->
+                                FilterChip(
+                                    selected = selectedCategory == cat,
+                                    onClick = { viewModel.selectedCategory.value = cat },
+                                    label = { Text(cat) },
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                            }
                         }
                     }
                 }
             }
 
-            // Products Count & Summary Bar with PDF download button
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = "${if (language == "bn") "মোট প্রদর্শিত: " else "Showing: "}${products.size} ${if (language == "bn") "টি পণ্য" else "items"}",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    val totalVal = products.sumOf { it.stockQuantity * it.sellPrice }
-                    Text(
-                        text = "${if (language == "bn") "মোট মূল্য: " else "Value: "}$currency${totalVal.toIntOrNull() ?: totalVal}",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-
-                // Download Products PDF Button
-                FilledTonalButton(
-                    onClick = {
-                        val pdfFile = PdfGenerator.generateAllProductsPdf(
-                            context = context,
-                            shopName = shopInfo.shopName,
-                            products = products,
-                            currency = currency
-                        )
-                        if (pdfFile != null) {
-                            PdfGenerator.openOrSharePdf(
-                                context = context,
-                                file = pdfFile,
-                                chooserTitle = if (language == "bn") "পণ্য তালিকা PDF ডাউনলোড / শেয়ার করুন" else "Download / Share Products PDF"
-                            )
-                        } else {
-                            Toast.makeText(
-                                context,
-                                if (language == "bn") "PDF তৈরি করতে সমস্যা হয়েছে" else "Failed to generate PDF",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                    },
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                    ),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+            // Banner for Expiring Products when Tab 2 is active
+            if (currentViewTab == 2) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF2F2)),
+                    border = BorderStroke(1.dp, Color(0xFFFECACA))
                 ) {
-                    Icon(Icons.Default.PictureAsPdf, contentDescription = "Download PDF", modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = if (language == "bn") "পণ্য PDF" else "Product PDF",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.HourglassBottom, contentDescription = null, tint = LossRed)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = if (language == "bn") "মেয়াদ উত্তীর্ণ ও শেষ পর্যায় পণ্য" else "Expiring & Expired Products",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = LossRed
+                                    )
+                                    val totalExpVal = allExpiringCombined.sumOf { it.stockQuantity * it.buyPrice }
+                                    Text(
+                                        text = "${if (language == "bn") "মেয়াদোত্তীর্ণ: " else "Expired: "}${expiredProducts.size}টি | ${if (language == "bn") "৩০ দিনের মধ্যে: " else "In 30 days: "}${expiringProducts.size}টি (ক্রয়মূল্য: $currency${totalExpVal.toIntOrNull() ?: totalExpVal})",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color(0xFF991B1B)
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Dedicated PDF Export Button for Expiring Products
+                        Button(
+                            onClick = {
+                                val pdfFile = PdfGenerator.generateExpiringProductsPdf(
+                                    context = context,
+                                    shopName = shopInfo.shopName,
+                                    products = allExpiringCombined,
+                                    currency = currency
+                                )
+                                if (pdfFile != null) {
+                                    PdfGenerator.openOrSharePdf(
+                                        context = context,
+                                        file = pdfFile,
+                                        chooserTitle = if (language == "bn") "মেয়াদ শেষ পণ্যের তালিকা PDF শেয়ার করুন" else "Share Expiring Products PDF"
+                                    )
+                                } else {
+                                    Toast.makeText(context, "PDF তৈরি করতে সমস্যা হয়েছে", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = LossRed)
+                        ) {
+                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (language == "bn") "মেয়াদ শেষ তালিকা PDF ডাউনলোড / শেয়ার" else "Export Expiring List PDF",
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            } else {
+                // Products Count & Summary Bar with General PDF download button
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "${if (language == "bn") "মোট প্রদর্শিত: " else "Showing: "}${displayedProducts.size} ${if (language == "bn") "টি পণ্য" else "items"}",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        val totalVal = displayedProducts.sumOf { it.stockQuantity * it.sellPrice }
+                        Text(
+                            text = "${if (language == "bn") "মোট মূল্য: " else "Value: "}$currency${totalVal.toIntOrNull() ?: totalVal}",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    // Download Products PDF Button
+                    FilledTonalButton(
+                        onClick = {
+                            val pdfFile = PdfGenerator.generateAllProductsPdf(
+                                context = context,
+                                shopName = shopInfo.shopName,
+                                products = displayedProducts,
+                                currency = currency
+                            )
+                            if (pdfFile != null) {
+                                PdfGenerator.openOrSharePdf(
+                                    context = context,
+                                    file = pdfFile,
+                                    chooserTitle = if (language == "bn") "পণ্য তালিকা PDF ডাউনলোড / শেয়ার করুন" else "Download / Share Products PDF"
+                                )
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    if (language == "bn") "PDF তৈরি করতে সমস্যা হয়েছে" else "Failed to generate PDF",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        ),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Icon(Icons.Default.PictureAsPdf, contentDescription = "Download PDF", modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (language == "bn") "পণ্য PDF" else "Product PDF",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
 
             // Product List
-            if (products.isEmpty()) {
+            if (displayedProducts.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -231,23 +372,26 @@ fun InventoryScreen(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
-                            Icons.Default.Inventory2,
+                            if (currentViewTab == 2) Icons.Default.CheckCircle else Icons.Default.Inventory2,
                             contentDescription = null,
                             modifier = Modifier.size(64.dp),
-                            tint = MaterialTheme.colorScheme.outlineVariant
+                            tint = if (currentViewTab == 2) ProfitGreen else MaterialTheme.colorScheme.outlineVariant
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = if (language == "bn") "কোনো পণ্য পাওয়া যায়নি" else "No products found",
+                            text = if (currentViewTab == 2) (if (language == "bn") "কোনো মেয়াদ উত্তীর্ণ বা মেয়াদ শেষ পর্যায়ের পণ্য নেই" else "No expiring or expired products found")
+                            else (if (language == "bn") "কোনো পণ্য পাওয়া যায়নি" else "No products found"),
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.outline
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = if (language == "bn") "নিচের 'নতুন পণ্য' বাটনে চাপ দিয়ে পণ্য যোগ করুন" else "Tap 'Add Product' below to add items",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.outline
-                        )
+                        if (currentViewTab == 0) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = if (language == "bn") "নিচের 'নতুন পণ্য' বাটনে চাপ দিয়ে পণ্য যোগ করুন" else "Tap 'Add Product' below to add items",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
                     }
                 }
             } else {
@@ -256,7 +400,7 @@ fun InventoryScreen(
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 90.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(products, key = { it.id }) { product ->
+                    items(displayedProducts, key = { it.id }) { product ->
                         ProductItemCard(
                             product = product,
                             currency = currency,
@@ -304,7 +448,7 @@ fun InventoryScreen(
     if (showStockInDialog && stockInProduct != null) {
         StockInDialog(
             product = stockInProduct!!,
-            allProducts = products,
+            allProducts = allProducts,
             currency = currency,
             language = language,
             onDismiss = { showStockInDialog = false },
@@ -357,6 +501,12 @@ fun ProductItemCard(
 
     val isLowStock = product.stockQuantity <= product.minStockAlert
     val isOutOfStock = product.stockQuantity <= 0.0
+
+    val now = System.currentTimeMillis()
+    val hasExpiry = product.expiryDate > 0L
+    val isExpired = hasExpiry && product.expiryDate < now
+    val daysRemaining = if (hasExpiry) ((product.expiryDate - now) / (1000 * 60 * 60 * 24)).toInt() else 999
+    val isExpiringSoon = hasExpiry && !isExpired && daysRemaining in 0..30
 
     val profitMargin = if (product.buyPrice > 0) {
         ((product.sellPrice - product.buyPrice) / product.buyPrice * 100).toInt()
@@ -504,7 +654,56 @@ fun ProductItemCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            // Expiry Date Badge if configured
+            if (hasExpiry) {
+                Spacer(modifier = Modifier.height(6.dp))
+                val expiryDateStr = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(product.expiryDate))
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = when {
+                        isExpired -> Color(0xFFFEE2E2)
+                        isExpiringSoon -> Color(0xFFFEF3C7)
+                        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                    }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            when {
+                                isExpired -> Icons.Default.Warning
+                                isExpiringSoon -> Icons.Default.HourglassBottom
+                                else -> Icons.Default.Event
+                            },
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = when {
+                                isExpired -> LossRed
+                                isExpiringSoon -> DueOrange
+                                else -> MaterialTheme.colorScheme.outline
+                            }
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = when {
+                                isExpired -> "${if (language == "bn") "মেয়াদ উত্তীর্ণ! (" else "Expired! ("}$expiryDateStr)"
+                                isExpiringSoon -> "${if (language == "bn") "মেয়াদ শেষ হতে $daysRemaining দিন বাকি (" else "Expiring in $daysRemaining days ("}$expiryDateStr)"
+                                else -> "${if (language == "bn") "মেয়াদ: " else "Expiry: "}$expiryDateStr"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = when {
+                                isExpired -> LossRed
+                                isExpiringSoon -> Color(0xFFB45309)
+                                else -> MaterialTheme.colorScheme.outline
+                            }
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Pricing Info & Quick Action Buttons
             Row(
@@ -574,6 +773,7 @@ fun AddEditProductDialog(
     onDismiss: () -> Unit,
     onSave: (Product) -> Unit
 ) {
+    val context = LocalContext.current
     var name by remember { mutableStateOf(product?.name ?: "") }
     var barcode by remember { mutableStateOf(product?.barcode ?: "") }
     var category by remember { mutableStateOf(product?.category ?: "মুদি সামগ্রী") }
@@ -583,6 +783,7 @@ fun AddEditProductDialog(
     var unit by remember { mutableStateOf(product?.unit ?: "পিস") }
     var minStockStr by remember { mutableStateOf(product?.minStockAlert?.toString()?.replace(".0", "") ?: "5") }
     var imageUri by remember { mutableStateOf(product?.imageUri ?: "") }
+    var expiryTimestamp by remember { mutableStateOf(product?.expiryDate ?: 0L) }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -592,7 +793,6 @@ fun AddEditProductDialog(
         }
     }
 
-    val units = listOf("পিস", "কেজি", "গ্রাম", "লিটার", "বস্তা", "প্যাকেট", "ডজন", "বক্স", "হালি")
     val categories = listOf("মুদি সামগ্রী", "চাল ও ডাল", "তেল ও ঘি", "চা ও পানীয়", "ডিম ও দুগ্ধজাত", "প্রসাধন", "পরিষ্কারক", "অন্যান্য")
 
     Dialog(onDismissRequest = onDismiss) {
@@ -824,6 +1024,128 @@ fun AddEditProductDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Product Expiry Date (পণ্যের মেয়াদ শেষ হওয়ার তারিখ)
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    border = CardDefaults.outlinedCardBorder(),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.HourglassBottom, contentDescription = null, tint = DueOrange, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (language == "bn") "পণ্যের মেয়াদ (Expiry Date)" else "Expiry Date",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            if (expiryTimestamp > 0L) {
+                                TextButton(
+                                    onClick = { expiryTimestamp = 0L },
+                                    contentPadding = PaddingValues(0.dp)
+                                ) {
+                                    Text(if (language == "bn") "মেয়াদ বাদ দিন" else "Clear", color = LossRed, style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+                        }
+
+                        if (expiryTimestamp > 0L) {
+                            val expDateStr = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(expiryTimestamp))
+                            Text(
+                                text = "${if (language == "bn") "নির্বাচিত মেয়াদ শেষ: " else "Selected Expiry: "}$expDateStr",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
+                        } else {
+                            Text(
+                                text = if (language == "bn") "মেয়াদ যুক্ত করা হয়নি (ঐচ্ছিক)" else "No expiry date set (Optional)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
+                        }
+
+                        // Quick duration chips & DatePicker trigger
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    val cal = Calendar.getInstance()
+                                    cal.add(Calendar.MONTH, 1)
+                                    expiryTimestamp = cal.timeInMillis
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("+১ মাস", style = MaterialTheme.typography.labelSmall)
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    val cal = Calendar.getInstance()
+                                    cal.add(Calendar.MONTH, 3)
+                                    expiryTimestamp = cal.timeInMillis
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("+৩ মাস", style = MaterialTheme.typography.labelSmall)
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    val cal = Calendar.getInstance()
+                                    cal.add(Calendar.MONTH, 6)
+                                    expiryTimestamp = cal.timeInMillis
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("+৬ মাস", style = MaterialTheme.typography.labelSmall)
+                            }
+                            Button(
+                                onClick = {
+                                    val cal = Calendar.getInstance()
+                                    if (expiryTimestamp > 0L) {
+                                        cal.timeInMillis = expiryTimestamp
+                                    }
+                                    DatePickerDialog(
+                                        context,
+                                        { _, y, m, d ->
+                                            val picked = Calendar.getInstance()
+                                            picked.set(y, m, d, 23, 59, 59)
+                                            expiryTimestamp = picked.timeInMillis
+                                        },
+                                        cal.get(Calendar.YEAR),
+                                        cal.get(Calendar.MONTH),
+                                        cal.get(Calendar.DAY_OF_MONTH)
+                                    ).show()
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                shape = RoundedCornerShape(6.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = DueOrange),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(14.dp))
+                            }
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(18.dp))
 
                 Row(
@@ -852,7 +1174,8 @@ fun AddEditProductDialog(
                                     stockQuantity = stockQ,
                                     unit = unit,
                                     minStockAlert = minS,
-                                    imageUri = imageUri
+                                    imageUri = imageUri,
+                                    expiryDate = expiryTimestamp
                                 ) ?: Product(
                                     name = name,
                                     barcode = barcode,
@@ -862,7 +1185,8 @@ fun AddEditProductDialog(
                                     stockQuantity = stockQ,
                                     unit = unit,
                                     minStockAlert = minS,
-                                    imageUri = imageUri
+                                    imageUri = imageUri,
+                                    expiryDate = expiryTimestamp
                                 )
                                 onSave(newProd)
                             }
@@ -903,95 +1227,79 @@ fun StockInDialog(
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(18.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 12.dp)
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(
                 modifier = Modifier
                     .padding(20.dp)
                     .verticalScroll(rememberScrollState())
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Text(
+                    text = if (language == "bn") "স্টক ইন / মাল ক্রয় যোগ" else "Stock In / Add Purchase",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Product selector
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                    border = CardDefaults.outlinedCardBorder(),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        text = if (language == "bn") "স্টক ইন / নতুন ক্রয়" else "Stock In / Purchase",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = StockBlue
-                    )
-                    if (allProducts.size > 1) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier.clickable { expandedProductSelector = !expandedProductSelector }
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(Icons.Default.SwapHoriz, contentDescription = "Change Product", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
-                                Spacer(modifier = Modifier.width(4.dp))
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = if (language == "bn") "পণ্য পরিবর্তন" else "Change",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary,
+                                    text = currentProduct.name,
+                                    style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold
                                 )
+                                Text(
+                                    text = "${if (language == "bn") "বর্তমান স্টক: " else "Current Stock: "}${currentProduct.stockQuantity.toIntOrNull() ?: currentProduct.stockQuantity} ${currentProduct.unit}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+
+                            if (allProducts.size > 1) {
+                                TextButton(onClick = { expandedProductSelector = !expandedProductSelector }) {
+                                    Text(if (language == "bn") "পণ্য পরিবর্তন" else "Change")
+                                }
                             }
                         }
-                    }
-                }
 
-                // If product selection dropdown is opened
-                if (expandedProductSelector && allProducts.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Card(
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                        border = CardDefaults.outlinedCardBorder(),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(10.dp)) {
+                        if (expandedProductSelector) {
+                            Spacer(modifier = Modifier.height(8.dp))
                             OutlinedTextField(
                                 value = productSearchQuery,
                                 onValueChange = { productSearchQuery = it },
-                                placeholder = { Text(if (language == "bn") "পণ্য খুঁজুন..." else "Search product...", style = MaterialTheme.typography.bodySmall) },
-                                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                                placeholder = { Text(if (language == "bn") "অন্য পণ্য খুঁজুন..." else "Search other product...") },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth()
                             )
                             Spacer(modifier = Modifier.height(6.dp))
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 160.dp)
-                            ) {
-                                items(filteredProducts) { p ->
+                            LazyColumn(modifier = Modifier.heightIn(max = 140.dp)) {
+                                items(filteredProducts.take(10)) { p ->
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(if (p.id == currentProduct.id) EmeraldPrimary.copy(alpha = 0.15f) else Color.Transparent)
                                             .clickable {
                                                 currentProduct = p
                                                 expandedProductSelector = false
                                             }
-                                            .padding(horizontal = 8.dp, vertical = 6.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
+                                            .padding(vertical = 6.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
-                                        Column {
-                                            Text(p.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                                            Text("${p.category} • স্টক: ${p.stockQuantity.toIntOrNull() ?: p.stockQuantity} ${p.unit}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
-                                        }
-                                        if (p.id == currentProduct.id) {
-                                            Icon(Icons.Default.Check, contentDescription = "Selected", tint = EmeraldPrimary, modifier = Modifier.size(18.dp))
-                                        }
+                                        Text(p.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                        Text("${p.stockQuantity.toIntOrNull() ?: p.stockQuantity} ${p.unit}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                                     }
                                 }
                             }
@@ -999,61 +1307,12 @@ fun StockInDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Current Selected Product Information Banner
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    border = CardDefaults.outlinedCardBorder(),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surface,
-                            modifier = Modifier.size(44.dp)
-                        ) {
-                            if (!currentProduct.imageUri.isNullOrBlank()) {
-                                AsyncImage(
-                                    model = currentProduct.imageUri,
-                                    contentDescription = currentProduct.name,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            } else {
-                                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                    Icon(Icons.Default.Inventory2, contentDescription = null, tint = StockBlue, modifier = Modifier.size(24.dp))
-                                }
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = currentProduct.name,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "${if (language == "bn") "বর্তমান স্টক: " else "Current Stock: "}${currentProduct.stockQuantity.toIntOrNull() ?: currentProduct.stockQuantity} ${currentProduct.unit}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = StockBlue,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 OutlinedTextField(
                     value = quantityStr,
                     onValueChange = { quantityStr = it },
-                    label = { Text(if (language == "bn") "যোগ করার পরিমাণ (${currentProduct.unit}) *" else "Quantity to Add *") },
+                    label = { Text(if (language == "bn") "নতুন আগত পরিমাণ (${currentProduct.unit}) *" else "Quantity (${currentProduct.unit}) *") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -1063,12 +1322,12 @@ fun StockInDialog(
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     OutlinedTextField(
                         value = buyPriceStr,
                         onValueChange = { buyPriceStr = it },
-                        label = { Text(if (language == "bn") "নতুন ক্রয়মূল্য ($currency)" else "Buy Price") },
+                        label = { Text(if (language == "bn") "ক্রয়মূল্য ($currency)" else "Buy Price") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         modifier = Modifier.weight(1f)
@@ -1076,7 +1335,7 @@ fun StockInDialog(
                     OutlinedTextField(
                         value = sellPriceStr,
                         onValueChange = { sellPriceStr = it },
-                        label = { Text(if (language == "bn") "নতুন বিক্রয়মূল্য ($currency)" else "Sell Price") },
+                        label = { Text(if (language == "bn") "বিক্রয়মূল্য ($currency)" else "Sell Price") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         modifier = Modifier.weight(1f)
@@ -1088,7 +1347,7 @@ fun StockInDialog(
                 OutlinedTextField(
                     value = note,
                     onValueChange = { note = it },
-                    label = { Text(if (language == "bn") "নোট / মহাজন / বিবরণ" else "Note / Supplier") },
+                    label = { Text(if (language == "bn") "নোট বা সরবরাহকারীর নাম" else "Note / Supplier") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1106,15 +1365,14 @@ fun StockInDialog(
                     Button(
                         onClick = {
                             val qty = quantityStr.toDoubleOrNull() ?: 0.0
+                            val buyP = buyPriceStr.toDoubleOrNull()
+                            val sellP = sellPriceStr.toDoubleOrNull()
                             if (qty > 0) {
-                                val buyP = buyPriceStr.toDoubleOrNull()
-                                val sellP = sellPriceStr.toDoubleOrNull()
                                 onConfirm(currentProduct, qty, buyP, sellP, note)
                             }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = StockBlue)
+                        }
                     ) {
-                        Text(if (language == "bn") "স্টক যোগ করুন" else "Add Stock")
+                        Text(if (language == "bn") "স্টক যুক্ত করুন" else "Add to Stock")
                     }
                 }
             }
@@ -1132,7 +1390,7 @@ fun StockOutDialog(
     var quantityStr by remember { mutableStateOf("1") }
     var reason by remember { mutableStateOf("নষ্ট / মেয়াদোত্তীর্ণ") }
 
-    val reasons = listOf("নষ্ট / মেয়াদোত্তীর্ণ", "ভেঙে গেছে", "ব্যক্তিগত ব্যবহার", "হারিয়ে গেছে", "অন্যান্য")
+    val reasons = listOf("নষ্ট / মেয়াদোত্তীর্ণ", "ভাঙা / ক্ষতিগ্রস্থ", "নিজ ব্যবহারের জন্য", "হারিয়ে গেছে", "অন্যান্য")
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -1141,16 +1399,15 @@ fun StockOutDialog(
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text(
-                    text = if (language == "bn") "স্টক বাদ / নষ্টের সমন্বয়" else "Stock Out / Damage",
+                    text = if (language == "bn") "স্টক বাদ / নষ্ট হিসাব" else "Stock Out / Damage",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = LossRed
                 )
                 Text(
-                    text = product.name,
+                    text = "${product.name} (বর্তমান স্টক: ${product.stockQuantity.toIntOrNull() ?: product.stockQuantity} ${product.unit})",
                     style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.outline
                 )
 
                 Spacer(modifier = Modifier.height(14.dp))
@@ -1158,22 +1415,22 @@ fun StockOutDialog(
                 OutlinedTextField(
                     value = quantityStr,
                     onValueChange = { quantityStr = it },
-                    label = { Text(if (language == "bn") "বাদ দেওয়ার পরিমাণ (${product.unit})" else "Quantity to Remove") },
+                    label = { Text(if (language == "bn") "বাদ দেওয়ার পরিমাণ (${product.unit}) *" else "Quantity to Remove *") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = if (language == "bn") "কারণ নির্বাচন করুন:" else "Select Reason:",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Bold
+                    text = if (language == "bn") "কারণ বাছাই করুন:" else "Select Reason:",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.padding(top = 4.dp)
+                    modifier = Modifier.padding(vertical = 4.dp)
                 ) {
                     items(reasons) { r ->
                         FilterChip(
@@ -1203,7 +1460,7 @@ fun StockOutDialog(
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = LossRed)
                     ) {
-                        Text(if (language == "bn") "স্টক কমান" else "Reduce Stock")
+                        Text(if (language == "bn") "স্টক থেকে বাদ দিন" else "Remove Stock")
                     }
                 }
             }
@@ -1218,10 +1475,11 @@ fun BarcodeScannerDialog(
     onDismiss: () -> Unit,
     onSelectProduct: (String) -> Unit
 ) {
+    var manualBarcode by remember { mutableStateOf("") }
+
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(18.dp),
-            modifier = Modifier.fillMaxWidth(0.95f),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
@@ -1232,7 +1490,7 @@ fun BarcodeScannerDialog(
                 ) {
                     Text(
                         text = if (language == "bn") "বারকোড স্ক্যানার" else "Barcode Scanner",
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -1241,68 +1499,72 @@ fun BarcodeScannerDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-                // Simulated Optical Camera Viewport
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(140.dp)
-                        .background(Color(0xFF0F172A), RoundedCornerShape(14.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.QrCodeScanner,
-                            contentDescription = "Scanner",
-                            tint = Color(0xFF10B981),
-                            modifier = Modifier.size(54.dp)
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = if (language == "bn") "বারকোড স্ক্যান হচ্ছে..." else "Scanning Barcode...",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFFA7F3D0)
-                        )
+                OutlinedTextField(
+                    value = manualBarcode,
+                    onValueChange = { manualBarcode = it },
+                    label = { Text(if (language == "bn") "বারকোড লিখুন বা স্ক্যান করুন" else "Enter / Scan Barcode") },
+                    leadingIcon = { Icon(Icons.Default.QrCodeScanner, contentDescription = null) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = if (language == "bn") "বারকোড যুক্ত বিদ্যমান পণ্যসমূহ (ট্যাপ করুন):" else "Products with Barcode:",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+
+                val withBarcode = remember(products) { products.filter { it.barcode.isNotBlank() } }
+
+                if (withBarcode.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(if (language == "bn") "কোনো বারকোড যুক্ত পণ্য নেই" else "No products with barcode", color = MaterialTheme.colorScheme.outline)
+                    }
+                } else {
+                    LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
+                        items(withBarcode) { prod ->
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 3.dp)
+                                    .clickable { onSelectProduct(prod.barcode) }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(prod.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
+                                    Text(prod.barcode, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+                        }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
-                Text(
-                    text = if (language == "bn") "দ্রুত বারকোড নির্বাচন করুন (সিমুলেশন):" else "Select Barcode to match:",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Bold
-                )
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                LazyColumn(
-                    modifier = Modifier.heightIn(max = 200.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    items(products.filter { it.barcode.isNotBlank() }) { p ->
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onSelectProduct(p.barcode) }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(10.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(p.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                                Text(
-                                    "Code: ${p.barcode}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
+                Button(
+                    onClick = {
+                        if (manualBarcode.isNotBlank()) {
+                            onSelectProduct(manualBarcode)
                         }
-                    }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(if (language == "bn") "বারকোড দিয়ে খুঁজুন" else "Search Barcode")
                 }
             }
         }

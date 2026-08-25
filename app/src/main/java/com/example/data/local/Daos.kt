@@ -57,11 +57,17 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE timestamp >= :startTime AND timestamp <= :endTime ORDER BY timestamp DESC")
     fun getTransactionsBetween(startTime: Long, endTime: Long): Flow<List<TransactionRecord>>
 
+    @Query("SELECT * FROM transactions WHERE customerName = :name OR (customerPhone != '' AND customerPhone = :phone) ORDER BY timestamp DESC")
+    fun getTransactionsForCustomer(name: String, phone: String): Flow<List<TransactionRecord>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTransaction(tx: TransactionRecord): Long
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAllTransactions(list: List<TransactionRecord>)
+
+    @Update
+    suspend fun updateTransaction(tx: TransactionRecord)
 
     @Delete
     suspend fun deleteTransaction(tx: TransactionRecord)
@@ -117,6 +123,12 @@ interface DueLogDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(list: List<DueLog>)
 
+    @Update
+    suspend fun updateDueLog(dueLog: DueLog)
+
+    @Delete
+    suspend fun deleteDueLog(dueLog: DueLog)
+
     @Query("DELETE FROM due_logs")
     suspend fun clearAll()
 }
@@ -134,6 +146,9 @@ interface ExpenseDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(list: List<Expense>)
+
+    @Update
+    suspend fun updateExpense(expense: Expense)
 
     @Delete
     suspend fun deleteExpense(expense: Expense)

@@ -1402,7 +1402,7 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold
                     )
-                    if (result.success && (result.productCount > 0 || result.customerCount > 0 || result.transactionCount > 0)) {
+                    if (result.success) {
                         HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
                         Text(
                             text = if (language == "bn") "উদ্ধারকৃত তথ্যের বিবরণ:" else "Restored Items Summary:",
@@ -1410,6 +1410,17 @@ fun SettingsScreen(
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
+                        result.restoredShopInfo?.let { s ->
+                            val balText = if (s.mainBalance % 1.0 == 0.0) s.mainBalance.toLong().toString() else String.format(Locale.US, "%.2f", s.mainBalance)
+                            Text(
+                                text = "• ${if (language == "bn") "দোকানের মূল ক্যাশ (হাতে নগদ): " else "Cash Balance: "}${s.currency}$balText",
+                                fontWeight = FontWeight.SemiBold,
+                                color = EmeraldPrimary
+                            )
+                        }
+                        if (result.cashLogCount > 0) {
+                            Text(text = "• ${if (language == "bn") "ক্যাশ লেনদেন ও খতিয়ান: " else "Cash Ledger Logs: "}${result.cashLogCount} টি")
+                        }
                         if (result.productCount > 0) {
                             Text(text = "• ${if (language == "bn") "পণ্য তালিকা: " else "Products: "}${result.productCount} টি")
                         }

@@ -31,6 +31,19 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     val lowStockProducts: StateFlow<List<Product>> = repository.lowStockProducts
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val expiringProducts: StateFlow<List<Product>> = products.map { list ->
+        val thirtyDaysMillis = 30L * 24 * 60 * 60 * 1000L
+        val now = System.currentTimeMillis()
+        list.filter { it.expiryDate > 0L && (it.expiryDate - now <= thirtyDaysMillis) }
+            .sortedBy { it.expiryDate }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val expiredProducts: StateFlow<List<Product>> = products.map { list ->
+        val now = System.currentTimeMillis()
+        list.filter { it.expiryDate > 0L && it.expiryDate < now }
+            .sortedBy { it.expiryDate }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val allTransactions: StateFlow<List<TransactionRecord>> = repository.allTransactions
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -171,15 +184,25 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         prefs.edit().putString("app_language", next).apply()
     }
 
-    fun updateShopInfo(name: String, owner: String, phone: String, address: String, currency: String, email: String? = null) {
+    fun updateShopInfo(
+        name: String,
+        owner: String,
+        phone: String,
+        address: String,
+        currency: String,
+        email: String? = null,
+        mainBalance: Double? = null
+    ) {
         val userEmail = email ?: _shopInfo.value.userEmail
+        val updatedMainBalance = mainBalance ?: _shopInfo.value.mainBalance
         _shopInfo.value = _shopInfo.value.copy(
             shopName = name,
             ownerName = owner,
             phone = phone,
             address = address,
             currency = currency,
-            userEmail = userEmail
+            userEmail = userEmail,
+            mainBalance = updatedMainBalance
         )
         prefs.edit()
             .putString("shop_name", name)
@@ -188,6 +211,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             .putString("shop_address", address)
             .putString("shop_currency", currency)
             .putString("user_email", userEmail)
+            .putFloat("main_balance", updatedMainBalance.toFloat())
             .apply()
     }
 
@@ -412,7 +436,8 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                     phone = s.phone,
                     address = s.address,
                     currency = s.currency,
-                    email = if (_shopInfo.value.userEmail.isNotBlank()) _shopInfo.value.userEmail else s.userEmail
+                    email = if (_shopInfo.value.userEmail.isNotBlank()) _shopInfo.value.userEmail else s.userEmail,
+                    mainBalance = s.mainBalance
                 )
             }
             isSyncing.value = false
@@ -639,9 +664,15 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // Customer / Due operations
-    fun addCustomer(name: String, phone: String, address: String, initialDue: Double) {
+    fun addCustomer(name: String, phone: String, address: String, initialDue: Double, imageUri: String = "") {
         viewModelScope.launch {
-            repository.addCustomer(name, phone, address, initialDue)
+            repository.addCustomer(name, phone, address, initialDue, imageUri)
+        }
+    }
+
+    fun updateCustomer(customer: Customer) {
+        viewModelScope.launch {
+            repository.updateCustomer(customer)
         }
     }
 
@@ -663,10 +694,82 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // Transaction & DueLog Editing (Mistake correction)
+    fun updateTransaction(tx: TransactionRecord) {
+        viewModelScope.launch {
+            repository.updateTransaction(tx)
+        }
+    }
+
+    fun deleteTransaction(tx: TransactionRecord) {
+        viewModelScope.launch {
+            repository.deleteTransaction(tx)
+        }
+    }
+
+    fun updateDueLog(dueLog: DueLog) {
+        viewModelScope.launch {
+            repository.updateDueLog(dueLog)
+        }
+    }
+
+    fun deleteDueLog(dueLog: DueLog) {
+        viewModelScope.launch {
+            repository.deleteDueLog(dueLog)
+        }
+    }
+
+    fun editDueLogAndRecalculate(
+        oldLog: DueLog,
+        newAmount: Double,
+        newType: String,
+        newNote: String,
+        customer: Customer
+    ) {
+        viewModelScope.launch {
+            // 1. Revert effect of old log on customer due
+            var adjustedDue = customer.totalDue
+            if (oldLog.type == "DUE_GIVEN") {
+                adjustedDue -= oldLog.amount
+            } else if (oldLog.type == "DUE_COLLECTED") {
+                adjustedDue += oldLog.amount
+            }
+
+            // 2. Apply new effect
+            if (newType == "DUE_GIVEN") {
+                adjustedDue += newAmount
+            } else if (newType == "DUE_COLLECTED") {
+                adjustedDue -= newAmount
+            }
+            adjustedDue = adjustedDue.coerceAtLeast(0.0)
+
+            // 3. Update customer
+            val updatedCustomer = customer.copy(
+                totalDue = adjustedDue,
+                lastTransactionDate = System.currentTimeMillis()
+            )
+            repository.updateCustomer(updatedCustomer)
+
+            // 4. Update DueLog
+            val updatedLog = oldLog.copy(
+                amount = newAmount,
+                type = newType,
+                note = newNote
+            )
+            repository.updateDueLog(updatedLog)
+        }
+    }
+
     // Expenses
     fun addExpense(title: String, category: String, amount: Double, note: String) {
         viewModelScope.launch {
             repository.addExpense(title, category, amount, note)
+        }
+    }
+
+    fun updateExpense(expense: Expense) {
+        viewModelScope.launch {
+            repository.updateExpense(expense)
         }
     }
 
@@ -914,7 +1017,8 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                     phone = s.phone,
                     address = s.address,
                     currency = s.currency,
-                    email = if (_shopInfo.value.userEmail.isNotBlank()) _shopInfo.value.userEmail else s.userEmail
+                    email = if (_shopInfo.value.userEmail.isNotBlank()) _shopInfo.value.userEmail else s.userEmail,
+                    mainBalance = s.mainBalance
                 )
             }
             isSyncing.value = false
@@ -934,7 +1038,8 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                     phone = s.phone,
                     address = s.address,
                     currency = s.currency,
-                    email = s.userEmail
+                    email = s.userEmail,
+                    mainBalance = s.mainBalance
                 )
             }
             isSyncing.value = false

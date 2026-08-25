@@ -858,6 +858,153 @@ object PdfGenerator {
         return savePdfToFile(context, pdfDocument, "Transactions_$timestamp.pdf")
     }
 
+    /**
+     * Generates Expiring & Expired Products List PDF for supplier return/replacement
+     */
+    fun generateExpiringProductsPdf(
+        context: Context,
+        shopName: String,
+        products: List<Product>,
+        currency: String = "৳"
+    ): File? {
+        val pdfDocument = PdfDocument()
+        var pageNumber = 1
+        var pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+        var page = pdfDocument.startPage(pageInfo)
+        var canvas = page.canvas
+
+        val titlePaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 18f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(15, 23, 42)
+            textAlign = Paint.Align.CENTER
+        }
+        val subPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 10f
+            color = Color.rgb(100, 116, 139)
+            textAlign = Paint.Align.CENTER
+        }
+        val boldPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 10f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(15, 23, 42)
+        }
+        val textPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 10f
+            color = Color.rgb(30, 41, 59)
+        }
+        val linePaint = Paint().apply {
+            color = Color.rgb(226, 232, 240)
+            strokeWidth = 1f
+        }
+        val headerPaint = Paint().apply {
+            color = Color.rgb(254, 243, 199) // amber header
+            style = Paint.Style.FILL
+        }
+
+        val now = System.currentTimeMillis()
+        val expiredCount = products.count { it.expiryDate in 1 until now }
+        val expiringSoonCount = products.size - expiredCount
+        val totalCost = products.sumOf { it.stockQuantity * it.buyPrice }
+
+        fun drawHeaderAndSummary(drawSummaryBox: Boolean) {
+            val topBarPaint = Paint().apply { color = Color.rgb(234, 88, 12); style = Paint.Style.FILL } // warning orange
+            canvas.drawRect(0f, 0f, 595f, 12f, topBarPaint)
+
+            var y = 42f
+            canvas.drawText(shopName, 297.5f, y, titlePaint)
+            y += 16f
+            canvas.drawText("মেয়াদ শেষ পর্যায় ও মেয়াদোত্তীর্ণ পণ্যের তালিকা (Expiring Products Report)", 297.5f, y, subPaint)
+            y += 14f
+            val genDate = SimpleDateFormat("dd MMMM yyyy, hh:mm a", Locale.getDefault()).format(Date())
+            canvas.drawText("তারিখ: $genDate | পৃষ্ঠা: $pageNumber", 297.5f, y, subPaint)
+
+            if (drawSummaryBox) {
+                y += 20f
+                val boxPaint = Paint().apply { color = Color.rgb(255, 251, 235); style = Paint.Style.FILL }
+                canvas.drawRoundRect(RectF(35f, y, 560f, y + 42f), 6f, 6f, boxPaint)
+                canvas.drawRoundRect(RectF(35f, y, 560f, y + 42f), 6f, 6f, linePaint)
+
+                y += 18f
+                canvas.drawText("মোট পণ্য: ${products.size} টি", 50f, y, boldPaint)
+                canvas.drawText("মেয়াদোত্তীর্ণ: $expiredCount টি | শেষ পর্যায়: $expiringSoonCount টি", 180f, y, boldPaint)
+                canvas.drawText("মোট ক্রয়মূল্য: $currency${totalCost.toIntOrNull() ?: totalCost}", 400f, y, boldPaint)
+            }
+        }
+
+        fun drawTableHeader(startY: Float): Float {
+            canvas.drawRoundRect(RectF(35f, startY - 12f, 560f, startY + 10f), 4f, 4f, headerPaint)
+            canvas.drawText("নং", 42f, startY, boldPaint)
+            canvas.drawText("পণ্যের নাম (Item Name)", 70f, startY, boldPaint)
+            canvas.drawText("স্টক পরিমাণ", 250f, startY, boldPaint)
+            canvas.drawText("মেয়াদ শেষ তারিখ", 330f, startY, boldPaint)
+            canvas.drawText("অবস্থা / দিন বাকি", 430f, startY, boldPaint)
+            canvas.drawText("ক্রয়মূল্য ($currency)", 505f, startY, boldPaint)
+            return startY + 18f
+        }
+
+        drawHeaderAndSummary(drawSummaryBox = true)
+        var y = 136f
+        y = drawTableHeader(y)
+
+        val rowBgAlt = Paint().apply { color = Color.rgb(255, 247, 237); style = Paint.Style.FILL }
+        val redTextPaint = Paint().apply { isAntiAlias = true; textSize = 10f; color = Color.rgb(220, 38, 38); typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD) }
+        val orangeTextPaint = Paint().apply { isAntiAlias = true; textSize = 10f; color = Color.rgb(217, 119, 6); typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD) }
+
+        products.forEachIndexed { index, p ->
+            if (y > 780f) {
+                pdfDocument.finishPage(page)
+                pageNumber++
+                pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+                page = pdfDocument.startPage(pageInfo)
+                canvas = page.canvas
+                drawHeaderAndSummary(drawSummaryBox = false)
+                y = 90f
+                y = drawTableHeader(y)
+            }
+
+            if (index % 2 == 1) {
+                canvas.drawRect(RectF(35f, y - 10f, 560f, y + 6f), rowBgAlt)
+            }
+
+            canvas.drawText("${index + 1}", 42f, y, textPaint)
+            val nameStr = if (p.name.length > 25) p.name.take(23) + ".." else p.name
+            canvas.drawText(nameStr, 70f, y, textPaint)
+            canvas.drawText("${p.stockQuantity.toIntOrNull() ?: p.stockQuantity} ${p.unit}", 250f, y, textPaint)
+
+            val expDateStr = if (p.expiryDate > 0) {
+                SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(p.expiryDate))
+            } else "N/A"
+            canvas.drawText(expDateStr, 330f, y, textPaint)
+
+            val daysRemaining = if (p.expiryDate > 0) {
+                ((p.expiryDate - now) / (1000 * 60 * 60 * 24)).toInt()
+            } else 0
+
+            val (statusStr, statusPaint) = when {
+                daysRemaining < 0 -> Pair("মেয়াদ শেষ! (${-daysRemaining}d)", redTextPaint)
+                daysRemaining == 0 -> Pair("আজ মেয়াদ শেষ", redTextPaint)
+                else -> Pair("$daysRemaining দিন বাকি", orangeTextPaint)
+            }
+            canvas.drawText(statusStr, 430f, y, statusPaint)
+
+            val costTotal = p.stockQuantity * p.buyPrice
+            canvas.drawText("${costTotal.toIntOrNull() ?: costTotal}", 505f, y, boldPaint)
+
+            y += 16f
+        }
+
+        canvas.drawText("Generated by NAFI SHOP 24 - মহাজন বা সরবরাহকারীকে ফেরত/বদল বাবদ রিপোর্ট", 297.5f, 815f, subPaint)
+        pdfDocument.finishPage(page)
+
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
+        return savePdfToFile(context, pdfDocument, "Expiring_Products_$timestamp.pdf")
+    }
+
     private fun savePdfToFile(context: Context, pdfDocument: PdfDocument, filename: String): File? {
         return try {
             val pdfDir = File(context.cacheDir, "documents")

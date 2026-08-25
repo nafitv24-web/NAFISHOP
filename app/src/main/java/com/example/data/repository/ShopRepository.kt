@@ -201,7 +201,7 @@ class ShopRepository(private val database: AppDatabase) {
         invoiceNumber
     }
 
-    suspend fun addCustomer(name: String, phone: String, address: String, initialDue: Double) = withContext(Dispatchers.IO) {
+    suspend fun addCustomer(name: String, phone: String, address: String, initialDue: Double, imageUri: String = "") = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         val customerId = customerDao.insertCustomer(
             Customer(
@@ -210,6 +210,7 @@ class ShopRepository(private val database: AppDatabase) {
                 address = address,
                 totalDue = initialDue,
                 totalPurchased = initialDue,
+                imageUri = imageUri,
                 lastTransactionDate = now
             )
         )
@@ -226,6 +227,10 @@ class ShopRepository(private val database: AppDatabase) {
                 )
             )
         }
+    }
+
+    suspend fun updateCustomer(customer: Customer) = withContext(Dispatchers.IO) {
+        customerDao.updateCustomer(customer)
     }
 
     suspend fun collectCustomerDuePayment(customer: Customer, amountPaid: Double, note: String) = withContext(Dispatchers.IO) {
@@ -262,6 +267,26 @@ class ShopRepository(private val database: AppDatabase) {
                 timestamp = now
             )
         )
+    }
+
+    suspend fun updateDueLog(dueLog: DueLog) = withContext(Dispatchers.IO) {
+        dueLogDao.updateDueLog(dueLog)
+    }
+
+    suspend fun deleteDueLog(dueLog: DueLog) = withContext(Dispatchers.IO) {
+        dueLogDao.deleteDueLog(dueLog)
+    }
+
+    suspend fun updateTransaction(tx: TransactionRecord) = withContext(Dispatchers.IO) {
+        transactionDao.updateTransaction(tx)
+    }
+
+    suspend fun deleteTransaction(tx: TransactionRecord) = withContext(Dispatchers.IO) {
+        transactionDao.deleteTransaction(tx)
+    }
+
+    suspend fun updateExpense(expense: Expense) = withContext(Dispatchers.IO) {
+        expenseDao.updateExpense(expense)
     }
 
     suspend fun deleteCustomer(customer: Customer) = withContext(Dispatchers.IO) {
@@ -321,6 +346,11 @@ class ShopRepository(private val database: AppDatabase) {
                 put("userEmail", s.userEmail)
             }
             root.put("shopInfo", sObj)
+            root.put("mainBalance", s.mainBalance)
+            root.put("cashBalance", s.mainBalance)
+        } ?: run {
+            root.put("mainBalance", 0.0)
+            root.put("cashBalance", 0.0)
         }
 
         val pArray = JSONArray()
@@ -335,6 +365,7 @@ class ShopRepository(private val database: AppDatabase) {
             o.put("unit", p.unit)
             o.put("minStockAlert", p.minStockAlert)
             o.put("imageUri", p.imageUri)
+            o.put("expiryDate", p.expiryDate)
             o.put("createdAt", p.createdAt)
             pArray.put(o)
         }
@@ -348,6 +379,7 @@ class ShopRepository(private val database: AppDatabase) {
             o.put("address", c.address)
             o.put("totalDue", c.totalDue)
             o.put("totalPurchased", c.totalPurchased)
+            o.put("imageUri", c.imageUri)
             o.put("lastTransactionDate", c.lastTransactionDate)
             cArray.put(o)
         }
@@ -429,17 +461,23 @@ class ShopRepository(private val database: AppDatabase) {
             var clCount = 0
 
             var restoredShopInfo: ShopInfo? = null
+            val rootCash = if (root.has("mainBalance")) root.optDouble("mainBalance", 0.0) else root.optDouble("cashBalance", 0.0)
             if (root.has("shopInfo")) {
                 val sObj = root.getJSONObject("shopInfo")
+                val finalCash = if (sObj.has("mainBalance")) sObj.optDouble("mainBalance", rootCash) else rootCash
                 restoredShopInfo = ShopInfo(
                     shopName = sObj.optString("shopName", "আমার দোকান"),
                     ownerName = sObj.optString("ownerName", "দোকানদার"),
                     phone = sObj.optString("phone", ""),
                     address = sObj.optString("address", ""),
                     currency = sObj.optString("currency", "৳"),
-                    mainBalance = sObj.optDouble("mainBalance", 0.0),
+                    mainBalance = finalCash,
                     userEmail = sObj.optString("userEmail", ""),
                     isGoogleLinked = sObj.optString("userEmail", "").isNotBlank()
+                )
+            } else if (root.has("mainBalance") || root.has("cashBalance")) {
+                restoredShopInfo = ShopInfo(
+                    mainBalance = rootCash
                 )
             }
 
@@ -468,6 +506,7 @@ class ShopRepository(private val database: AppDatabase) {
                             unit = o.optString("unit", "পিস"),
                             minStockAlert = o.optDouble("minStockAlert", 5.0),
                             imageUri = o.optString("imageUri", ""),
+                            expiryDate = o.optLong("expiryDate", 0L),
                             createdAt = o.optLong("createdAt", System.currentTimeMillis())
                         )
                     )
@@ -490,6 +529,7 @@ class ShopRepository(private val database: AppDatabase) {
                             address = o.optString("address", ""),
                             totalDue = o.optDouble("totalDue", 0.0),
                             totalPurchased = o.optDouble("totalPurchased", 0.0),
+                            imageUri = o.optString("imageUri", ""),
                             lastTransactionDate = o.optLong("lastTransactionDate", System.currentTimeMillis())
                         )
                     )

@@ -15,6 +15,7 @@ data class Product(
     val unit: String = "পিস",
     val minStockAlert: Double = 5.0,
     val imageUri: String = "",
+    val expiryDate: Long = 0L, // 0L means no expiry date specified
     val createdAt: Long = System.currentTimeMillis()
 )
 
@@ -48,6 +49,7 @@ data class Customer(
     val address: String = "",
     val totalDue: Double = 0.0,
     val totalPurchased: Double = 0.0,
+    val imageUri: String = "",
     val lastTransactionDate: Long = System.currentTimeMillis()
 )
 
