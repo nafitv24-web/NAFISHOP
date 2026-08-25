@@ -683,10 +683,6 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                 note = note
             )
 
-            if (paid > 0 && paymentMethod == "CASH") {
-                addCashToMainBalance(paid, "বিক্রয় নগদ আদায় (#$invoiceNo)")
-            }
-
             val invoiceDetails = InvoiceDetails(
                 invoiceNumber = invoiceNo,
                 shopName = _shopInfo.value.shopName,
@@ -725,9 +721,6 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     fun collectCustomerDue(customer: Customer, amountPaid: Double, note: String) {
         viewModelScope.launch {
             repository.collectCustomerDuePayment(customer, amountPaid, note)
-            if (amountPaid > 0) {
-                addCashToMainBalance(amountPaid, "বাকি আদায় (${customer.name})")
-            }
         }
     }
 
@@ -743,7 +736,31 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // Transaction & DueLog Editing (Mistake correction)
+    // Transaction & DueLog Editing (Mistake correction / Return handling)
+    fun returnProductSale(tx: TransactionRecord, returnQuantity: Double, note: String) {
+        viewModelScope.launch {
+            repository.returnSaleItem(tx, returnQuantity, note)
+        }
+    }
+
+    fun editSaleTransaction(
+        oldTx: TransactionRecord,
+        newQuantity: Double,
+        newUnitPrice: Double,
+        newCustomerName: String,
+        newNote: String
+    ) {
+        viewModelScope.launch {
+            repository.editSaleTransaction(oldTx, newQuantity, newUnitPrice, newCustomerName, newNote)
+        }
+    }
+
+    fun deleteSaleAndRestock(tx: TransactionRecord) {
+        viewModelScope.launch {
+            repository.deleteTransaction(tx)
+        }
+    }
+
     fun updateTransaction(tx: TransactionRecord) {
         viewModelScope.launch {
             repository.updateTransaction(tx)
@@ -752,10 +769,24 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteTransaction(tx: TransactionRecord) {
         viewModelScope.launch {
-            if (tx.type == "SALE" && tx.paidAmount > 0 && tx.paymentMethod == "CASH") {
-                withdrawCashFromMainBalance(tx.paidAmount, "বিক্রয় বাতিল ক্যাশ ফেরত (${tx.productName})")
-            }
             repository.deleteTransaction(tx)
+        }
+    }
+
+    fun editCashLog(
+        oldLog: CashLog,
+        newAmount: Double,
+        newNote: String
+    ) {
+        viewModelScope.launch {
+            val updated = oldLog.copy(amount = newAmount, note = newNote)
+            repository.updateCashLog(updated)
+        }
+    }
+
+    fun deleteCashLog(cashLog: CashLog) {
+        viewModelScope.launch {
+            repository.deleteCashLog(cashLog)
         }
     }
 

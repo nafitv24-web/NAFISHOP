@@ -204,6 +204,15 @@ interface CashLogDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(list: List<CashLog>)
 
+    @Update
+    suspend fun updateCashLog(cashLog: CashLog)
+
+    @Delete
+    suspend fun deleteCashLog(cashLog: CashLog)
+
+    @Query("DELETE FROM cash_logs WHERE id = :id")
+    suspend fun deleteCashLogById(id: Long)
+
     @Query("DELETE FROM cash_logs")
     suspend fun clearAll()
 }

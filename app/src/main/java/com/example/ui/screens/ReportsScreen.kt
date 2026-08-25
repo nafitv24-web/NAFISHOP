@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.TransactionRecord
+import com.example.ui.components.EditOrReturnSaleDialog
 import com.example.ui.components.toIntOrNull
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.ShopViewModel
@@ -43,6 +44,7 @@ fun ReportsScreen(
     val currency = shopInfo.currency
 
     var selectedPeriod by remember { mutableStateOf("TODAY") } // TODAY, WEEK, MONTH, ALL
+    var editingTransaction by remember { mutableStateOf<TransactionRecord?>(null) }
 
     val periodRange = remember(selectedPeriod) {
         val cal = Calendar.getInstance()
@@ -406,9 +408,40 @@ fun ReportsScreen(
             }
         } else {
             items(periodTransactions.take(15)) { tx ->
-                TransactionFeedItem(tx = tx, currency = currency, language = language)
+                TransactionFeedItem(
+                    tx = tx,
+                    currency = currency,
+                    language = language,
+                    onClick = {
+                        if (tx.type == "SALE") {
+                            editingTransaction = tx
+                        }
+                    }
+                )
             }
         }
+    }
+
+    if (editingTransaction != null) {
+        val txToEdit = editingTransaction!!
+        EditOrReturnSaleDialog(
+            transaction = txToEdit,
+            currency = currency,
+            language = language,
+            onDismiss = { editingTransaction = null },
+            onReturnItem = { returnQty, note ->
+                viewModel.returnProductSale(txToEdit, returnQty, note)
+                editingTransaction = null
+            },
+            onEditSale = { newQty, newPrice, newCustomerName, newNote ->
+                viewModel.editSaleTransaction(txToEdit, newQty, newPrice, newCustomerName, newNote)
+                editingTransaction = null
+            },
+            onDeleteSale = {
+                viewModel.deleteSaleAndRestock(txToEdit)
+                editingTransaction = null
+            }
+        )
     }
 }
 

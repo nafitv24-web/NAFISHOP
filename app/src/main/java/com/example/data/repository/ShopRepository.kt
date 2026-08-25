@@ -150,6 +150,8 @@ class ShopRepository(private val database: AppDatabase) {
         }
     }
 
+    private fun Double.formatQty(): String = if (this % 1.0 == 0.0) this.toInt().toString() else this.toString()
+
     suspend fun processSale(
         cartItems: List<CartItem>,
         customerName: String,
@@ -235,6 +237,8 @@ class ShopRepository(private val database: AppDatabase) {
             }
 
             if (calculatedDue > 0) {
+                val itemsSummary = cartItems.joinToString(", ") { "${it.product.name} (${it.quantity.formatQty()} ${it.product.unit})" }
+                val dueNote = if (note.isNotBlank()) "$itemsSummary • $note • মেমো #$invoiceNumber" else "$itemsSummary • মেমো #$invoiceNumber"
                 dueLogDao.insertDueLog(
                     DueLog(
                         customerId = existingCustomer.id,
@@ -242,7 +246,7 @@ class ShopRepository(private val database: AppDatabase) {
                         customerPhone = existingCustomer.phone,
                         type = "DUE_GIVEN",
                         amount = calculatedDue,
-                        note = "মেমো #$invoiceNumber বাবদ বাকি",
+                        note = dueNote,
                         timestamp = now
                     )
                 )
@@ -422,6 +426,99 @@ class ShopRepository(private val database: AppDatabase) {
         }
 
         transactionDao.deleteTransaction(tx)
+    }
+
+    suspend fun returnSaleItem(tx: TransactionRecord, returnQty: Double, note: String) = withContext(Dispatchers.IO) {
+        val qtyToReturn = returnQty.coerceIn(0.1, tx.quantity)
+        val now = System.currentTimeMillis()
+
+        // 1. Restock product into inventory
+        if (tx.productId > 0) {
+            productDao.increaseStock(tx.productId, qtyToReturn)
+        }
+
+        val returnedAmount = tx.unitPrice * qtyToReturn
+
+        // 2. Adjust customer due if transaction had due
+        if (tx.dueAmount > 0) {
+            val customer = customerDao.findExistingCustomer(tx.customerName, tx.customerPhone)
+            if (customer != null) {
+                val dueReduction = returnedAmount.coerceAtMost(tx.dueAmount)
+                val updatedDue = (customer.totalDue - dueReduction).coerceAtLeast(0.0)
+                customerDao.setCustomerDue(customer.id, updatedDue, now)
+
+                dueLogDao.insertDueLog(
+                    DueLog(
+                        customerId = customer.id,
+                        customerName = customer.name,
+                        customerPhone = customer.phone,
+                        type = "DUE_COLLECTED",
+                        amount = dueReduction,
+                        note = "পণ্য ফেরত: ${tx.productName} (${qtyToReturn.formatQty()} ${tx.unit}) • ${note.ifBlank { "মেমো #${tx.invoiceNumber}" }}",
+                        timestamp = now
+                    )
+                )
+            }
+        }
+
+        // 3. Update or delete transaction record
+        if (qtyToReturn >= tx.quantity) {
+            transactionDao.deleteTransaction(tx)
+        } else {
+            val remainingQty = tx.quantity - qtyToReturn
+            val remainingTotal = (tx.unitPrice * remainingQty).coerceAtLeast(0.0)
+            val remainingCost = tx.costPrice * remainingQty
+            val remainingProfit = remainingTotal - remainingCost
+            val remainingPaid = (tx.paidAmount - returnedAmount).coerceAtLeast(0.0)
+            val remainingDue = (tx.dueAmount - returnedAmount).coerceAtLeast(0.0)
+
+            transactionDao.updateTransaction(
+                tx.copy(
+                    quantity = remainingQty,
+                    totalAmount = remainingTotal,
+                    profitAmount = remainingProfit,
+                    paidAmount = remainingPaid,
+                    dueAmount = remainingDue,
+                    note = "${tx.note} (ফেরত: $qtyToReturn ${tx.unit})".trim()
+                )
+            )
+        }
+    }
+
+    suspend fun editSaleTransaction(
+        oldTx: TransactionRecord,
+        newQuantity: Double,
+        newUnitPrice: Double,
+        newCustomerName: String,
+        newNote: String
+    ) = withContext(Dispatchers.IO) {
+        val qtyDiff = oldTx.quantity - newQuantity
+        if (oldTx.productId > 0 && qtyDiff != 0.0) {
+            productDao.increaseStock(oldTx.productId, qtyDiff) // if newQuantity is less, qtyDiff > 0 (restock)
+        }
+
+        val newTotal = newQuantity * newUnitPrice
+        val newCost = oldTx.costPrice * newQuantity
+        val newProfit = newTotal - newCost
+
+        transactionDao.updateTransaction(
+            oldTx.copy(
+                quantity = newQuantity,
+                unitPrice = newUnitPrice,
+                totalAmount = newTotal,
+                profitAmount = newProfit,
+                customerName = newCustomerName.ifBlank { oldTx.customerName },
+                note = newNote
+            )
+        )
+    }
+
+    suspend fun updateCashLog(cashLog: CashLog) = withContext(Dispatchers.IO) {
+        cashLogDao.updateCashLog(cashLog)
+    }
+
+    suspend fun deleteCashLog(cashLog: CashLog) = withContext(Dispatchers.IO) {
+        cashLogDao.deleteCashLog(cashLog)
     }
 
     suspend fun updateExpense(expense: Expense) = withContext(Dispatchers.IO) {

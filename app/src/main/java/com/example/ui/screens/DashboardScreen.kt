@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -33,6 +34,7 @@ import androidx.compose.ui.window.Dialog
 import com.example.data.model.CashLog
 import com.example.data.model.Product
 import com.example.data.model.TransactionRecord
+import com.example.ui.components.EditOrReturnSaleDialog
 import com.example.ui.components.toIntOrNull
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.ShopViewModel
@@ -65,6 +67,7 @@ fun DashboardScreen(
     var showSetBalanceDialog by remember { mutableStateOf(false) }
     var showDayEndSettleDialog by remember { mutableStateOf(false) }
     var showCashHistoryDialog by remember { mutableStateOf(false) }
+    var editingTransaction by remember { mutableStateOf<TransactionRecord?>(null) }
 
     val todayDateFormatted = remember {
         val sdf = SimpleDateFormat("EEEE, d MMMM yyyy", if (language == "bn") Locale("bn", "BD") else Locale.ENGLISH)
@@ -609,9 +612,41 @@ fun DashboardScreen(
             }
         } else {
             items(recentTxs.take(10)) { tx ->
-                TransactionFeedItem(tx = tx, currency = currency, language = language)
+                TransactionFeedItem(
+                    tx = tx,
+                    currency = currency,
+                    language = language,
+                    onClick = {
+                        if (tx.type == "SALE") {
+                            editingTransaction = tx
+                        }
+                    }
+                )
             }
         }
+    }
+
+    // Edit / Return Transaction Dialog
+    if (editingTransaction != null) {
+        val txToEdit = editingTransaction!!
+        EditOrReturnSaleDialog(
+            transaction = txToEdit,
+            currency = currency,
+            language = language,
+            onDismiss = { editingTransaction = null },
+            onReturnItem = { returnQty, note ->
+                viewModel.returnProductSale(txToEdit, returnQty, note)
+                editingTransaction = null
+            },
+            onEditSale = { newQty, newPrice, newCustomerName, newNote ->
+                viewModel.editSaleTransaction(txToEdit, newQty, newPrice, newCustomerName, newNote)
+                editingTransaction = null
+            },
+            onDeleteSale = {
+                viewModel.deleteSaleAndRestock(txToEdit)
+                editingTransaction = null
+            }
+        )
     }
 
     // Cash Management Dialogs
@@ -644,13 +679,13 @@ fun DashboardScreen(
     }
 
     if (showSetBalanceDialog) {
-        SetMainBalanceDialog(
+        EditMainCashBalanceDialog(
             currentBalance = mainBalance,
             currency = currency,
             language = language,
             onDismiss = { showSetBalanceDialog = false },
-            onConfirm = { amount, note ->
-                viewModel.updateMainBalance(amount, note)
+            onConfirm = { newBalance, note ->
+                viewModel.updateMainBalance(newBalance, note)
                 showSetBalanceDialog = false
             }
         )
@@ -663,8 +698,8 @@ fun DashboardScreen(
             currency = currency,
             language = language,
             onDismiss = { showDayEndSettleDialog = false },
-            onConfirm = { note ->
-                viewModel.settleDayEndCashToMainBalance(summary.todaySales, note)
+            onConfirm = { settledAmount, note ->
+                viewModel.settleDayEndCashToMainBalance(settledAmount, note)
                 showDayEndSettleDialog = false
             }
         )
@@ -675,7 +710,13 @@ fun DashboardScreen(
             cashLogs = cashLogs,
             currency = currency,
             language = language,
-            onDismiss = { showCashHistoryDialog = false }
+            onDismiss = { showCashHistoryDialog = false },
+            onEditLog = { log, newAmount, newNote ->
+                viewModel.editCashLog(log, newAmount, newNote)
+            },
+            onDeleteLog = { log ->
+                viewModel.deleteCashLog(log)
+            }
         )
     }
 }
@@ -755,43 +796,136 @@ fun CashInputDialog(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SetMainBalanceDialog(
+fun EditMainCashBalanceDialog(
     currentBalance: Double,
     currency: String,
     language: String,
     onDismiss: () -> Unit,
     onConfirm: (Double, String) -> Unit
 ) {
-    var amountStr by remember { mutableStateOf(currentBalance.toString().replace(".0", "")) }
-    var note by remember { mutableStateOf("সরাসরি ক্যাশ ব্যালেন্স সেট/সংশোধন") }
+    // Mode: "ADD", "SUBTRACT", "SET"
+    var mode by remember { mutableStateOf("SET") }
+    var amountStr by remember {
+        mutableStateOf(currentBalance.toIntOrNull()?.toString() ?: currentBalance.toString())
+    }
+    var note by remember { mutableStateOf("") }
+
+    val enteredAmount = amountStr.toDoubleOrNull() ?: 0.0
+    val resultingBalance = remember(mode, enteredAmount, currentBalance) {
+        when (mode) {
+            "ADD" -> currentBalance + enteredAmount
+            "SUBTRACT" -> (currentBalance - enteredAmount).coerceAtLeast(0.0)
+            else -> enteredAmount
+        }
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
-            shape = RoundedCornerShape(18.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(20.dp)) {
-                Text(
-                    text = if (language == "bn") "মূল ক্যাশ ব্যালেন্স পরিবর্তন" else "Set Main Balance",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = if (language == "bn") "আপনার ক্যাশ ড্রয়ারে এখন সর্বমোট কত টাকা আছে তা লিখুন" else "Enter current exact cash in your cash register/drawer",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(Color(0xFFDCFCE7), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.AccountBalanceWallet,
+                                contentDescription = null,
+                                tint = EmeraldPrimary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = if (language == "bn") "দোকানের মূল ক্যাশ এডিট" else "Edit Main Cash Balance",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "${if (language == "bn") "বর্তমান মূল ক্যাশ:" else "Current:"} $currency${currentBalance.toIntOrNull() ?: currentBalance}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = EmeraldPrimary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Mode Chips
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    FilterChip(
+                        selected = mode == "SET",
+                        onClick = {
+                            mode = "SET"
+                            amountStr = currentBalance.toIntOrNull()?.toString() ?: currentBalance.toString()
+                        },
+                        label = { Text(if (language == "bn") "সরাসরি সেট (=)" else "Set Exact (=)", style = MaterialTheme.typography.labelSmall) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    FilterChip(
+                        selected = mode == "ADD",
+                        onClick = {
+                            mode = "ADD"
+                            amountStr = ""
+                        },
+                        label = { Text(if (language == "bn") "ক্যাশ বৃদ্ধি (+)" else "Add (+)", style = MaterialTheme.typography.labelSmall) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    FilterChip(
+                        selected = mode == "SUBTRACT",
+                        onClick = {
+                            mode = "SUBTRACT"
+                            amountStr = ""
+                        },
+                        label = { Text(if (language == "bn") "ক্যাশ হ্রাস (-)" else "Subtract (-)", style = MaterialTheme.typography.labelSmall) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(14.dp))
 
                 OutlinedTextField(
                     value = amountStr,
                     onValueChange = { amountStr = it },
-                    label = { Text(if (language == "bn") "নতুন মূল ক্যাশ ($currency)" else "New Balance") },
+                    label = {
+                        Text(
+                            when (mode) {
+                                "ADD" -> if (language == "bn") "কত টাকা যোগ করবেন ($currency)" else "Amount to Add ($currency)"
+                                "SUBTRACT" -> if (language == "bn") "কত টাকা বিয়োগ করবেন ($currency)" else "Amount to Subtract ($currency)"
+                                else -> if (language == "bn") "নতুন মূল ক্যাশ ব্যালেন্স ($currency)" else "New Total Balance ($currency)"
+                            }
+                        )
+                    },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -800,8 +934,236 @@ fun SetMainBalanceDialog(
                 OutlinedTextField(
                     value = note,
                     onValueChange = { note = it },
-                    label = { Text(if (language == "bn") "সংশোধনের বিবরণ" else "Reason / Note") },
+                    label = { Text(if (language == "bn") "সংশোধনের বিবরণ / কারণ" else "Reason / Note") },
+                    placeholder = { Text(if (language == "bn") "যেমন: ক্যাশ ড্রয়ার হিসাব সমন্বয়" else "e.g. Cash drawer reconciliation") },
                     singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Result Preview Card
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (language == "bn") "আপডেটের পর নতুন মূল ক্যাশ:" else "New Resulting Cash:",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = "$currency${resultingBalance.toIntOrNull() ?: resultingBalance}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = EmeraldPrimary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(if (language == "bn") "বাতিল" else "Cancel")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            val defaultNote = when (mode) {
+                                "ADD" -> "ক্যাশ বৃদ্ধি (+ $currency$enteredAmount)"
+                                "SUBTRACT" -> "ক্যাশ হ্রাস (- $currency$enteredAmount)"
+                                else -> "সরাসরি ক্যাশ ব্যালেন্স সংশোধন"
+                            }
+                            onConfirm(resultingBalance, note.ifBlank { defaultNote })
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(if (language == "bn") "আপডেট করুন" else "Update Balance")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DayEndSettlementDialog(
+    summary: com.example.data.model.DashboardSummary,
+    currentMainBalance: Double,
+    currency: String,
+    language: String,
+    onDismiss: () -> Unit,
+    onConfirm: (settledAmount: Double, note: String) -> Unit
+) {
+    // The net cash generated today is calculated accurately:
+    // Today's total sales (cash portion) or total sales
+    val defaultClosingAmount = summary.todaySales
+    var customAmountStr by remember { mutableStateOf(defaultClosingAmount.toIntOrNull()?.toString() ?: defaultClosingAmount.toString()) }
+    var note by remember { mutableStateOf("আজকের দিনের মোট বিক্রির ক্যাশ ক্লোজিং") }
+
+    val settledAmount = customAmountStr.toDoubleOrNull() ?: 0.0
+    val newExpectedBalance = currentMainBalance + settledAmount
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(Color(0xFFDCFCE7), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Savings,
+                                contentDescription = null,
+                                tint = EmeraldPrimary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = if (language == "bn") "দিনশেষের বিক্রি ক্যাশ ক্লোজিং" else "Day-End Cash Settle",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = EmeraldPrimary
+                            )
+                            Text(
+                                text = if (language == "bn") "বিক্রির ক্যাশ ড্রয়ার হিসাব মিলান" else "Reconcile register with main cash",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
+                    }
+
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = if (language == "bn") "দোকানের মূল ক্যাশে সারাদিনের বিক্রি সরাসরি যোগ হয় না। দিনশেষে ক্যাশ ড্রয়ারে থাকা বিক্রির টাকা গুনে মূল ক্যাশে যুক্ত করুন।" else "Sales are held in the register and not auto-added to main cash. Settle the counted cash at the end of the day.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Breakdown Card with opening and closing details
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    border = CardDefaults.outlinedCardBorder(),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(
+                                text = if (language == "bn") "১. পূর্বে দোকানের মূল ক্যাশ:" else "1. Previous Main Cash:",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                text = "$currency${currentMainBalance.toIntOrNull() ?: currentMainBalance}",
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(
+                                text = if (language == "bn") "২. আজকের মোট বিক্রি (+):" else "2. Today's Total Sales (+):",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = ProfitGreen
+                            )
+                            Text(
+                                text = "+$currency${summary.todaySales.toIntOrNull() ?: summary.todaySales}",
+                                fontWeight = FontWeight.Bold,
+                                color = ProfitGreen
+                            )
+                        }
+                        if (summary.todayExpenses > 0) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(
+                                    text = if (language == "bn") "৩. আজকের খরচ (-):" else "3. Today's Expenses (-):",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = LossRed
+                                )
+                                Text(
+                                    text = "-$currency${summary.todayExpenses.toIntOrNull() ?: summary.todayExpenses}",
+                                    fontWeight = FontWeight.Bold,
+                                    color = LossRed
+                                )
+                            }
+                        }
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(
+                                text = if (language == "bn") "যুক্ত করার পর নতুন মূল ক্যাশ:" else "New Total Main Cash:",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = EmeraldPrimary
+                            )
+                            Text(
+                                text = "$currency${newExpectedBalance.toIntOrNull() ?: newExpectedBalance}",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = EmeraldPrimary
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                OutlinedTextField(
+                    value = customAmountStr,
+                    onValueChange = { customAmountStr = it },
+                    label = { Text(if (language == "bn") "মূল ক্যাশে যুক্ত করার টাকার পরিমাণ ($currency) *" else "Amount to Add to Main Cash ($currency) *") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    label = { Text(if (language == "bn") "নোট / মন্তব্য" else "Note") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -817,112 +1179,17 @@ fun SetMainBalanceDialog(
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = {
-                            val amount = amountStr.toDoubleOrNull() ?: 0.0
-                            onConfirm(amount, note)
+                            if (settledAmount > 0) {
+                                onConfirm(settledAmount, note)
+                            }
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
+                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
+                        shape = RoundedCornerShape(10.dp),
+                        enabled = settledAmount > 0
                     ) {
-                        Text(if (language == "bn") "সেট করুন" else "Set Balance")
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun DayEndSettlementDialog(
-    summary: com.example.data.model.DashboardSummary,
-    currentMainBalance: Double,
-    currency: String,
-    language: String,
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit
-) {
-    var note by remember { mutableStateOf("আজকের দিনের মোট বিক্রির ক্যাশ ক্লোজিং") }
-    val newExpectedBalance = currentMainBalance + summary.todaySales
-
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            shape = RoundedCornerShape(18.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier
-                    .padding(20.dp)
-                    .verticalScroll(rememberScrollState())
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Savings, contentDescription = null, tint = EmeraldPrimary, modifier = Modifier.size(28.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = if (language == "bn") "দিনশেষের বিক্রি ক্যাশ ক্লোজিং" else "Day-End Cash Settle",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = EmeraldPrimary
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Text(
-                    text = if (language == "bn") "আজ সারাদিনের মোট বিক্রি মূল ক্যাশ ব্যালেন্সে যোগ করা হবে।" else "Today's sales will be added directly into your main cash balance.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Breakdown Card
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    border = CardDefaults.outlinedCardBorder(),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(if (language == "bn") "বর্তমান মূল ক্যাশ:" else "Current Cash:", style = MaterialTheme.typography.bodyMedium)
-                            Text("$currency${currentMainBalance.toIntOrNull() ?: currentMainBalance}", fontWeight = FontWeight.Bold)
-                        }
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(if (language == "bn") "আজকের মোট বিক্রি (+):" else "Today's Total Sales (+):", style = MaterialTheme.typography.bodyMedium, color = ProfitGreen)
-                            Text("+$currency${summary.todaySales.toIntOrNull() ?: summary.todaySales}", fontWeight = FontWeight.Bold, color = ProfitGreen)
-                        }
-                        HorizontalDivider()
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(if (language == "bn") "ক্লোজিং এর পর নতুন ক্যাশ:" else "New Total Cash Balance:", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = EmeraldPrimary)
-                            Text("$currency${newExpectedBalance.toIntOrNull() ?: newExpectedBalance}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.ExtraBold, color = EmeraldPrimary)
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                OutlinedTextField(
-                    value = note,
-                    onValueChange = { note = it },
-                    label = { Text(if (language == "bn") "নোট / মন্তব্য" else "Note") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(18.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text(if (language == "bn") "বাতিল" else "Cancel")
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = { onConfirm(note) },
-                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
-                    ) {
-                        Text(if (language == "bn") "ক্যাশে যুক্ত করুন" else "Add to Cash")
+                        Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(if (language == "bn") "ক্যাশে যুক্ত ও ক্লোজ করুন" else "Add to Cash & Close")
                     }
                 }
             }
@@ -935,8 +1202,14 @@ fun CashHistoryDialog(
     cashLogs: List<CashLog>,
     currency: String,
     language: String,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onEditLog: (CashLog, Double, String) -> Unit,
+    onDeleteLog: (CashLog) -> Unit
 ) {
+    var editingLog by remember { mutableStateOf<CashLog?>(null) }
+    var editAmountStr by remember { mutableStateOf("") }
+    var editNote by remember { mutableStateOf("") }
+
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(18.dp),
@@ -1025,14 +1298,88 @@ fun CashHistoryDialog(
                                         )
                                     }
 
-                                    Text(
-                                        text = "${if (isAddition) "+" else "-"}$currency${log.amount.toIntOrNull() ?: log.amount}",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = if (isAddition) ProfitGreen else LossRed
-                                    )
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text(
+                                            text = "${if (isAddition) "+" else "-"}$currency${log.amount.toIntOrNull() ?: log.amount}",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = if (isAddition) ProfitGreen else LossRed
+                                        )
+                                        Row {
+                                            IconButton(
+                                                onClick = {
+                                                    editingLog = log
+                                                    editAmountStr = log.amount.toIntOrNull()?.toString() ?: log.amount.toString()
+                                                    editNote = log.note
+                                                },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(Icons.Default.Edit, contentDescription = "Edit", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                            }
+                                            IconButton(
+                                                onClick = { onDeleteLog(log) },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = LossRed, modifier = Modifier.size(16.dp))
+                                            }
+                                        }
+                                    }
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Sub-dialog for editing a cash log
+    if (editingLog != null) {
+        val targetLog = editingLog!!
+        Dialog(onDismissRequest = { editingLog = null }) {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Text(
+                        text = if (language == "bn") "ক্যাশ লেনদেন সংশোধন" else "Edit Cash Entry",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = editAmountStr,
+                        onValueChange = { editAmountStr = it },
+                        label = { Text(if (language == "bn") "টাকার পরিমাণ ($currency)" else "Amount ($currency)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = editNote,
+                        onValueChange = { editNote = it },
+                        label = { Text(if (language == "bn") "নোট / বিবরণ" else "Note") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = { editingLog = null }) {
+                            Text(if (language == "bn") "বাতিল" else "Cancel")
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                val amount = editAmountStr.toDoubleOrNull() ?: targetLog.amount
+                                onEditLog(targetLog, amount, editNote)
+                                editingLog = null
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
+                        ) {
+                            Text(if (language == "bn") "সংরক্ষণ" else "Save")
                         }
                     }
                 }
@@ -1139,7 +1486,8 @@ fun MetricCard(
 fun TransactionFeedItem(
     tx: TransactionRecord,
     currency: String,
-    language: String
+    language: String,
+    onClick: (() -> Unit)? = null
 ) {
     val dateStr = remember(tx.timestamp) {
         SimpleDateFormat("hh:mm a, d MMM", Locale.getDefault()).format(Date(tx.timestamp))
@@ -1150,7 +1498,11 @@ fun TransactionFeedItem(
     val isDamage = tx.type == "STOCK_OUT_DAMAGE"
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
+            ),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = CardDefaults.outlinedCardBorder()
@@ -1193,12 +1545,23 @@ fun TransactionFeedItem(
             Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = tx.productName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = tx.productName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (isSale) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = "Edit or Return",
+                            tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
                 Text(
                     text = "${if (isSale) "বিক্রি" else if (isStockIn) "স্টক ইন" else "সমন্বয়"} • ${tx.quantity.toIntOrNull() ?: tx.quantity} ${tx.unit} • $dateStr",
                     style = MaterialTheme.typography.bodySmall,
