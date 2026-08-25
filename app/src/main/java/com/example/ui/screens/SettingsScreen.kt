@@ -655,12 +655,24 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.AccountCircle, contentDescription = null, tint = EmeraldPrimary, modifier = Modifier.size(24.dp))
+                            Icon(Icons.Default.CloudQueue, contentDescription = null, tint = EmeraldPrimary, modifier = Modifier.size(24.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (language == "bn") "গুগল অ্যাকাউন্ট ও লগআউট" else "Google Account & Logout",
+                                text = if (language == "bn") "Firebase ও গুগল অ্যাকাউন্ট" else "Firebase & Google Account",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = EmeraldPrimary.copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = "nafishop-54e99",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = EmeraldPrimary,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                             )
                         }
                     }

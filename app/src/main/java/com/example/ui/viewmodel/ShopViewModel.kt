@@ -5,6 +5,9 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.data.auth.FirebaseAuthManager
+import com.example.data.auth.AuthResult
+import com.google.firebase.auth.FirebaseUser
 import com.example.data.local.AppDatabase
 import com.example.data.model.*
 import com.example.data.repository.ShopRepository
@@ -43,13 +46,17 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     val cashLogs: StateFlow<List<CashLog>> = repository.allCashLogs
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val firebaseAuth = FirebaseAuthManager()
+    private val _firebaseUser = MutableStateFlow<FirebaseUser?>(firebaseAuth.currentUser)
+    val firebaseUser: StateFlow<FirebaseUser?> = _firebaseUser.asStateFlow()
+
     private val prefs = application.getSharedPreferences("shop_khata_prefs", android.content.Context.MODE_PRIVATE)
 
     // Language & Shop Profile State
     private val _language = MutableStateFlow(prefs.getString("app_language", "bn") ?: "bn")
     val language: StateFlow<String> = _language.asStateFlow()
 
-    private val _isLoggedIn = MutableStateFlow(prefs.getBoolean("is_logged_in", false))
+    private val _isLoggedIn = MutableStateFlow(prefs.getBoolean("is_logged_in", false) || firebaseAuth.isUserLoggedIn)
     val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
 
     private val _shopInfo = MutableStateFlow(
@@ -188,6 +195,69 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             .apply()
     }
 
+    fun firebaseSignUp(
+        email: String,
+        pass: String,
+        shopName: String,
+        ownerName: String,
+        onResult: (AuthResult) -> Unit
+    ) {
+        viewModelScope.launch {
+            val result = firebaseAuth.signUpWithEmail(email, pass, displayName = ownerName.ifBlank { shopName })
+            if (result is AuthResult.Success) {
+                _firebaseUser.value = result.user
+                val sName = if (shopName.isNotBlank()) shopName else _shopInfo.value.shopName
+                val oName = if (ownerName.isNotBlank()) ownerName else _shopInfo.value.ownerName
+                _shopInfo.value = _shopInfo.value.copy(
+                    userEmail = email,
+                    shopName = sName,
+                    ownerName = oName,
+                    isGoogleLinked = true
+                )
+                _isLoggedIn.value = true
+                prefs.edit()
+                    .putString("user_email", email)
+                    .putString("shop_name", sName)
+                    .putString("shop_owner", oName)
+                    .putBoolean("is_google_linked", true)
+                    .putBoolean("is_logged_in", true)
+                    .apply()
+            }
+            onResult(result)
+        }
+    }
+
+    fun firebaseSignIn(
+        email: String,
+        pass: String,
+        onResult: (AuthResult) -> Unit
+    ) {
+        viewModelScope.launch {
+            val result = firebaseAuth.signInWithEmail(email, pass)
+            if (result is AuthResult.Success) {
+                _firebaseUser.value = result.user
+                _shopInfo.value = _shopInfo.value.copy(
+                    userEmail = email,
+                    isGoogleLinked = true
+                )
+                _isLoggedIn.value = true
+                prefs.edit()
+                    .putString("user_email", email)
+                    .putBoolean("is_google_linked", true)
+                    .putBoolean("is_logged_in", true)
+                    .apply()
+            }
+            onResult(result)
+        }
+    }
+
+    fun firebaseResetPassword(email: String, onResult: (AuthResult) -> Unit) {
+        viewModelScope.launch {
+            val result = firebaseAuth.sendPasswordReset(email)
+            onResult(result)
+        }
+    }
+
     fun loginUser(email: String, password: String, customShopName: String = "") {
         val sName = if (customShopName.isNotBlank()) customShopName else _shopInfo.value.shopName
         _shopInfo.value = _shopInfo.value.copy(
@@ -213,6 +283,8 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun logoutUser() {
+        firebaseAuth.signOut()
+        _firebaseUser.value = null
         _isLoggedIn.value = false
         prefs.edit()
             .putBoolean("is_logged_in", false)
