@@ -126,6 +126,8 @@ class FirebaseAuthManager(private val context: Context? = null) {
     private fun getReadableErrorMessage(e: Exception): String {
         val msg = e.message ?: ""
         return when {
+            msg.contains("CONFIGURATION_NOT_FOUND", ignoreCase = true) ->
+                "ফায়ারবেস কনফিগারেশন ত্রুটি: Firebase Console-এ Email/Password অথেনটিকেশন সক্রিয় করা প্রয়োজন। আপনি নিচে 'গেস্ট হিসেবে প্রবেশ করুন' চেপে সরাসরি সম্পূর্ণ অ্যাপটি ব্যবহার করতে পারেন।"
             msg.contains("The email address is already in use", ignoreCase = true) ||
             msg.contains("email-already-in-use", ignoreCase = true) ->
                 "এই জিমেইল আইডি দিয়ে ইতিমধ্যে একটি অ্যাকাউন্ট তৈরি আছে! অনুগ্রহ করে 'লগইন করুন' বাটনে চাপুন।"

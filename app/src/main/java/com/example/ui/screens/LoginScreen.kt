@@ -382,26 +382,57 @@ fun LoginScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                     }
 
-                    // Error Notification Banner
+                    // Error Notification Banner with Instant Enter Option
                     if (errorMessage != null) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = LossRed.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(12.dp),
+                            color = LossRed.copy(alpha = 0.12f),
                             border = CardDefaults.outlinedCardBorder(),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = LossRed, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = errorMessage!!,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = LossRed
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = LossRed, modifier = Modifier.size(20.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = errorMessage!!,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = LossRed
+                                    )
+                                }
+
+                                // Quick Enter Button if Firebase is not yet enabled in Firebase Console
+                                Button(
+                                    onClick = {
+                                        viewModel.updateShopInfo(
+                                            name = shopName.ifBlank { "NAFI SHOP 24" },
+                                            owner = ownerName.ifBlank { "মালিক" },
+                                            phone = "",
+                                            address = "",
+                                            currency = "৳",
+                                            email = email.ifBlank { "nafitv24@gmail.com" }
+                                        )
+                                        viewModel.loginAsGuest()
+                                        onLoginSuccess()
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(Icons.Default.Storefront, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (isBn) "দোকানে প্রবেশ করুন (গুগল ড্রাইভ ও অফলাইন মোড)" else "Enter Shop (Drive & Offline Mode)",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.labelLarge
+                                    )
+                                }
                             }
                         }
                     }

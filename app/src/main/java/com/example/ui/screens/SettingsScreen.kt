@@ -412,6 +412,30 @@ fun SettingsScreen(
                         }
                     }
 
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Info, contentDescription = null, tint = StockBlue, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (language == "bn")
+                                    "প্রথমে 'ড্রাইভে রপ্তানি করুন' চেপে ব্যাকআপ রাখুন। এরপর যেকোনো সময় 'ড্রাইভ থেকে আমদানি' চেপে সহজে রিস্টোর করতে পারবেন।"
+                                else
+                                    "First tap 'Export to Drive' to create a backup. Later, tap 'Import from Drive' to restore anytime.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
                     if (isSyncing) {
                         Spacer(modifier = Modifier.height(10.dp))
                         Row(
@@ -1133,8 +1157,22 @@ fun SettingsScreen(
                 }
             },
             confirmButton = {
-                Button(onClick = { showRestoreResultDialog = false }) {
-                    Text(if (language == "bn") "ঠিক আছে" else "OK")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (!result.success) {
+                        OutlinedButton(
+                            onClick = {
+                                showRestoreResultDialog = false
+                                pickRestoreFileLauncher.launch("*/*")
+                            }
+                        ) {
+                            Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(if (language == "bn") "ফাইল নির্বাচন" else "Pick File")
+                        }
+                    }
+                    Button(onClick = { showRestoreResultDialog = false }) {
+                        Text(if (language == "bn") "ঠিক আছে" else "OK")
+                    }
                 }
             }
         )
