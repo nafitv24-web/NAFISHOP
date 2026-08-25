@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -23,6 +24,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.example.data.model.CartItem
 import com.example.data.model.Customer
 import com.example.data.model.Product
@@ -52,6 +54,8 @@ fun PosSaleScreen(
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("সব") }
     var showCustomerPicker by remember { mutableStateOf(false) }
+    var showAddCustomerInPosDialog by remember { mutableStateOf(false) }
+    var customerSearchQuery by remember { mutableStateOf("") }
 
     val defaultCategories = listOf("সব", "মুদি সামগ্রী", "চাল ও ডাল", "তেল ও ঘি", "চা ও পানীয়", "ডিম ও দুগ্ধজাত", "প্রসাধন", "পরিষ্কারক", "অন্যান্য")
     val categories = remember(products) {
@@ -407,6 +411,10 @@ fun PosSaleScreen(
                                                 viewModel.cartPaymentMethod.value = key
                                                 if (key == "DUE") {
                                                     viewModel.cartPaidAmount.value = 0.0
+                                                    // If customer is not selected or is generic cash customer, prompt selection
+                                                    if (customerName.isBlank() || customerName == "ক্যাশ কাস্টমার" || customerName == "Cash Customer") {
+                                                        showCustomerPicker = true
+                                                    }
                                                 } else {
                                                     viewModel.cartPaidAmount.value = netPayable
                                                 }
@@ -492,55 +500,197 @@ fun PosSaleScreen(
         }
     }
 
-    // Customer Picker Modal
+    // Enhanced Customer Picker Modal with Search & Add Customer
     if (showCustomerPicker) {
-        AlertDialog(
-            onDismissRequest = { showCustomerPicker = false },
-            title = { Text(if (language == "bn") "কাস্টমার নির্বাচন করুন" else "Select Customer") },
-            text = {
-                LazyColumn(
+        val filteredCustomers = remember(customers, customerSearchQuery) {
+            customers.filter {
+                customerSearchQuery.isBlank() ||
+                        it.name.contains(customerSearchQuery, ignoreCase = true) ||
+                        it.phone.contains(customerSearchQuery, ignoreCase = true) ||
+                        it.address.contains(customerSearchQuery, ignoreCase = true)
+            }
+        }
+
+        Dialog(onDismissRequest = { showCustomerPicker = false }) {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.85f)
+            ) {
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 280.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                        .fillMaxSize()
+                        .padding(16.dp)
                 ) {
-                    items(customers) { c ->
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
+                    // Header Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (language == "bn") "বাকি / কাস্টমার নির্বাচন" else "Select Customer",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        IconButton(onClick = { showCustomerPicker = false }) {
+                            Icon(Icons.Default.Close, contentDescription = "Close")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // + Add New Customer Button
+                    Button(
+                        onClick = { showAddCustomerInPosDialog = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = DueOrange),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (language == "bn") "+ নতুন কাস্টমার যোগ করুন" else "+ Add New Customer",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Search Customer field
+                    OutlinedTextField(
+                        value = customerSearchQuery,
+                        onValueChange = { customerSearchQuery = it },
+                        placeholder = { Text(if (language == "bn") "নাম, মোবাইল বা ঠিকানা খুঁজুন..." else "Search name, phone, address...") },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Customer List
+                    if (filteredCustomers.isEmpty()) {
+                        Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    viewModel.cartCustomerName.value = c.name
-                                    viewModel.cartCustomerPhone.value = c.phone
-                                    showCustomerPicker = false
-                                }
+                                .weight(1f)
+                                .fillMaxWidth(),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Row(
-                                modifier = Modifier.padding(10.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column {
-                                    Text(c.name, fontWeight = FontWeight.Bold)
-                                    Text(c.phone, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.PersonOutline, contentDescription = null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(48.dp))
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = if (language == "bn") "কোনো কাস্টমার পাওয়া যায়নি" else "No customers found",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                TextButton(onClick = { showAddCustomerInPosDialog = true }) {
+                                    Text(if (language == "bn") "নতুন কাস্টমার হিসেবে তৈরি করুন" else "Create New Customer")
                                 }
-                                if (c.totalDue > 0) {
-                                    Text(
-                                        "বাকি: $currency${c.totalDue.toIntOrNull() ?: c.totalDue}",
-                                        color = DueOrange,
-                                        fontWeight = FontWeight.Bold,
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(filteredCustomers) { c ->
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                    border = BorderStroke(1.dp, if (c.totalDue > 0) DueOrange.copy(alpha = 0.3f) else Color.Transparent),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            viewModel.cartCustomerName.value = c.name
+                                            viewModel.cartCustomerPhone.value = c.phone
+                                            showCustomerPicker = false
+                                        }
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(12.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.weight(1f),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Surface(
+                                                shape = CircleShape,
+                                                color = if (c.totalDue > 0) Color(0xFFFFEDD5) else Color(0xFFDCFCE7),
+                                                modifier = Modifier.size(38.dp)
+                                            ) {
+                                                Box(contentAlignment = Alignment.Center) {
+                                                    Text(
+                                                        text = c.name.take(1).uppercase(),
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = if (c.totalDue > 0) DueOrange else ProfitGreen
+                                                    )
+                                                }
+                                            }
+
+                                            Spacer(modifier = Modifier.width(10.dp))
+
+                                            Column {
+                                                Text(c.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                                                if (c.phone.isNotBlank()) {
+                                                    Text(c.phone, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                                                }
+                                                if (c.address.isNotBlank()) {
+                                                    Text(c.address, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outlineVariant)
+                                                }
+                                            }
+                                        }
+
+                                        Column(horizontalAlignment = Alignment.End) {
+                                            if (c.totalDue > 0) {
+                                                Text(
+                                                    "বাকি: $currency${c.totalDue.toIntOrNull() ?: c.totalDue}",
+                                                    color = DueOrange,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    style = MaterialTheme.typography.bodyMedium
+                                                )
+                                            } else {
+                                                Text(
+                                                    if (language == "bn") "পরিশোধিত" else "Settled",
+                                                    color = ProfitGreen,
+                                                    fontWeight = FontWeight.Bold,
+                                                    style = MaterialTheme.typography.bodySmall
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = { showCustomerPicker = false }) {
-                    Text(if (language == "bn") "বন্ধ করুন" else "Close")
-                }
+            }
+        }
+    }
+
+    // In-place Add Customer Dialog inside POS Sale Screen
+    if (showAddCustomerInPosDialog) {
+        AddCustomerDialog(
+            currency = currency,
+            language = language,
+            onDismiss = { showAddCustomerInPosDialog = false },
+            onSave = { name, phone, address, initialDue, imageUri ->
+                viewModel.addCustomer(name, phone, address, initialDue, imageUri)
+                // Automatically assign this newly created customer to the active cart!
+                viewModel.cartCustomerName.value = name
+                viewModel.cartCustomerPhone.value = phone
+                showAddCustomerInPosDialog = false
+                showCustomerPicker = false
             }
         )
     }

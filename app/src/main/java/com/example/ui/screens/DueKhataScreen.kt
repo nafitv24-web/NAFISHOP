@@ -71,6 +71,8 @@ fun DueKhataScreen(
     var selectedCustomerForEdit by remember { mutableStateOf<Customer?>(null) }
     var showEditCustomerDialog by remember { mutableStateOf(false) }
 
+    var selectedCustomerForLedger by remember { mutableStateOf<Customer?>(null) }
+
     var editingDueLog by remember { mutableStateOf<Pair<DueLog, Customer>?>(null) }
 
     val filteredCustomers = remember(customers, searchQuery) {
@@ -84,6 +86,15 @@ fun DueKhataScreen(
 
     val totalDueSum = remember(customers) { customers.sumOf { it.totalDue } }
     val debtorsCount = remember(customers) { customers.count { it.totalDue > 0 } }
+
+    if (selectedCustomerForLedger != null) {
+        CustomerLedgerScreen(
+            customer = selectedCustomerForLedger!!,
+            viewModel = viewModel,
+            onBack = { selectedCustomerForLedger = null }
+        )
+        return
+    }
 
     Scaffold(
         floatingActionButton = {
@@ -286,8 +297,7 @@ fun DueKhataScreen(
                                 showAddDueDialog = true
                             },
                             onViewHistory = {
-                                selectedCustomerForHistory = customer
-                                showHistoryDialog = true
+                                selectedCustomerForLedger = customer
                             },
                             onEdit = {
                                 selectedCustomerForEdit = customer
@@ -429,7 +439,9 @@ fun CustomerKhataCard(
     var expandedMenu by remember { mutableStateOf(false) }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onViewHistory),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = CardDefaults.outlinedCardBorder()
