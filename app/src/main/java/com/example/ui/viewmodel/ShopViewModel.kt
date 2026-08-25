@@ -132,6 +132,45 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     val isSyncing = MutableStateFlow(false)
     val syncMessage = MutableStateFlow<String?>(null)
 
+    // Current App Version Info
+    val currentAppVersion = "2.4.0"
+    val currentVersionCode = 24
+
+    // Admin & App Update State
+    private val _appUpdateInfo = MutableStateFlow(
+        AppUpdateInfo(
+            versionName = prefs.getString("app_update_version_name", "2.4.0") ?: "2.4.0",
+            versionCode = prefs.getInt("app_update_version_code", 24),
+            downloadUrl = prefs.getString("app_update_download_url", "https://drive.google.com") ?: "https://drive.google.com",
+            releaseNotes = prefs.getString("app_update_notes", "নতুন দ্রুত বিক্রয় (POS), কাস্টমার ট্রানজেকশন হিস্ট্রি ও মেয়াদ ট্র্যাকিং সুবিধা যুক্ত করা হয়েছে।") ?: "",
+            isForceUpdate = prefs.getBoolean("app_update_force", false),
+            isUpdateActive = prefs.getBoolean("app_update_active", true),
+            releaseDate = prefs.getLong("app_update_date", System.currentTimeMillis())
+        )
+    )
+    val appUpdateInfo: StateFlow<AppUpdateInfo> = _appUpdateInfo.asStateFlow()
+
+    private val _isUpdateAvailable = MutableStateFlow(false)
+    val isUpdateAvailable: StateFlow<Boolean> = _isUpdateAvailable.asStateFlow()
+
+    private val _dismissedUpdate = MutableStateFlow(false)
+    val dismissedUpdate: StateFlow<Boolean> = _dismissedUpdate.asStateFlow()
+
+    // Admin User Notices
+    private val _activeNotice = MutableStateFlow<AppNotice?>(null)
+    val activeNotice: StateFlow<AppNotice?> = _activeNotice.asStateFlow()
+
+    private val _noticeHistory = MutableStateFlow<List<AppNotice>>(emptyList())
+    val noticeHistory: StateFlow<List<AppNotice>> = _noticeHistory.asStateFlow()
+
+    private val _adminPin = MutableStateFlow(prefs.getString("admin_pin", "1234") ?: "1234")
+    val adminPin: StateFlow<String> = _adminPin.asStateFlow()
+
+    init {
+        loadSavedNotices()
+        checkForUpdates(manualCheck = false)
+    }
+
     // Dashboard Summary derivation
     val dashboardSummary: StateFlow<DashboardSummary> = combine(
         allTransactions,
@@ -1045,6 +1084,191 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             isSyncing.value = false
             onResult(result)
         }
+    }
+
+    // -------------------------------------------------------------
+    // ADMIN PANEL: APP UPDATES & USER NOTIFICATIONS
+    // -------------------------------------------------------------
+
+    private fun loadSavedNotices() {
+        val noticesJson = prefs.getString("saved_notices_json", null)
+        if (!noticesJson.isNullOrBlank()) {
+            try {
+                val arr = org.json.JSONArray(noticesJson)
+                val list = mutableListOf<AppNotice>()
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    list.add(
+                        AppNotice(
+                            id = obj.optString("id", UUID.randomUUID().toString()),
+                            title = obj.optString("title", ""),
+                            message = obj.optString("message", ""),
+                            type = obj.optString("type", "INFO"),
+                            timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
+                            isActive = obj.optBoolean("isActive", true),
+                            actionUrl = obj.optString("actionUrl", "")
+                        )
+                    )
+                }
+                _noticeHistory.value = list
+                _activeNotice.value = list.firstOrNull { it.isActive }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    private fun saveNoticesToPrefs(list: List<AppNotice>) {
+        try {
+            val arr = org.json.JSONArray()
+            for (n in list) {
+                val obj = JSONObject().apply {
+                    put("id", n.id)
+                    put("title", n.title)
+                    put("message", n.message)
+                    put("type", n.type)
+                    put("timestamp", n.timestamp)
+                    put("isActive", n.isActive)
+                    put("actionUrl", n.actionUrl)
+                }
+                arr.put(obj)
+            }
+            prefs.edit().putString("saved_notices_json", arr.toString()).apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun checkForUpdates(manualCheck: Boolean = false, onResult: ((Boolean, String) -> Unit)? = null) {
+        viewModelScope.launch {
+            if (manualCheck) {
+                isSyncing.value = true
+                syncMessage.value = if (_language.value == "bn") "আপডেট চেক করা হচ্ছে..." else "Checking for updates..."
+            }
+
+            try {
+                // 1. Try fetching latest update metadata from cloud (Firebase Realtime DB)
+                val cloudUpdate = firebaseRealtime.fetchAppUpdate()
+                val activeCloudNotice = firebaseRealtime.fetchActiveNotice()
+
+                if (cloudUpdate != null) {
+                    _appUpdateInfo.value = cloudUpdate
+                    prefs.edit()
+                        .putString("app_update_version_name", cloudUpdate.versionName)
+                        .putInt("app_update_version_code", cloudUpdate.versionCode)
+                        .putString("app_update_download_url", cloudUpdate.downloadUrl)
+                        .putString("app_update_notes", cloudUpdate.releaseNotes)
+                        .putBoolean("app_update_force", cloudUpdate.isForceUpdate)
+                        .putBoolean("app_update_active", cloudUpdate.isUpdateActive)
+                        .putLong("app_update_date", cloudUpdate.releaseDate)
+                        .apply()
+                }
+
+                if (activeCloudNotice != null) {
+                    _activeNotice.value = activeCloudNotice
+                }
+
+                val currentUpdate = _appUpdateInfo.value
+                val hasNewVersion = currentUpdate.isUpdateActive && (
+                        currentUpdate.versionCode > currentVersionCode ||
+                                (!currentUpdate.versionName.equals(currentAppVersion, ignoreCase = true) && currentUpdate.downloadUrl.isNotBlank())
+                        )
+
+                _isUpdateAvailable.value = hasNewVersion
+
+                if (manualCheck) {
+                    isSyncing.value = false
+                    if (hasNewVersion) {
+                        onResult?.invoke(true, if (_language.value == "bn") "নতুন ভার্সন (${currentUpdate.versionName}) পাওয়া গেছে!" else "New version (${currentUpdate.versionName}) is available!")
+                    } else {
+                        onResult?.invoke(false, if (_language.value == "bn") "আপনি সর্বশেষ ভার্সন (${currentAppVersion}) ব্যবহার করছেন।" else "You are using the latest version (${currentAppVersion}).")
+                    }
+                }
+            } catch (e: Exception) {
+                if (manualCheck) {
+                    isSyncing.value = false
+                    onResult?.invoke(false, "চেক করতে সমস্যা হয়েছে: ${e.localizedMessage}")
+                }
+            }
+        }
+    }
+
+    fun publishAppUpdate(
+        updateInfo: AppUpdateInfo,
+        onComplete: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            _appUpdateInfo.value = updateInfo
+            prefs.edit()
+                .putString("app_update_version_name", updateInfo.versionName)
+                .putInt("app_update_version_code", updateInfo.versionCode)
+                .putString("app_update_download_url", updateInfo.downloadUrl)
+                .putString("app_update_notes", updateInfo.releaseNotes)
+                .putBoolean("app_update_force", updateInfo.isForceUpdate)
+                .putBoolean("app_update_active", updateInfo.isUpdateActive)
+                .putLong("app_update_date", updateInfo.releaseDate)
+                .apply()
+
+            val hasNewVersion = updateInfo.isUpdateActive && (
+                    updateInfo.versionCode > currentVersionCode ||
+                            (!updateInfo.versionName.equals(currentAppVersion, ignoreCase = true) && updateInfo.downloadUrl.isNotBlank())
+                    )
+            _isUpdateAvailable.value = hasNewVersion
+            _dismissedUpdate.value = false
+
+            // Publish to Cloud so all users receive it
+            val res = firebaseRealtime.publishAppUpdate(updateInfo)
+            onComplete(true, if (res.success) "অ্যাপ আপডেট সফলভাবে ক্লাউড ও লোকাল সিস্টেমে প্রকাশিত হয়েছে!" else "আপডেট সংরক্ষিত হয়েছে (অফলাইন মোড)")
+        }
+    }
+
+    fun publishNotice(
+        notice: AppNotice,
+        onComplete: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val updatedList = listOf(notice) + _noticeHistory.value.filter { it.id != notice.id }
+            _noticeHistory.value = updatedList
+            _activeNotice.value = notice
+            saveNoticesToPrefs(updatedList)
+
+            val res = firebaseRealtime.publishAppNotice(notice)
+            onComplete(true, if (res.success) "ইউজারদের কাছে নোটিফিকেশন সফলভাবে পাঠানো হয়েছে!" else "নোটিশ সংরক্ষিত হয়েছে")
+        }
+    }
+
+    fun deleteNotice(noticeId: String, onComplete: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val updatedList = _noticeHistory.value.filter { it.id != noticeId }
+            _noticeHistory.value = updatedList
+            if (_activeNotice.value?.id == noticeId) {
+                _activeNotice.value = updatedList.firstOrNull { it.isActive }
+                firebaseRealtime.clearActiveNotice()
+            }
+            saveNoticesToPrefs(updatedList)
+            onComplete(true)
+        }
+    }
+
+    fun dismissActiveNotice() {
+        _activeNotice.value = null
+    }
+
+    fun dismissUpdateAlert() {
+        _dismissedUpdate.value = true
+    }
+
+    fun verifyAdminPin(pin: String): Boolean {
+        return pin.trim() == _adminPin.value.trim()
+    }
+
+    fun changeAdminPin(oldPin: String, newPin: String): Boolean {
+        if (oldPin.trim() == _adminPin.value.trim()) {
+            _adminPin.value = newPin.trim()
+            prefs.edit().putString("admin_pin", newPin.trim()).apply()
+            return true
+        }
+        return false
     }
 }
 

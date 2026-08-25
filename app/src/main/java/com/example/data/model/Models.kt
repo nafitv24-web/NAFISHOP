@@ -135,3 +135,23 @@ data class RestoreResult(
     val restoredShopInfo: ShopInfo? = null
 )
 
+data class AppUpdateInfo(
+    val versionName: String = "2.4.0",
+    val versionCode: Int = 24,
+    val downloadUrl: String = "https://drive.google.com",
+    val releaseNotes: String = "নতুন দ্রুত বিক্রয় (POS), কাস্টমার ট্রানজেকশন হিস্ট্রি ও মেয়াদ ট্র্যাকিং সুবিধা যুক্ত করা হয়েছে।",
+    val isForceUpdate: Boolean = false,
+    val isUpdateActive: Boolean = true,
+    val releaseDate: Long = System.currentTimeMillis()
+)
+
+data class AppNotice(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val title: String = "",
+    val message: String = "",
+    val type: String = "INFO", // "INFO", "ALERT", "OFFER", "FEATURE"
+    val timestamp: Long = System.currentTimeMillis(),
+    val isActive: Boolean = true,
+    val actionUrl: String = ""
+)
+

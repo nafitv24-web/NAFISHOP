@@ -16,7 +16,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.Product
+import com.example.ui.components.AppNoticeDialog
 import com.example.ui.components.AppPermissionDialog
+import com.example.ui.components.AppUpdateDialog
 import com.example.ui.components.InvoiceDialog
 import com.example.ui.components.PermissionHelper
 import androidx.compose.ui.platform.LocalContext
@@ -60,6 +62,13 @@ fun MainAppScaffold(
     var showQuickStockInDialog by remember { mutableStateOf(false) }
     var showQuickAddExpenseDialog by remember { mutableStateOf(false) }
     val products by viewModel.products.collectAsState()
+
+    val appUpdateInfo by viewModel.appUpdateInfo.collectAsState()
+    val isUpdateAvailable by viewModel.isUpdateAvailable.collectAsState()
+    val activeNotice by viewModel.activeNotice.collectAsState()
+
+    var userDismissedUpdateDialog by remember { mutableStateOf(false) }
+    var userDismissedNoticeDialog by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     var showPermissionDialog by remember {
@@ -263,6 +272,25 @@ fun MainAppScaffold(
             onPermissionsResult = { granted ->
                 showPermissionDialog = false
             }
+        )
+    }
+
+    // Automatic App Update Dialog (if new version detected and not yet dismissed)
+    if (isUpdateAvailable && !userDismissedUpdateDialog && appUpdateInfo != null) {
+        AppUpdateDialog(
+            updateInfo = appUpdateInfo,
+            currentVersion = viewModel.currentAppVersion,
+            language = language,
+            onDismiss = { userDismissedUpdateDialog = true }
+        )
+    }
+
+    // Automatic Admin Notice Dialog (if active broadcast notice and not yet dismissed)
+    if (activeNotice != null && !userDismissedNoticeDialog) {
+        AppNoticeDialog(
+            notice = activeNotice!!,
+            language = language,
+            onDismiss = { userDismissedNoticeDialog = true }
         )
     }
 }

@@ -1,12 +1,15 @@
 package com.example.data.firebase
 
 import android.util.Log
+import com.example.data.model.AppNotice
+import com.example.data.model.AppUpdateInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
@@ -265,6 +268,137 @@ class FirebaseRealtimeManager {
         } catch (e: Exception) {
             Log.e(TAG, "Firebase restore failed", e)
             FirebaseOperationResult(false, "Firebase থেকে রিস্টোর ব্যর্থ: ${e.localizedMessage ?: "সংযোগ সমস্যা"}")
+        }
+    }
+
+    /**
+     * Publish App Update info to Firebase
+     */
+    suspend fun publishAppUpdate(updateInfo: AppUpdateInfo): FirebaseOperationResult = withContext(Dispatchers.IO) {
+        try {
+            val url = "$DATABASE_URL/app_update_info.json"
+            val jsonObj = JSONObject().apply {
+                put("versionName", updateInfo.versionName)
+                put("versionCode", updateInfo.versionCode)
+                put("downloadUrl", updateInfo.downloadUrl)
+                put("releaseNotes", updateInfo.releaseNotes)
+                put("isForceUpdate", updateInfo.isForceUpdate)
+                put("isUpdateActive", updateInfo.isUpdateActive)
+                put("releaseDate", updateInfo.releaseDate)
+            }
+            val body = jsonObj.toString().toRequestBody(jsonMediaType)
+            val req = Request.Builder().url(url).put(body).build()
+            val resp = client.newCall(req).execute()
+            if (resp.isSuccessful) {
+                FirebaseOperationResult(true, "অ্যাপ আপডেট সফলভাবে ক্লাউডে প্রকাশিত হয়েছে!")
+            } else {
+                FirebaseOperationResult(false, "আপডেট পাবলিশ ব্যর্থ: কোড ${resp.code}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Publish app update failed", e)
+            FirebaseOperationResult(false, "আপডেট পাবলিশ ত্রুটি: ${e.localizedMessage}")
+        }
+    }
+
+    /**
+     * Fetch App Update info from Firebase
+     */
+    suspend fun fetchAppUpdate(): AppUpdateInfo? = withContext(Dispatchers.IO) {
+        try {
+            val url = "$DATABASE_URL/app_update_info.json"
+            val req = Request.Builder().url(url).get().build()
+            val resp = client.newCall(req).execute()
+            val body = resp.body?.string()
+            if (resp.isSuccessful && !body.isNullOrBlank() && body != "null") {
+                val json = JSONObject(body)
+                AppUpdateInfo(
+                    versionName = json.optString("versionName", "2.4.0"),
+                    versionCode = json.optInt("versionCode", 24),
+                    downloadUrl = json.optString("downloadUrl", ""),
+                    releaseNotes = json.optString("releaseNotes", ""),
+                    isForceUpdate = json.optBoolean("isForceUpdate", false),
+                    isUpdateActive = json.optBoolean("isUpdateActive", true),
+                    releaseDate = json.optLong("releaseDate", System.currentTimeMillis())
+                )
+            } else null
+        } catch (e: Exception) {
+            Log.e(TAG, "Fetch app update failed", e)
+            null
+        }
+    }
+
+    /**
+     * Publish User Notice to Firebase
+     */
+    suspend fun publishAppNotice(notice: AppNotice): FirebaseOperationResult = withContext(Dispatchers.IO) {
+        try {
+            val url = "$DATABASE_URL/app_notices/${notice.id}.json"
+            val activeUrl = "$DATABASE_URL/active_notice.json"
+            val jsonObj = JSONObject().apply {
+                put("id", notice.id)
+                put("title", notice.title)
+                put("message", notice.message)
+                put("type", notice.type)
+                put("timestamp", notice.timestamp)
+                put("isActive", notice.isActive)
+                put("actionUrl", notice.actionUrl)
+            }
+            val body = jsonObj.toString().toRequestBody(jsonMediaType)
+            val req = Request.Builder().url(url).put(body).build()
+            client.newCall(req).execute()
+
+            val reqActive = Request.Builder().url(activeUrl).put(body).build()
+            val respActive = client.newCall(reqActive).execute()
+
+            if (respActive.isSuccessful) {
+                FirebaseOperationResult(true, "ইউজার নোটিফিকেশন সফলভাবে পাঠানো হয়েছে!")
+            } else {
+                FirebaseOperationResult(false, "নোটিফিকেশন পাঠানো ব্যর্থ হয়েছে")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Publish notice failed", e)
+            FirebaseOperationResult(false, "নোটিফিকেশন ত্রুটি: ${e.localizedMessage}")
+        }
+    }
+
+    /**
+     * Fetch active notice from Firebase
+     */
+    suspend fun fetchActiveNotice(): AppNotice? = withContext(Dispatchers.IO) {
+        try {
+            val url = "$DATABASE_URL/active_notice.json"
+            val req = Request.Builder().url(url).get().build()
+            val resp = client.newCall(req).execute()
+            val body = resp.body?.string()
+            if (resp.isSuccessful && !body.isNullOrBlank() && body != "null") {
+                val json = JSONObject(body)
+                AppNotice(
+                    id = json.optString("id", ""),
+                    title = json.optString("title", ""),
+                    message = json.optString("message", ""),
+                    type = json.optString("type", "INFO"),
+                    timestamp = json.optLong("timestamp", System.currentTimeMillis()),
+                    isActive = json.optBoolean("isActive", true),
+                    actionUrl = json.optString("actionUrl", "")
+                )
+            } else null
+        } catch (e: Exception) {
+            Log.e(TAG, "Fetch active notice failed", e)
+            null
+        }
+    }
+
+    /**
+     * Delete / deactivate notice
+     */
+    suspend fun clearActiveNotice(): FirebaseOperationResult = withContext(Dispatchers.IO) {
+        try {
+            val activeUrl = "$DATABASE_URL/active_notice.json"
+            val req = Request.Builder().url(activeUrl).delete().build()
+            client.newCall(req).execute()
+            FirebaseOperationResult(true, "নোটিশ প্রত্যাহার করা হয়েছে")
+        } catch (e: Exception) {
+            FirebaseOperationResult(false, "নোটিশ মুছতে সমস্যা: ${e.localizedMessage}")
         }
     }
 }

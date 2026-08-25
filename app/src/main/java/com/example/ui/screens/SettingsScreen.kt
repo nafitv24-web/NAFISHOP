@@ -31,7 +31,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.data.model.RestoreResult
+import com.example.ui.components.AdminPanelDialog
+import com.example.ui.components.AppNoticeDialog
 import com.example.ui.components.AppPermissionDialog
+import com.example.ui.components.AppUpdateDialog
 import com.example.ui.components.PermissionHelper
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.ShopViewModel
@@ -49,9 +52,13 @@ fun SettingsScreen(
     val language by viewModel.language.collectAsState()
     val isSyncing by viewModel.isSyncing.collectAsState()
     val syncMessage by viewModel.syncMessage.collectAsState()
+    val appUpdateInfo by viewModel.appUpdateInfo.collectAsState()
+    val isUpdateAvailable by viewModel.isUpdateAvailable.collectAsState()
+    val activeNotice by viewModel.activeNotice.collectAsState()
 
-    var showFirebaseBackupConfirmDialog by remember { mutableStateOf(false) }
-    var showFirebaseRestoreConfirmDialog by remember { mutableStateOf(false) }
+    var showAdminPanelDialog by remember { mutableStateOf(false) }
+    var showAppUpdateDialog by remember { mutableStateOf(false) }
+    var showNoticeDialog by remember { mutableStateOf(false) }
     var showEditProfileDialog by remember { mutableStateOf(false) }
     var showJsonExportDialog by remember { mutableStateOf(false) }
     var showJsonImportDialog by remember { mutableStateOf(false) }
@@ -481,76 +488,6 @@ fun SettingsScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Secondary Cloud & Offline Options
-                    Text(
-                        text = if (language == "bn") "বিকল্প ক্লাউড ডাটাবেজ (Firebase RTDB):" else "Alternative Cloud (Firebase RTDB):",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    // Firebase Realtime Database Live Cloud Row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = { showFirebaseBackupConfirmDialog = true },
-                            modifier = Modifier.weight(1f),
-                            enabled = !isSyncing,
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = if (language == "bn") "Firebase ব্যাকআপ" else "Firebase Backup",
-                                style = MaterialTheme.typography.labelMedium
-                            )
-                        }
-
-                        OutlinedButton(
-                            onClick = { showFirebaseRestoreConfirmDialog = true },
-                            modifier = Modifier.weight(1f),
-                            enabled = !isSyncing,
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = if (language == "bn") "Firebase রিস্টোর" else "Firebase Restore",
-                                style = MaterialTheme.typography.labelMedium
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.Info, contentDescription = null, tint = StockBlue, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (language == "bn")
-                                    "প্রথমে 'ড্রাইভে রপ্তানি করুন' চেপে ব্যাকআপ রাখুন। এরপর যেকোনো সময় 'ড্রাইভ থেকে আমদানি' চেপে সহজে রিস্টোর করতে পারবেন।"
-                                else
-                                    "First tap 'Export to Drive' to create a backup. Later, tap 'Import from Drive' to restore anytime.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
                     if (isSyncing) {
                         Spacer(modifier = Modifier.height(10.dp))
                         Row(
@@ -568,6 +505,144 @@ fun SettingsScreen(
                                 text = syncMessage ?: (if (language == "bn") "গুগল ড্রাইভ সিঙ্ক হচ্ছে..." else "Syncing with Google Drive..."),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = EmeraldPrimary
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Admin Panel & App Updates Card
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = CardDefaults.outlinedCardBorder()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(EmeraldPrimary.copy(alpha = 0.15f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.AdminPanelSettings,
+                                    contentDescription = null,
+                                    tint = EmeraldPrimary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = if (language == "bn") "এডমিন প্যানেল" else "Admin Panel",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = if (language == "bn") "অ্যাপ আপডেট ও ইউজার নোটিফিকেশন" else "App Updates & User Broadcasts",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isUpdateAvailable) Color(0xFFFEF3C7) else Color(0xFFDCFCE7)
+                        ) {
+                            Text(
+                                text = "v${viewModel.currentAppVersion}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isUpdateAvailable) DueOrange else ProfitGreen,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    if (activeNotice != null) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showNoticeDialog = true }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Campaign, contentDescription = null, tint = EmeraldPrimary, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "${if (language == "bn") "সর্বশেষ নোটিশ: " else "Notice: "}${activeNotice?.title}",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1
+                                    )
+                                }
+                                Text(
+                                    text = if (language == "bn") "দেখুন" else "View",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = EmeraldPrimary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        // Admin Panel Button
+                        Button(
+                            onClick = { showAdminPanelDialog = true },
+                            modifier = Modifier.weight(1.1f),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
+                        ) {
+                            Icon(Icons.Default.Security, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (language == "bn") "এডমিন প্যানেল" else "Admin Panel",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        // Check / Download Update Button
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.checkForUpdates(manualCheck = true) { hasUpdate, msg ->
+                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                    if (hasUpdate) {
+                                        showAppUpdateDialog = true
+                                    }
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(Icons.Default.DownloadForOffline, contentDescription = null, modifier = Modifier.size(16.dp), tint = StockBlue)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (language == "bn") "আপডেট চেক" else "Check Update",
+                                style = MaterialTheme.typography.labelMedium
                             )
                         }
                     }
@@ -1075,160 +1150,30 @@ fun SettingsScreen(
         )
     }
 
-    // Firebase Realtime DB Cloud Backup Confirmation Dialog
-    if (showFirebaseBackupConfirmDialog) {
-        AlertDialog(
-            onDismissRequest = { showFirebaseBackupConfirmDialog = false },
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.CloudSync,
-                    contentDescription = null,
-                    tint = EmeraldPrimary,
-                    modifier = Modifier.size(36.dp)
-                )
-            },
-            title = {
-                Text(
-                    text = if (language == "bn") "Firebase ক্লাউড ব্যাকআপ" else "Firebase Cloud Backup",
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = if (language == "bn")
-                            "আপনার দোকানের সমস্ত পণ্যের তালিকা, বাকি খাতা, কাস্টমার এবং বিক্রয় হিসাব সরাসরি Firebase Realtime Database ক্লাউডে (nafishop-54e99) সংরক্ষিত হবে।"
-                        else
-                            "All products, customers, dues and sales records will be saved to Firebase Realtime Database cloud (nafishop-54e99).",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        border = CardDefaults.outlinedCardBorder()
-                    ) {
-                        Column(modifier = Modifier.padding(10.dp)) {
-                            Text(
-                                text = "Firebase Project: nafishop-54e99",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "${if (language == "bn") "দোকান: " else "Shop: "}${shopInfo.shopName}",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "${if (language == "bn") "অ্যাকাউন্ট: " else "Account: "}${shopInfo.userEmail.ifBlank { viewModel.getAccountIdentifier() }}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = EmeraldPrimary
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showFirebaseBackupConfirmDialog = false
-                        viewModel.backupToFirebaseRealtimeCloud { success, msg ->
-                            if (success) {
-                                Toast.makeText(
-                                    context,
-                                    if (language == "bn") "✅ Firebase ক্লাউডে ব্যাকআপ সম্পন্ন হয়েছে! ($msg)" else "✅ Firebase Backup successful! ($msg)",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                            } else {
-                                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
-                            }
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
-                ) {
-                    Text(if (language == "bn") "ক্লাউডে সেভ করুন" else "Save to Cloud")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showFirebaseBackupConfirmDialog = false }) {
-                    Text(if (language == "bn") "বাতিল" else "Cancel")
-                }
-            }
+    // Admin Panel Dialog
+    if (showAdminPanelDialog) {
+        AdminPanelDialog(
+            viewModel = viewModel,
+            onDismiss = { showAdminPanelDialog = false }
         )
     }
 
-    // Firebase Realtime DB Cloud Restore Confirmation Dialog
-    if (showFirebaseRestoreConfirmDialog) {
-        AlertDialog(
-            onDismissRequest = { showFirebaseRestoreConfirmDialog = false },
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.CloudDownload,
-                    contentDescription = null,
-                    tint = StockBlue,
-                    modifier = Modifier.size(36.dp)
-                )
-            },
-            title = {
-                Text(
-                    text = if (language == "bn") "Firebase থেকে রিস্টোর" else "Restore from Firebase",
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = if (language == "bn")
-                            "Firebase Realtime ক্লাউড ডাটাবেজ (nafishop-54e99) থেকে পূর্ববর্তী ব্যাকআপ ডাউনলোড করে আপনার দোকানের সব তথ্য রিস্টোর করা হবে।"
-                        else
-                            "Restore all shop data from Firebase Realtime Database cloud (nafishop-54e99).",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+    // App Update Available Dialog
+    if (showAppUpdateDialog) {
+        AppUpdateDialog(
+            updateInfo = appUpdateInfo,
+            currentVersion = viewModel.currentAppVersion,
+            language = language,
+            onDismiss = { showAppUpdateDialog = false }
+        )
+    }
 
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        border = CardDefaults.outlinedCardBorder()
-                    ) {
-                        Column(modifier = Modifier.padding(10.dp)) {
-                            Text(
-                                text = "Firebase Project: nafishop-54e99",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "${if (language == "bn") "দোকান: " else "Shop: "}${shopInfo.shopName}",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "${if (language == "bn") "টার্গেট অ্যাকাউন্ট: " else "Target: "}${shopInfo.userEmail.ifBlank { viewModel.getAccountIdentifier() }}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = StockBlue
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showFirebaseRestoreConfirmDialog = false
-                        viewModel.restoreFromFirebaseRealtimeCloud { res ->
-                            restoreResultData = res
-                            showRestoreResultDialog = true
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = StockBlue)
-                ) {
-                    Text(if (language == "bn") "রিস্টোর শুরু করুন" else "Start Restore")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showFirebaseRestoreConfirmDialog = false }) {
-                    Text(if (language == "bn") "বাতিল" else "Cancel")
-                }
-            }
+    // User Notice Dialog
+    if (showNoticeDialog && activeNotice != null) {
+        AppNoticeDialog(
+            notice = activeNotice!!,
+            language = language,
+            onDismiss = { showNoticeDialog = false }
         )
     }
 
