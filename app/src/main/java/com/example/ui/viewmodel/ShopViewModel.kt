@@ -149,6 +149,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                 // 1. Save locally in isolated cloud store for this user
                 prefs.edit()
                     .putString("cloud_backup_json_${accountId}", jsonStr)
+                    .putString("cloud_backup_json_latest", jsonStr)
                     .putLong("cloud_backup_timestamp_${accountId}", System.currentTimeMillis())
                     .apply()
 
@@ -260,6 +261,11 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         checkForUpdates(manualCheck = false)
         viewModelScope.launch {
             repository.deduplicateAndMergeCustomers()
+            // Auto restore if logged in
+            val savedEmail = prefs.getString("user_email", "") ?: ""
+            if (prefs.getBoolean("is_logged_in", false) && savedEmail.isNotBlank()) {
+                autoRestoreOnLogin(savedEmail)
+            }
         }
     }
 
@@ -404,6 +410,62 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         triggerInstantDriveBackup("ইমেইল লিঙ্ক")
     }
 
+    /**
+     * Automatically restore user's previous transaction history, products, dues, expenses,
+     * cash logs and shop info immediately upon login from Google Drive / Cloud storage.
+     */
+    fun autoRestoreOnLogin(accountId: String, onRestored: ((Boolean) -> Unit)? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                _autoBackupStatus.value = "⏳ ড্রাইভ থেকে পূর্বের খাতা লোড হচ্ছে..."
+                val cleanAccountId = accountId.trim().lowercase().ifBlank { getAccountIdentifier() }
+
+                // 1. Try local isolated cloud store for this user first (instant zero-delay restore)
+                var backupJson = prefs.getString("cloud_backup_json_${cleanAccountId}", null)
+
+                // 2. Query Firebase Realtime DB Cloud under this account ID
+                if (backupJson.isNullOrBlank()) {
+                    val cloudRes = firebaseRealtime.restoreShopData(cleanAccountId)
+                    if (cloudRes.success && !cloudRes.data.isNullOrBlank()) {
+                        backupJson = cloudRes.data
+                    }
+                }
+
+                // 3. Fallback to latest local cache if available
+                if (backupJson.isNullOrBlank()) {
+                    val latestBackup = prefs.getString("cloud_backup_json_latest", null)
+                    if (!latestBackup.isNullOrBlank()) {
+                        backupJson = latestBackup
+                    }
+                }
+
+                if (!backupJson.isNullOrBlank()) {
+                    val result = repository.importDataFromJson(backupJson, cleanSlate = true)
+                    if (result.success && result.restoredShopInfo != null) {
+                        val s = result.restoredShopInfo
+                        updateShopInfo(
+                            name = s.shopName,
+                            owner = s.ownerName,
+                            phone = s.phone,
+                            address = s.address,
+                            currency = s.currency,
+                            email = if (_shopInfo.value.userEmail.isNotBlank()) _shopInfo.value.userEmail else s.userEmail,
+                            mainBalance = s.mainBalance
+                        )
+                        _autoBackupStatus.value = "🟢 ড্রাইভ থেকে পূর্বের সকল লেনদেন রিস্টোর হয়েছে"
+                        onRestored?.invoke(true)
+                        return@launch
+                    }
+                }
+                _autoBackupStatus.value = "🟢 ড্রাইভে অটো ব্যাকআপ সক্রিয়"
+                onRestored?.invoke(false)
+            } catch (e: Exception) {
+                _autoBackupStatus.value = "🟢 ড্রাইভে ব্যাকআপ সক্রিয়"
+                onRestored?.invoke(false)
+            }
+        }
+    }
+
     fun firebaseSignUp(
         email: String,
         pass: String,
@@ -437,6 +499,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
 
                 // Also create entry in Firebase Realtime DB
                 firebaseRealtime.registerAccount(email, pass, sName, oName)
+                autoRestoreOnLogin(email)
                 onResult(authResult)
                 return@launch
             }
@@ -460,6 +523,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                     .putBoolean("is_logged_in", true)
                     .apply()
 
+                autoRestoreOnLogin(email)
                 onResult(AuthResult.Success(null, "অ্যাকাউন্ট সফলভাবে তৈরি হয়েছে"))
             } else {
                 onResult(AuthResult.Error(rtResult.message))
@@ -489,6 +553,8 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                     .putBoolean("is_logged_in", true)
                     .apply()
 
+                // Auto-restore previous transactions and shop database on login
+                autoRestoreOnLogin(email)
                 onResult(authResult)
                 return@launch
             }
@@ -526,6 +592,8 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                     .putBoolean("is_logged_in", true)
                     .apply()
 
+                // Auto-restore previous transactions and shop database on login
+                autoRestoreOnLogin(email)
                 onResult(AuthResult.Success(null, "সফলভাবে লগইন হয়েছে"))
             } else {
                 // If both failed, return readable message
@@ -645,6 +713,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             .putBoolean("is_google_linked", true)
             .putBoolean("is_logged_in", true)
             .apply()
+        autoRestoreOnLogin(email)
     }
 
     fun loginAsGuest() {
@@ -652,6 +721,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         prefs.edit()
             .putBoolean("is_logged_in", true)
             .apply()
+        autoRestoreOnLogin(getAccountIdentifier())
     }
 
     fun logoutUser() {

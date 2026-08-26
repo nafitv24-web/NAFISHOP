@@ -482,7 +482,7 @@ fun LoginScreen(
                                     isLoading = false
                                     when (result) {
                                         is AuthResult.Success -> {
-                                            successMessage = if (isBn) "লগইন সফল হয়েছে!" else "Signed in successfully!"
+                                            successMessage = if (isBn) "লগইন সফল! ড্রাইভ থেকে পূর্বের সকল লেনদেন ও খাতা লোড হচ্ছে..." else "Signed in! Restoring previous transactions from Drive..."
                                             Toast.makeText(context, successMessage, Toast.LENGTH_SHORT).show()
                                             onLoginSuccess()
                                         }
