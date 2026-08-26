@@ -187,10 +187,20 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     private val _noticeHistory = MutableStateFlow<List<AppNotice>>(emptyList())
     val noticeHistory: StateFlow<List<AppNotice>> = _noticeHistory.asStateFlow()
 
-    private val _adminPin = MutableStateFlow(prefs.getString("admin_pin", "1234") ?: "1234")
-    val adminPin: StateFlow<String> = _adminPin.asStateFlow()
+    private val _adminPin: MutableStateFlow<String>
+    val adminPin: StateFlow<String>
 
     init {
+        val savedPin = prefs.getString("admin_pin", null)
+        val initialPin = if (savedPin == null || savedPin == "1234") {
+            prefs.edit().putString("admin_pin", "40541273").apply()
+            "40541273"
+        } else {
+            savedPin
+        }
+        _adminPin = MutableStateFlow(initialPin)
+        adminPin = _adminPin.asStateFlow()
+
         loadSavedNotices()
         checkForUpdates(manualCheck = false)
         viewModelScope.launch {

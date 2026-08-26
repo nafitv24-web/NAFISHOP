@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -53,7 +54,7 @@ fun AdminPanelDialog(
     var pinInput by remember { mutableStateOf("") }
     var pinError by remember { mutableStateOf(false) }
 
-    // Admin Tabs: 0: Publish App Update, 1: Broadcast Notice, 2: Security & PIN
+    // Admin Tabs: 0: Breaking News / Notice, 1: Publish App Update, 2: Security & Password
     var selectedTab by remember { mutableStateOf(0) }
 
     Dialog(
@@ -103,7 +104,7 @@ fun AdminPanelDialog(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = if (language == "bn") "অ্যাপ আপডেট ও ইউজার নোটিফিকেশন" else "App Updates & User Notifications",
+                                    text = if (language == "bn") "নিউজ নোটিশ, আপডেট ও নিরাপত্তা" else "News Notices, Updates & Security",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.outline
                                 )
@@ -117,8 +118,8 @@ fun AdminPanelDialog(
                 }
 
                 if (!isAuthenticated) {
-                    // Admin PIN Lock Screen
-                    AdminPinLockView(
+                    // Admin Password Lock Screen (Masked, No plain text hints)
+                    AdminPasswordLockView(
                         pinInput = pinInput,
                         pinError = pinError,
                         language = language,
@@ -127,7 +128,7 @@ fun AdminPanelDialog(
                             pinError = false
                         },
                         onUnlock = {
-                            if (viewModel.verifyAdminPin(pinInput) || pinInput == "1234") {
+                            if (viewModel.verifyAdminPin(pinInput) || pinInput.trim() == "40541273") {
                                 isAuthenticated = true
                                 pinError = false
                             } else {
@@ -147,33 +148,33 @@ fun AdminPanelDialog(
                             onClick = { selectedTab = 0 },
                             text = {
                                 Text(
-                                    text = if (language == "bn") "অ্যাপ আপডেট" else "App Update",
+                                    text = if (language == "bn") "নিউজ নোটিশ" else "News & Notice",
                                     fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal,
-                                    fontSize = 13.sp
+                                    fontSize = 12.sp
                                 )
                             },
-                            icon = { Icon(Icons.Default.SystemUpdate, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                            icon = { Icon(Icons.Default.Campaign, contentDescription = null, modifier = Modifier.size(18.dp)) }
                         )
                         Tab(
                             selected = selectedTab == 1,
                             onClick = { selectedTab = 1 },
                             text = {
                                 Text(
-                                    text = if (language == "bn") "ইউজার নোটিশ" else "Notices",
+                                    text = if (language == "bn") "অ্যাপ আপডেট" else "App Update",
                                     fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal,
-                                    fontSize = 13.sp
+                                    fontSize = 12.sp
                                 )
                             },
-                            icon = { Icon(Icons.Default.Campaign, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                            icon = { Icon(Icons.Default.SystemUpdate, contentDescription = null, modifier = Modifier.size(18.dp)) }
                         )
                         Tab(
                             selected = selectedTab == 2,
                             onClick = { selectedTab = 2 },
                             text = {
                                 Text(
-                                    text = if (language == "bn") "পিন পরিবর্তন" else "Security",
+                                    text = if (language == "bn") "পাসওয়ার্ড সেটিং" else "Security",
                                     fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Normal,
-                                    fontSize = 13.sp
+                                    fontSize = 12.sp
                                 )
                             },
                             icon = { Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(18.dp)) }
@@ -186,7 +187,21 @@ fun AdminPanelDialog(
                             .padding(16.dp)
                     ) {
                         when (selectedTab) {
-                            0 -> AdminPublishUpdateTab(
+                            0 -> AdminBroadcastNoticeTab(
+                                noticeHistory = noticeHistory,
+                                language = language,
+                                onSendNotice = { notice ->
+                                    viewModel.publishNotice(notice) { success, msg ->
+                                        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                    }
+                                },
+                                onDeleteNotice = { id ->
+                                    viewModel.deleteNotice(id) {
+                                        Toast.makeText(context, if (language == "bn") "নোটিশ মুছে ফেলা হয়েছে" else "Notice deleted", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            )
+                            1 -> AdminPublishUpdateTab(
                                 currentUpdate = currentUpdate,
                                 currentAppVersion = viewModel.currentAppVersion,
                                 currentVersionCode = viewModel.currentVersionCode,
@@ -197,28 +212,14 @@ fun AdminPanelDialog(
                                     }
                                 }
                             )
-                            1 -> AdminBroadcastNoticeTab(
-                                noticeHistory = noticeHistory,
-                                language = language,
-                                onSendNotice = { notice ->
-                                    viewModel.publishNotice(notice) { success, msg ->
-                                        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
-                                    }
-                                },
-                                onDeleteNotice = { id ->
-                                    viewModel.deleteNotice(id) {
-                                        Toast.makeText(context, if (language == "bn") "নোটিশ ডিলিট করা হয়েছে" else "Notice deleted", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            )
                             2 -> AdminSecurityTab(
                                 language = language,
                                 onChangePin = { oldPin, newPin ->
                                     val success = viewModel.changeAdminPin(oldPin, newPin)
                                     if (success) {
-                                        Toast.makeText(context, if (language == "bn") "এডমিন পিন সফলভাবে পরিবর্তন হয়েছে!" else "PIN changed successfully!", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, if (language == "bn") "এডমিন পাসওয়ার্ড সফলভাবে পরিবর্তন হয়েছে!" else "Password changed successfully!", Toast.LENGTH_SHORT).show()
                                     } else {
-                                        Toast.makeText(context, if (language == "bn") "পুরাতন পিন ভুল!" else "Incorrect old PIN!", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, if (language == "bn") "বর্তমান পাসওয়ার্ড ভুল!" else "Incorrect current password!", Toast.LENGTH_SHORT).show()
                                     }
                                     success
                                 }
@@ -232,13 +233,15 @@ fun AdminPanelDialog(
 }
 
 @Composable
-private fun AdminPinLockView(
+private fun AdminPasswordLockView(
     pinInput: String,
     pinError: Boolean,
     language: String,
     onPinChange: (String) -> Unit,
     onUnlock: () -> Unit
 ) {
+    var passwordVisible by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -264,13 +267,13 @@ private fun AdminPinLockView(
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = if (language == "bn") "এডমিন পাসওয়ার্ড দিন" else "Enter Admin PIN",
+            text = if (language == "bn") "এডমিন পাসওয়ার্ড দিন" else "Enter Admin Password",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold
         )
 
         Text(
-            text = if (language == "bn") "ডিফল্ট পিন: 1234 (ভিতর থেকে পরিবর্তন করতে পারবেন)" else "Default PIN: 1234 (Can be changed inside)",
+            text = if (language == "bn") "নিরাপত্তার স্বার্থে শুধুমাত্র অ্যাডমিন অ্যাক্সেস করতে পারবেন" else "Secure Admin Panel Access",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.outline
         )
@@ -280,21 +283,30 @@ private fun AdminPinLockView(
         OutlinedTextField(
             value = pinInput,
             onValueChange = onPinChange,
-            label = { Text(if (language == "bn") "৪ সংখ্যার পিন" else "4-digit PIN") },
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            label = { Text(if (language == "bn") "এডমিন পাসওয়ার্ড" else "Admin Password") },
+            placeholder = { Text("••••••••") },
+            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            trailingIcon = {
+                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                    Icon(
+                        imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                        contentDescription = if (passwordVisible) "Hide password" else "Show password"
+                    )
+                }
+            },
             isError = pinError,
             supportingText = {
                 if (pinError) {
                     Text(
-                        text = if (language == "bn") "ভুল পিন! পুনরায় চেষ্টা করুন (ডিফল্ট: 1234)" else "Invalid PIN! Default is 1234",
+                        text = if (language == "bn") "ভুল পাসওয়ার্ড! সঠিক পাসওয়ার্ড দিয়ে পুনরায় চেষ্টা করুন" else "Incorrect password! Please try again",
                         color = MaterialTheme.colorScheme.error
                     )
                 }
             },
             singleLine = true,
             shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.fillMaxWidth(0.75f)
+            modifier = Modifier.fillMaxWidth(0.85f)
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -302,7 +314,7 @@ private fun AdminPinLockView(
         Button(
             onClick = onUnlock,
             modifier = Modifier
-                .fillMaxWidth(0.75f)
+                .fillMaxWidth(0.85f)
                 .height(48.dp),
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
@@ -310,7 +322,7 @@ private fun AdminPinLockView(
             Icon(Icons.Default.VpnKey, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = if (language == "bn") "আনলক করুন" else "Unlock Admin",
+                text = if (language == "bn") "প্রবেশ করুন" else "Unlock Panel",
                 fontWeight = FontWeight.Bold
             )
         }
@@ -339,11 +351,9 @@ private fun AdminPublishUpdateTab(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Current Installed vs Cloud Update Status Card
         Card(
             shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
-            border = CardDefaults.outlinedCardBorder()
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
         ) {
             Row(
                 modifier = Modifier
@@ -560,18 +570,37 @@ private fun AdminBroadcastNoticeTab(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(
-            text = if (language == "bn") "ইউজারদের জরুরী নোটিফিকেশন পাঠান" else "Broadcast Notice to Users",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-        )
+        Card(
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF2F2))
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Campaign, contentDescription = null, tint = LossRed, modifier = Modifier.size(24.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text(
+                        text = if (language == "bn") "🔴 লাইভ নিউজ ও নোটিশ প্রকাশ করুন" else "🔴 Publish Live Breaking News & Notice",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = LossRed
+                    )
+                    Text(
+                        text = if (language == "bn") "এখানে লিখলে সবার উপরের হেডলাইনে নিউজ স্ক্রোলিং ব্যানারের মতো প্রদর্শিত হবে।" else "This notice will be displayed as a live news ticker at the top of the app.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF991B1B)
+                    )
+                }
+            }
+        }
 
         OutlinedTextField(
             value = title,
             onValueChange = { title = it },
-            label = { Text(if (language == "bn") "নোটিশের শিরোনাম *" else "Notice Title *") },
-            placeholder = { Text(if (language == "bn") "যেমন: জরুরী রক্ষণাবেক্ষণ বিজ্ঞপ্তি" else "e.g. Server Maintenance Notice") },
+            label = { Text(if (language == "bn") "নিউজ / নোটিশের শিরোনাম *" else "News / Notice Headline *") },
+            placeholder = { Text(if (language == "bn") "যেমন: বিশেষ ছাড় চলছে / জরুরী নোটিশ" else "e.g. Special Offer / Urgent Notice") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
@@ -579,8 +608,8 @@ private fun AdminBroadcastNoticeTab(
         OutlinedTextField(
             value = message,
             onValueChange = { message = it },
-            label = { Text(if (language == "bn") "বিস্তারিত বার্তা *" else "Notice Message *") },
-            placeholder = { Text(if (language == "bn") "সম্মানিত ব্যবহারকারীগণ, আজ রাত ১২টায় অ্যাপ আপডেট হবে..." else "Dear users, we are updating the app tonight...") },
+            label = { Text(if (language == "bn") "নিউজ / বিস্তারিত বার্তা *" else "News Details / Message *") },
+            placeholder = { Text(if (language == "bn") "সম্মানিত গ্রাহক ও ইউজারগণ, আমাদের সকল পণ্যে আকর্ষণীয় মূল্যছাড় চলছে..." else "Dear users, special discounts are live...") },
             minLines = 3,
             maxLines = 5,
             modifier = Modifier.fillMaxWidth()
@@ -615,7 +644,7 @@ private fun AdminBroadcastNoticeTab(
         OutlinedTextField(
             value = actionUrl,
             onValueChange = { actionUrl = it },
-            label = { Text(if (language == "bn") "বাটন লিঙ্ক / URL (ঐচ্ছিক)" else "Action URL (Optional)") },
+            label = { Text(if (language == "bn") "বাটন লিঙ্ক / URL (ঐচ্ছিক)" else "Action Link / URL (Optional)") },
             placeholder = { Text("https://...") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
@@ -645,12 +674,12 @@ private fun AdminBroadcastNoticeTab(
                 .fillMaxWidth()
                 .height(48.dp),
             shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
+            colors = ButtonDefaults.buttonColors(containerColor = LossRed)
         ) {
             Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = if (language == "bn") "সকল ইউজারের কাছে নোটিফিকেশন পাঠান" else "Send Notice to All Users",
+                text = if (language == "bn") "সবার উপরে নিউজ নোটিশ হিসেবে প্রকাশ করুন" else "Publish as Top News Notice",
                 fontWeight = FontWeight.Bold
             )
         }
@@ -742,6 +771,10 @@ private fun AdminSecurityTab(
     var oldPin by remember { mutableStateOf("") }
     var newPin by remember { mutableStateOf("") }
     var confirmPin by remember { mutableStateOf("") }
+    var oldVisible by remember { mutableStateOf(false) }
+    var newVisible by remember { mutableStateOf(false) }
+    var confirmVisible by remember { mutableStateOf(false) }
+
     val context = LocalContext.current
 
     Column(
@@ -751,14 +784,14 @@ private fun AdminSecurityTab(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Text(
-            text = if (language == "bn") "এডমিন পিন নম্বর পরিবর্তন" else "Change Admin PIN",
+            text = if (language == "bn") "এডমিন পাসওয়ার্ড পরিবর্তন" else "Change Admin Password",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary
         )
 
         Text(
-            text = if (language == "bn") "শুধুমাত্র দোকান মালিক বা অ্যাডমিন এই পিন দিয়ে আপডেট ও নোটিফিকেশন প্রকাশ করতে পারবেন।" else "Only the store owner/admin can publish updates using this PIN.",
+            text = if (language == "bn") "শুধুমাত্র দোকান মালিক বা অ্যাডমিন এই পাসওয়ার্ড দিয়ে আপডেট ও নোটিশ প্রকাশ করতে পারবেন।" else "Only store owner or authorized admin can publish updates and notices using this password.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.outline
         )
@@ -766,9 +799,15 @@ private fun AdminSecurityTab(
         OutlinedTextField(
             value = oldPin,
             onValueChange = { oldPin = it },
-            label = { Text(if (language == "bn") "বর্তমান পিন (ডিফল্ট: 1234)" else "Current PIN (Default: 1234)") },
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            label = { Text(if (language == "bn") "বর্তমান পাসওয়ার্ড" else "Current Password") },
+            placeholder = { Text("••••••••") },
+            visualTransformation = if (oldVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            trailingIcon = {
+                IconButton(onClick = { oldVisible = !oldVisible }) {
+                    Icon(imageVector = if (oldVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, contentDescription = null)
+                }
+            },
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
@@ -776,9 +815,15 @@ private fun AdminSecurityTab(
         OutlinedTextField(
             value = newPin,
             onValueChange = { newPin = it },
-            label = { Text(if (language == "bn") "নতুন ৪ সংখ্যার পিন" else "New 4-digit PIN") },
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            label = { Text(if (language == "bn") "নতুন পাসওয়ার্ড" else "New Password") },
+            placeholder = { Text("••••••••") },
+            visualTransformation = if (newVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            trailingIcon = {
+                IconButton(onClick = { newVisible = !newVisible }) {
+                    Icon(imageVector = if (newVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, contentDescription = null)
+                }
+            },
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
@@ -786,9 +831,15 @@ private fun AdminSecurityTab(
         OutlinedTextField(
             value = confirmPin,
             onValueChange = { confirmPin = it },
-            label = { Text(if (language == "bn") "নতুন পিন নিশ্চিত করুন" else "Confirm New PIN") },
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            label = { Text(if (language == "bn") "নতুন পাসওয়ার্ড নিশ্চিত করুন" else "Confirm New Password") },
+            placeholder = { Text("••••••••") },
+            visualTransformation = if (confirmVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            trailingIcon = {
+                IconButton(onClick = { confirmVisible = !confirmVisible }) {
+                    Icon(imageVector = if (confirmVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, contentDescription = null)
+                }
+            },
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
@@ -796,11 +847,11 @@ private fun AdminSecurityTab(
         Button(
             onClick = {
                 if (newPin.length < 4) {
-                    Toast.makeText(context, if (language == "bn") "পিন কমপক্ষে ৪ সংখ্যা হতে হবে" else "PIN must be at least 4 digits", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, if (language == "bn") "পাসওয়ার্ড কমপক্ষে ৪ সংখ্যা বা অক্ষরের হতে হবে" else "Password must be at least 4 characters", Toast.LENGTH_SHORT).show()
                     return@Button
                 }
                 if (newPin != confirmPin) {
-                    Toast.makeText(context, if (language == "bn") "নতুন পিন দুটি মিলেনি!" else "PINs do not match!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, if (language == "bn") "নতুন পাসওয়ার্ড দুটি মেলেনি!" else "Passwords do not match!", Toast.LENGTH_SHORT).show()
                     return@Button
                 }
                 val res = onChangePin(oldPin, newPin)
@@ -818,7 +869,7 @@ private fun AdminSecurityTab(
         ) {
             Icon(Icons.Default.Check, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
-            Text(if (language == "bn") "পিন সেভ করুন" else "Save PIN", fontWeight = FontWeight.Bold)
+            Text(if (language == "bn") "পাসওয়ার্ড সেভ করুন" else "Save Password", fontWeight = FontWeight.Bold)
         }
     }
 }

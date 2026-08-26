@@ -16,10 +16,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.Product
+import com.example.ui.components.AdminPanelDialog
 import com.example.ui.components.AppNoticeDialog
 import com.example.ui.components.AppPermissionDialog
 import com.example.ui.components.AppUpdateDialog
 import com.example.ui.components.InvoiceDialog
+import com.example.ui.components.NewsNoticeTickerBar
 import com.example.ui.components.PermissionHelper
 import androidx.compose.ui.platform.LocalContext
 import com.example.ui.theme.*
@@ -70,6 +72,8 @@ fun MainAppScaffold(
 
     var userDismissedUpdateDialog by remember { mutableStateOf(false) }
     var userDismissedNoticeDialog by remember { mutableStateOf(false) }
+    var showNoticeDetailsDialog by remember { mutableStateOf<com.example.data.model.AppNotice?>(null) }
+    var showAdminPanelFromTop by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     var showPermissionDialog by remember {
@@ -78,44 +82,81 @@ fun MainAppScaffold(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = if (language == "bn") currentScreen.bnTitle else currentScreen.enTitle,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = shopInfo.shopName,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                actions = {
-                    if (currentScreen != ShopScreen.POS) {
-                        FilledTonalButton(
-                            onClick = { currentScreen = ShopScreen.POS },
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.filledTonalButtonColors(
-                                containerColor = EmeraldPrimary.copy(alpha = 0.15f),
-                                contentColor = EmeraldPrimary
+            Column {
+                TopAppBar(
+                    title = {
+                        Column {
+                            Text(
+                                text = if (language == "bn") currentScreen.bnTitle else currentScreen.enTitle,
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
                             )
-                        ) {
-                            Icon(Icons.Default.AddShoppingCart, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(if (language == "bn") "বিক্রি" else "Sale", fontWeight = FontWeight.Bold)
+                            Text(
+                                text = shopInfo.shopName,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
-                        Spacer(modifier = Modifier.width(8.dp))
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                    },
+                    actions = {
+                        // News / Notice action icon
+                        IconButton(onClick = {
+                            if (activeNotice != null) {
+                                showNoticeDetailsDialog = activeNotice
+                            } else {
+                                showAdminPanelFromTop = true
+                            }
+                        }) {
+                            BadgedBox(
+                                badge = {
+                                    if (activeNotice != null && activeNotice!!.isActive) {
+                                        Badge(containerColor = LossRed)
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    Icons.Default.Campaign,
+                                    contentDescription = "News & Notice",
+                                    tint = if (activeNotice != null && activeNotice!!.isActive) LossRed else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        if (currentScreen != ShopScreen.POS) {
+                            FilledTonalButton(
+                                onClick = { currentScreen = ShopScreen.POS },
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = EmeraldPrimary.copy(alpha = 0.15f),
+                                    contentColor = EmeraldPrimary
+                                )
+                            ) {
+                                Icon(Icons.Default.AddShoppingCart, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(if (language == "bn") "বিক্রি" else "Sale", fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface
+                    )
                 )
-            )
+
+                // Top Live Breaking News & Notice Ticker Bar
+                NewsNoticeTickerBar(
+                    activeNotice = activeNotice,
+                    language = language,
+                    onNoticeClick = { notice ->
+                        showNoticeDetailsDialog = notice
+                    },
+                    onOpenAdminPanel = {
+                        showAdminPanelFromTop = true
+                    }
+                )
+            }
         },
         bottomBar = {
             NavigationBar(
@@ -293,6 +334,23 @@ fun MainAppScaffold(
             notice = activeNotice!!,
             language = language,
             onDismiss = { userDismissedNoticeDialog = true }
+        )
+    }
+
+    // Manual Notice Detail Dialog (when user taps on the top News / Notice Bar or Action Icon)
+    if (showNoticeDetailsDialog != null) {
+        AppNoticeDialog(
+            notice = showNoticeDetailsDialog!!,
+            language = language,
+            onDismiss = { showNoticeDetailsDialog = null }
+        )
+    }
+
+    // Admin Panel Dialog opened from top bar or news banner
+    if (showAdminPanelFromTop) {
+        AdminPanelDialog(
+            viewModel = viewModel,
+            onDismiss = { showAdminPanelFromTop = false }
         )
     }
 }
