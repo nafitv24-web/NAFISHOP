@@ -993,6 +993,12 @@ fun DashboardScreen(
             },
             onDeleteLog = { log ->
                 viewModel.deleteCashLog(log)
+            },
+            onAddIncome = { amount, note, timestamp ->
+                viewModel.addCashIncome(amount, note, timestamp)
+            },
+            onAddExpense = { amount, note, timestamp ->
+                viewModel.addCashExpense(amount, note, "অন্যান্য", timestamp)
             }
         )
     }
@@ -1010,38 +1016,114 @@ fun CashInputDialog(
     var amountStr by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
 
+    val presetAmounts = if (isPositive) listOf("500", "1000", "2000", "5000") else listOf("100", "200", "500", "1000")
+    val presetNotes = if (isPositive) listOf("ক্যাশ বিক্রি", "বাকি আদায়", "ব্যক্তিগত জমা", "মহাজন ফেরত") else listOf("দোকান ভাড়া", "বিদ্যুৎ বিল", "চা-নাস্তা", "ব্যক্তিগত খরচ")
+
     Dialog(onDismissRequest = onDismiss) {
         Card(
-            shape = RoundedCornerShape(18.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isPositive) ProfitGreen else LossRed
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isPositive) ProfitGreen else LossRed
+                    )
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(14.dp))
 
                 OutlinedTextField(
                     value = amountStr,
                     onValueChange = { amountStr = it },
-                    label = { Text(if (language == "bn") "টাকার পরিমাণ ($currency)" else "Amount") },
+                    label = { Text(if (language == "bn") "টাকার পরিমাণ ($currency) *" else "Amount ($currency) *") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    presetAmounts.forEach { preset ->
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    val cur = amountStr.toDoubleOrNull() ?: 0.0
+                                    val add = preset.toDoubleOrNull() ?: 0.0
+                                    amountStr = (cur + add).toInt().toString()
+                                }
+                        ) {
+                            Text(
+                                text = "+$currency$preset",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (isPositive) ProfitGreen else LossRed,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                modifier = Modifier.padding(vertical = 5.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 OutlinedTextField(
                     value = note,
                     onValueChange = { note = it },
-                    label = { Text(if (language == "bn") "কারণ / বিবরণ (যেমন: ব্যক্তিগত জমা, মহাজন পরিশোধ)" else "Note / Reason") },
+                    label = { Text(if (language == "bn") "কারণ / বিবরণ *" else "Note / Reason *") },
+                    placeholder = { Text(if (isPositive) "যেমন: নগদ বিক্রি, ব্যক্তিগত জমা" else "যেমন: Halima Bill, দোকান ভাড়া") },
                     singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    presetNotes.take(3).forEach { noteSuggestion ->
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { note = noteSuggestion }
+                        ) {
+                            Text(
+                                text = noteSuggestion,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                maxLines = 1,
+                                fontSize = 10.sp,
+                                modifier = Modifier.padding(vertical = 4.dp, horizontal = 2.dp)
+                            )
+                        }
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(18.dp))
 
@@ -1063,9 +1145,13 @@ fun CashInputDialog(
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (isPositive) ProfitGreen else LossRed
                         ),
+                        shape = RoundedCornerShape(10.dp),
                         enabled = (amountStr.toDoubleOrNull() ?: 0.0) > 0
                     ) {
-                        Text(if (language == "bn") "নিশ্চিত করুন" else "Confirm")
+                        Text(
+                            text = if (isPositive) (if (language == "bn") "ক্যাশ জমা করুন" else "Deposit") else (if (language == "bn") "ক্যাশ উত্তোলন করুন" else "Withdraw"),
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
@@ -1528,128 +1614,533 @@ fun CashHistoryDialog(
     language: String,
     onDismiss: () -> Unit,
     onEditLog: (CashLog, Double, String) -> Unit,
-    onDeleteLog: (CashLog) -> Unit
+    onDeleteLog: (CashLog) -> Unit,
+    onAddIncome: ((Double, String, Long) -> Unit)? = null,
+    onAddExpense: ((Double, String, Long) -> Unit)? = null
 ) {
+    // Filter states: "ALL", "DAILY", "WEEKLY", "MONTHLY", "YEARLY"
+    var selectedPeriod by remember { mutableStateOf("ALL") }
+    var searchQuery by remember { mutableStateOf("") }
+    var isSearchActive by remember { mutableStateOf(false) }
+
+    var showIncomeDialog by remember { mutableStateOf(false) }
+    var showExpenseDialog by remember { mutableStateOf(false) }
     var editingLog by remember { mutableStateOf<CashLog?>(null) }
-    var editAmountStr by remember { mutableStateOf("") }
-    var editNote by remember { mutableStateOf("") }
+    var deletingLog by remember { mutableStateOf<CashLog?>(null) }
+
+    val now = remember { System.currentTimeMillis() }
+    val calendar = remember { Calendar.getInstance() }
+
+    val startOfDay = remember(now) {
+        calendar.apply {
+            timeInMillis = now
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
+
+    val startOfWeek = remember(now) {
+        calendar.apply {
+            timeInMillis = now
+            set(Calendar.DAY_OF_WEEK, firstDayOfWeek)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
+
+    val startOfMonth = remember(now) {
+        calendar.apply {
+            timeInMillis = now
+            set(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
+
+    val startOfYear = remember(now) {
+        calendar.apply {
+            timeInMillis = now
+            set(Calendar.DAY_OF_YEAR, 1)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
+
+    val filteredLogs = remember(cashLogs, selectedPeriod, searchQuery) {
+        cashLogs.filter { log ->
+            val matchesPeriod = when (selectedPeriod) {
+                "DAILY" -> log.timestamp >= startOfDay
+                "WEEKLY" -> log.timestamp >= startOfWeek
+                "MONTHLY" -> log.timestamp >= startOfMonth
+                "YEARLY" -> log.timestamp >= startOfYear
+                else -> true
+            }
+            val matchesSearch = if (searchQuery.isBlank()) true else {
+                log.note.contains(searchQuery, ignoreCase = true) ||
+                log.type.contains(searchQuery, ignoreCase = true) ||
+                log.amount.toString().contains(searchQuery)
+            }
+            matchesPeriod && matchesSearch
+        }
+    }
+
+    val totalIncome = remember(filteredLogs) {
+        filteredLogs.filter { log ->
+            log.type in listOf("DEPOSIT", "DAY_END_CLOSING", "INCOME") || (log.type == "MANUAL_ADJUST" && log.amount >= 0)
+        }.sumOf { it.amount }
+    }
+
+    val totalExpense = remember(filteredLogs) {
+        filteredLogs.filter { log ->
+            log.type in listOf("WITHDRAWAL", "EXPENSE")
+        }.sumOf { it.amount }
+    }
+
+    val netBalance = totalIncome - totalExpense
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
-            shape = RoundedCornerShape(18.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.85f)
+                .fillMaxHeight(0.92f)
         ) {
-            Column(modifier = Modifier.padding(18.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Header (Title, Search, Close)
+                Surface(
+                    color = Color(0xFF1E293B),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.History, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = if (language == "bn") "ক্যাশ লেজার / হিস্টোরি" else "Cash Drawer Ledger",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (isSearchActive) {
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                placeholder = { Text(if (language == "bn") "নোট খুঁজুন..." else "Search...", color = Color(0xFF94A3B8), fontSize = 12.sp) },
+                                singleLine = true,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = Color(0xFF0F172A),
+                                    unfocusedContainerColor = Color(0xFF0F172A),
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White
+                                )
+                            )
+                        } else {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .background(Color(0xFF3B82F6).copy(alpha = 0.2f), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.AccountBalanceWallet,
+                                        contentDescription = null,
+                                        tint = Color(0xFF60A5FA),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (language == "bn") "নগদ বই" else "Cash Book",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = {
+                                isSearchActive = !isSearchActive
+                                if (!isSearchActive) searchQuery = ""
+                            }, modifier = Modifier.size(32.dp)) {
+                                Icon(
+                                    if (isSearchActive) Icons.Default.Close else Icons.Default.Search,
+                                    contentDescription = "Search",
+                                    tint = Color.White
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
+                            IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                            }
+                        }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                if (cashLogs.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = if (language == "bn") "কোনো ক্যাশ লেনদেনের ইতিহাস পাওয়া যায়নি" else "No cash log records found",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.outline
+                // Filter Tabs (সব, দৈনিক, সাপ্তাহিক, মাসিক, বার্ষিক)
+                Surface(
+                    color = Color(0xFF1E293B),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        val filters = listOf(
+                            "ALL" to (if (language == "bn") "সব" else "All"),
+                            "DAILY" to (if (language == "bn") "দৈনিক" else "Daily"),
+                            "WEEKLY" to (if (language == "bn") "সাপ্তাহিক" else "Weekly"),
+                            "MONTHLY" to (if (language == "bn") "মাসিক" else "Monthly"),
+                            "YEARLY" to (if (language == "bn") "বার্ষিক" else "Yearly")
                         )
+
+                        filters.forEach { (key, label) ->
+                            val isSelected = selectedPeriod == key
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = if (isSelected) Color(0xFF3B82F6) else Color(0xFF334155),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable { selectedPeriod = key }
+                            ) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = Color.White,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(vertical = 6.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Table Header Bar (তারিখ | নোট | আয় | খরচ)
+                Surface(
+                    color = Color(0xFF1E293B),
+                    border = BorderStroke(0.5.dp, Color(0xFF334155)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (language == "bn") "তারিখ" else "Date",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF94A3B8),
+                            modifier = Modifier.weight(1.2f)
+                        )
+                        Text(
+                            text = if (language == "bn") "নোট" else "Note",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF94A3B8),
+                            modifier = Modifier.weight(1.4f)
+                        )
+                        Text(
+                            text = if (language == "bn") "আয়" else "In",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF4ADE80),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                            modifier = Modifier.weight(0.9f)
+                        )
+                        Text(
+                            text = if (language == "bn") "খরচ" else "Out",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFF87171),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                            modifier = Modifier.weight(0.9f)
+                        )
+                    }
+                }
+
+                // Table Body Rows
+                if (filteredLogs.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Default.ReceiptLong,
+                                contentDescription = null,
+                                tint = Color(0xFF475569),
+                                modifier = Modifier.size(40.dp)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = if (language == "bn") "কোনো ক্যাশ লেনদেন পাওয়া যায়নি" else "No cash log entries",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF94A3B8)
+                            )
+                        }
                     }
                 } else {
                     LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
                     ) {
-                        items(cashLogs) { log ->
-                            val dateStr = remember(log.timestamp) {
-                                SimpleDateFormat("hh:mm a, d MMM yyyy", Locale.getDefault()).format(Date(log.timestamp))
-                            }
-                            val isAddition = log.type in listOf("DEPOSIT", "DAY_END_CLOSING") || (log.type == "MANUAL_ADJUST" && log.amount >= 0)
+                        items(filteredLogs) { log ->
+                            val isAddition = log.type in listOf("DEPOSIT", "DAY_END_CLOSING", "INCOME") || (log.type == "MANUAL_ADJUST" && log.amount >= 0)
 
-                            Card(
-                                shape = RoundedCornerShape(10.dp),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                                border = CardDefaults.outlinedCardBorder(),
-                                modifier = Modifier.fillMaxWidth()
+                            val dateFormatted = remember(log.timestamp) {
+                                val cal = Calendar.getInstance().apply { timeInMillis = log.timestamp }
+                                val dayOfWeekBn = when (cal.get(Calendar.DAY_OF_WEEK)) {
+                                    Calendar.SATURDAY -> "শনি"
+                                    Calendar.SUNDAY -> "রবি"
+                                    Calendar.MONDAY -> "সোম"
+                                    Calendar.TUESDAY -> "মঙ্গল"
+                                    Calendar.WEDNESDAY -> "বুধ"
+                                    Calendar.THURSDAY -> "বৃহস্পতি"
+                                    Calendar.FRIDAY -> "শুক্র"
+                                    else -> ""
+                                }
+                                val dateStr = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date(log.timestamp))
+                                val timeStr = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(log.timestamp))
+                                Triple(dayOfWeekBn, dateStr, timeStr)
+                            }
+
+                            Surface(
+                                color = Color(0xFF0F172A),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { editingLog = log }
                             ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(10.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
+                                Column {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        // 1. Date & Time
+                                        Column(modifier = Modifier.weight(1.2f)) {
+                                            Text(
+                                                text = if (language == "bn") "${dateFormatted.first}, ${dateFormatted.second}" else dateFormatted.second,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = Color.White,
+                                                fontSize = 11.sp,
+                                                maxLines = 1,
+                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = dateFormatted.third,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = Color(0xFF94A3B8),
+                                                fontSize = 9.sp
+                                            )
+                                        }
+
+                                        // 2. Note
+                                        Column(modifier = Modifier.weight(1.4f)) {
+                                            Text(
+                                                text = log.note.ifBlank {
+                                                    when (log.type) {
+                                                        "DEPOSIT" -> if (language == "bn") "ক্যাশ জমা" else "Cash Deposit"
+                                                        "WITHDRAWAL" -> if (language == "bn") "ক্যাশ উত্তোলন" else "Cash Withdrawal"
+                                                        "DAY_END_CLOSING" -> if (language == "bn") "আজকের বিক্রি" else "Today's Sale"
+                                                        "MANUAL_ADJUST" -> if (language == "bn") "ব্যালেন্স সংশোধন" else "Balance Set"
+                                                        else -> log.type
+                                                    }
+                                                },
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Medium,
+                                                color = Color.White,
+                                                fontSize = 12.sp,
+                                                maxLines = 2,
+                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                            )
+                                        }
+
+                                        // 3. Income Column (Green)
                                         Text(
-                                            text = when (log.type) {
-                                                "DEPOSIT" -> if (language == "bn") "ক্যাশ জমা" else "Cash Deposit"
-                                                "WITHDRAWAL" -> if (language == "bn") "ক্যাশ উত্তোলন" else "Cash Withdrawal"
-                                                "DAY_END_CLOSING" -> if (language == "bn") "দিনশেষের বিক্রি ক্যাশ" else "Day-End Sales Added"
-                                                "MANUAL_ADJUST" -> if (language == "bn") "ব্যালেন্স সংশোধন" else "Balance Set"
-                                                else -> log.type
-                                            },
+                                            text = if (isAddition) (log.amount.toIntOrNull()?.toString() ?: log.amount.toString()) else "",
                                             style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = FontWeight.Bold,
-                                            color = if (isAddition) ProfitGreen else LossRed
+                                            color = Color(0xFF4ADE80),
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                                            fontSize = 12.sp,
+                                            modifier = Modifier.weight(0.9f)
                                         )
+
+                                        // 4. Expense Column (Red)
                                         Text(
-                                            text = "${log.note} • $dateStr",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.outline
-                                        )
-                                        Text(
-                                            text = "${if (language == "bn") "নতুন ব্যালেন্স: " else "New Bal: "}$currency${log.balanceAfter.toIntOrNull() ?: log.balanceAfter}",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            text = if (!isAddition) (log.amount.toIntOrNull()?.toString() ?: log.amount.toString()) else "",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFFF87171),
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                                            fontSize = 12.sp,
+                                            modifier = Modifier.weight(0.9f)
                                         )
                                     }
 
-                                    Column(horizontalAlignment = Alignment.End) {
-                                        Text(
-                                            text = "${if (isAddition) "+" else "-"}$currency${log.amount.toIntOrNull() ?: log.amount}",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = if (isAddition) ProfitGreen else LossRed
-                                        )
-                                        Row {
-                                            IconButton(
-                                                onClick = {
-                                                    editingLog = log
-                                                    editAmountStr = log.amount.toIntOrNull()?.toString() ?: log.amount.toString()
-                                                    editNote = log.note
-                                                },
-                                                modifier = Modifier.size(28.dp)
-                                            ) {
-                                                Icon(Icons.Default.Edit, contentDescription = "Edit", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-                                            }
-                                            IconButton(
-                                                onClick = { onDeleteLog(log) },
-                                                modifier = Modifier.size(28.dp)
-                                            ) {
-                                                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = LossRed, modifier = Modifier.size(16.dp))
-                                            }
-                                        }
-                                    }
+                                    HorizontalDivider(color = Color(0xFF1E293B), thickness = 0.6.dp)
                                 }
                             }
+                        }
+                    }
+                }
+
+                // Bottom Sticky Action Buttons (আয় / খরচ)
+                if (onAddIncome != null && onAddExpense != null) {
+                    Surface(
+                        color = Color(0xFF1E293B),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = { showIncomeDialog = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A)),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(40.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (language == "bn") "আয়" else "In",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+
+                            Button(
+                                onClick = { showExpenseDialog = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(40.dp)
+                            ) {
+                                Icon(Icons.Default.Remove, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (language == "bn") "খরচ" else "Out",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Bottom Sticky Summary Footer (মোট আয় | মোট খরচ | ব্যালেন্স)
+                Surface(
+                    color = Color(0xFF0F172A),
+                    border = BorderStroke(1.dp, Color(0xFF334155)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = if (language == "bn") "মোট আয়" else "Total In",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF94A3B8),
+                                fontSize = 10.sp
+                            )
+                            Text(
+                                text = "$currency${totalIncome.toIntOrNull() ?: totalIncome}",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF4ADE80),
+                                fontSize = 12.sp
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .width(1.dp)
+                                .height(24.dp)
+                                .background(Color(0xFF334155))
+                        )
+
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = if (language == "bn") "মোট খরচ" else "Total Out",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF94A3B8),
+                                fontSize = 10.sp
+                            )
+                            Text(
+                                text = "$currency${totalExpense.toIntOrNull() ?: totalExpense}",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFF87171),
+                                fontSize = 12.sp
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .width(1.dp)
+                                .height(24.dp)
+                                .background(Color(0xFF334155))
+                        )
+
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = if (language == "bn") "ব্যালেন্স" else "Balance",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF94A3B8),
+                                fontSize = 10.sp
+                            )
+                            Text(
+                                text = "$currency${netBalance.toIntOrNull() ?: netBalance}",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = if (netBalance >= 0) Color(0xFF60A5FA) else Color(0xFFF87171),
+                                fontSize = 12.sp
+                            )
                         }
                     }
                 }
@@ -1657,21 +2148,66 @@ fun CashHistoryDialog(
         }
     }
 
+    // Modal for Adding Income from Cash Book
+    if (showIncomeDialog && onAddIncome != null) {
+        CashInputDialog(
+            title = if (language == "bn") "নগদ আয় যোগ করুন (Cash In)" else "Add Cash Income",
+            currency = currency,
+            language = language,
+            isPositive = true,
+            onDismiss = { showIncomeDialog = false },
+            onConfirm = { amount, note ->
+                onAddIncome(amount, note, System.currentTimeMillis())
+                showIncomeDialog = false
+            }
+        )
+    }
+
+    // Modal for Adding Expense from Cash Book
+    if (showExpenseDialog && onAddExpense != null) {
+        CashInputDialog(
+            title = if (language == "bn") "নগদ খরচ কর্তন করুন (Cash Out)" else "Record Cash Expense",
+            currency = currency,
+            language = language,
+            isPositive = false,
+            onDismiss = { showExpenseDialog = false },
+            onConfirm = { amount, note ->
+                onAddExpense(amount, note, System.currentTimeMillis())
+                showExpenseDialog = false
+            }
+        )
+    }
+
     // Sub-dialog for editing a cash log
     if (editingLog != null) {
         val targetLog = editingLog!!
+        var editAmountStr by remember { mutableStateOf(targetLog.amount.toIntOrNull()?.toString() ?: targetLog.amount.toString()) }
+        var editNote by remember { mutableStateOf(targetLog.note) }
+
         Dialog(onDismissRequest = { editingLog = null }) {
             Card(
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(18.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Text(
-                        text = if (language == "bn") "ক্যাশ লেনদেন সংশোধন" else "Edit Cash Entry",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (language == "bn") "ক্যাশ লেনদেন সংশোধন" else "Edit Cash Entry",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        IconButton(onClick = {
+                            deletingLog = targetLog
+                            editingLog = null
+                        }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = LossRed)
+                        }
+                    }
                     Spacer(modifier = Modifier.height(12.dp))
                     OutlinedTextField(
                         value = editAmountStr,
@@ -1679,14 +2215,16 @@ fun CashHistoryDialog(
                         label = { Text(if (language == "bn") "টাকার পরিমাণ ($currency)" else "Amount ($currency)") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     OutlinedTextField(
                         value = editNote,
                         onValueChange = { editNote = it },
                         label = { Text(if (language == "bn") "নোট / বিবরণ" else "Note") },
                         singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(16.dp))
@@ -1701,7 +2239,8 @@ fun CashHistoryDialog(
                                 onEditLog(targetLog, amount, editNote)
                                 editingLog = null
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
+                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
+                            shape = RoundedCornerShape(10.dp)
                         ) {
                             Text(if (language == "bn") "সংরক্ষণ" else "Save")
                         }
@@ -1709,6 +2248,32 @@ fun CashHistoryDialog(
                 }
             }
         }
+    }
+
+    // Delete Log Confirmation Dialog
+    if (deletingLog != null) {
+        val target = deletingLog!!
+        AlertDialog(
+            onDismissRequest = { deletingLog = null },
+            title = { Text(if (language == "bn") "লেনদেন ডিলিট নিশ্চিতকরণ" else "Confirm Delete") },
+            text = { Text(if (language == "bn") "আপনি কি এই ক্যাশ এন্ট্রিটি মুছে ফেলতে চান?" else "Are you sure you want to delete this entry?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteLog(target)
+                        deletingLog = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = LossRed)
+                ) {
+                    Text(if (language == "bn") "ডিলিট করুন" else "Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deletingLog = null }) {
+                    Text(if (language == "bn") "বাতিল" else "Cancel")
+                }
+            }
+        )
     }
 }
 

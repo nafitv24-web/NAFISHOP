@@ -567,23 +567,38 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun addCashToMainBalance(amount: Double, reason: String = "ক্যাশ জমা") {
+    fun addCashToMainBalance(amount: Double, reason: String = "ক্যাশ জমা", timestamp: Long = System.currentTimeMillis()) {
         if (amount <= 0) return
         val newBal = _shopInfo.value.mainBalance + amount
         _shopInfo.value = _shopInfo.value.copy(mainBalance = newBal)
         prefs.edit().putFloat("main_balance", newBal.toFloat()).apply()
         viewModelScope.launch {
-            repository.recordCashLog("DEPOSIT", amount, newBal, reason)
+            repository.recordCashLog("DEPOSIT", amount, newBal, reason, timestamp)
         }
     }
 
-    fun withdrawCashFromMainBalance(amount: Double, reason: String = "ক্যাশ উত্তোলন") {
+    fun addCashIncome(amount: Double, reason: String = "ক্যাশ আয়", timestamp: Long = System.currentTimeMillis()) {
+        addCashToMainBalance(amount, reason, timestamp)
+    }
+
+    fun withdrawCashFromMainBalance(amount: Double, reason: String = "ক্যাশ উত্তোলন", timestamp: Long = System.currentTimeMillis()) {
         if (amount <= 0) return
         val newBal = (_shopInfo.value.mainBalance - amount).coerceAtLeast(0.0)
         _shopInfo.value = _shopInfo.value.copy(mainBalance = newBal)
         prefs.edit().putFloat("main_balance", newBal.toFloat()).apply()
         viewModelScope.launch {
-            repository.recordCashLog("WITHDRAWAL", amount, newBal, reason)
+            repository.recordCashLog("WITHDRAWAL", amount, newBal, reason, timestamp)
+        }
+    }
+
+    fun addCashExpense(amount: Double, reason: String = "ক্যাশ খরচ", category: String = "অন্যান্য", timestamp: Long = System.currentTimeMillis()) {
+        if (amount <= 0) return
+        val newBal = (_shopInfo.value.mainBalance - amount).coerceAtLeast(0.0)
+        _shopInfo.value = _shopInfo.value.copy(mainBalance = newBal)
+        prefs.edit().putFloat("main_balance", newBal.toFloat()).apply()
+        viewModelScope.launch {
+            repository.recordCashLog("WITHDRAWAL", amount, newBal, reason, timestamp)
+            repository.addExpense(reason, category, amount, reason)
         }
     }
 

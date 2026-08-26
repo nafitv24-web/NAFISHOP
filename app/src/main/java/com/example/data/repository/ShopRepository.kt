@@ -545,14 +545,20 @@ class ShopRepository(private val database: AppDatabase) {
         expenseDao.deleteExpense(expense)
     }
 
-    suspend fun recordCashLog(type: String, amount: Double, balanceAfter: Double, note: String) = withContext(Dispatchers.IO) {
+    suspend fun recordCashLog(
+        type: String,
+        amount: Double,
+        balanceAfter: Double,
+        note: String,
+        timestamp: Long = System.currentTimeMillis()
+    ) = withContext(Dispatchers.IO) {
         cashLogDao.insertCashLog(
             CashLog(
                 type = type,
                 amount = amount,
                 balanceAfter = balanceAfter,
                 note = note,
-                timestamp = System.currentTimeMillis()
+                timestamp = timestamp
             )
         )
     }
