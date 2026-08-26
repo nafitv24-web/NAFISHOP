@@ -21,6 +21,7 @@ import com.example.ui.components.AppNoticeDialog
 import com.example.ui.components.AppPermissionDialog
 import com.example.ui.components.AppUpdateDialog
 import com.example.ui.components.InvoiceDialog
+import com.example.ui.components.NafiShopSmallLogo
 import com.example.ui.components.NewsNoticeTickerBar
 import com.example.ui.components.PermissionHelper
 import androidx.compose.ui.platform.LocalContext
@@ -85,17 +86,21 @@ fun MainAppScaffold(
             Column {
                 TopAppBar(
                     title = {
-                        Column {
-                            Text(
-                                text = if (language == "bn") currentScreen.bnTitle else currentScreen.enTitle,
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = shopInfo.shopName,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            NafiShopSmallLogo(size = 36.dp)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = if (language == "bn") currentScreen.bnTitle else currentScreen.enTitle,
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = shopInfo.shopName,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     },
                     actions = {

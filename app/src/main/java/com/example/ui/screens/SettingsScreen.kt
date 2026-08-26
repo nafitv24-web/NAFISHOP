@@ -35,6 +35,9 @@ import com.example.ui.components.AdminPanelDialog
 import com.example.ui.components.AppNoticeDialog
 import com.example.ui.components.AppPermissionDialog
 import com.example.ui.components.AppUpdateDialog
+import com.example.ui.components.NafiShopFullBrandCard
+import com.example.ui.components.NafiShopLogoBadge
+import com.example.ui.components.NafiShopSmallLogo
 import com.example.ui.components.PermissionHelper
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.ShopViewModel
@@ -137,14 +140,7 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .background(EmeraldPrimary.copy(alpha = 0.15f), CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.Storefront, contentDescription = null, tint = EmeraldPrimary, modifier = Modifier.size(28.dp))
-                            }
+                            NafiShopLogoBadge(size = 50.dp)
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
@@ -1015,39 +1011,12 @@ fun SettingsScreen(
             }
         }
 
-        // 8. About App Card
+        // 8. Official Brand & About App Card
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = CardDefaults.outlinedCardBorder()
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(
-                        Icons.Default.Store,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(36.dp)
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "দোকান খাতা ও ইনভেন্টরি ম্যানেজার",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "সংস্করণ ২.০ • সম্পূর্ণ নিরাপদ ও ক্লাউড ব্যাকআপ সমর্থিত",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                }
-            }
+            NafiShopFullBrandCard(
+                tagline = if (language == "bn") "দোকানদারের হিসাবের বিশ্বস্ত সঙ্গী • ভার্সন ${viewModel.currentAppVersion}" else "Your Trusted Business Ledger Partner • v${viewModel.currentAppVersion}",
+                showTagline = true
+            )
         }
     }
 

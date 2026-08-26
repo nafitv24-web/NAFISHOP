@@ -1,38 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Storefront Canopy & Counter -->
-    <!-- Shop Roof/Awning -->
+
+    <!-- Ledger Binder Shadow -->
+    <path
+        android:fillColor="#30000000"
+        android:pathData="M27,24 L79,24 A4,4 0 0,1 83,28 L83,82 A4,4 0 0,1 79,86 L27,86 A4,4 0 0,1 23,82 L23,28 A4,4 0 0,1 27,24 Z" />
+
+    <!-- Ledger Binder / Cover (Deep Leather Purple with Gold Border) -->
+    <path
+        android:fillColor="#3B0764"
+        android:strokeColor="#F59E0B"
+        android:strokeWidth="1"
+        android:pathData="M26,22 L78,22 A4,4 0 0,1 82,26 L82,80 A4,4 0 0,1 78,84 L26,84 A4,4 0 0,1 22,80 L22,26 A4,4 0 0,1 26,22 Z" />
+
+    <!-- Ledger White Notepad Sheet -->
+    <path
+        android:fillColor="#FDFBF7"
+        android:strokeColor="#CBD5E1"
+        android:strokeWidth="0.6"
+        android:pathData="M28,26 L76,26 A2,2 0 0,1 78,28 L78,78 A2,2 0 0,1 76,80 L28,80 A2,2 0 0,1 26,78 L26,28 A2,2 0 0,1 28,26 Z" />
+
+    <!-- Notepad Spiral Punch Holes -->
+    <path
+        android:fillColor="#1E293B"
+        android:pathData="M30,30 A1.2,1.2 0 1,0 30,32.4 A1.2,1.2 0 1,0 30,30 Z
+                          M30,38 A1.2,1.2 0 1,0 30,40.4 A1.2,1.2 0 1,0 30,38 Z
+                          M30,46 A1.2,1.2 0 1,0 30,48.4 A1.2,1.2 0 1,0 30,46 Z
+                          M30,54 A1.2,1.2 0 1,0 30,56.4 A1.2,1.2 0 1,0 30,54 Z
+                          M30,62 A1.2,1.2 0 1,0 30,64.4 A1.2,1.2 0 1,0 30,62 Z
+                          M30,70 A1.2,1.2 0 1,0 30,72.4 A1.2,1.2 0 1,0 30,70 Z" />
+
+    <!-- Grid Header Row & Lines -->
+    <path
+        android:fillColor="#E2E8F0"
+        android:pathData="M33,30 L74,30 L74,36 L33,36 Z" />
+
+    <!-- Ruled Horizontal Grid Lines -->
+    <path
+        android:strokeColor="#94A3B8"
+        android:strokeWidth="0.5"
+        android:pathData="M33,36 L74,36
+                          M33,42 L74,42
+                          M33,48 L74,48
+                          M33,54 L74,54
+                          M33,60 L74,60
+                          M33,66 L74,66
+                          M33,72 L74,72" />
+
+    <!-- Ruled Vertical Grid Columns -->
+    <path
+        android:strokeColor="#94A3B8"
+        android:strokeWidth="0.5"
+        android:pathData="M41,30 L41,75
+                          M51,30 L51,75
+                          M60,30 L60,75
+                          M68,30 L68,75" />
+
+    <!-- Growth Bar Chart (Bottom Right) -->
+    <path
+        android:fillColor="#D97706"
+        android:pathData="M70,72 L73,72 L73,78 L70,78 Z" />
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M74,67 L77,67 L77,78 L74,78 Z" />
     <path
         android:fillColor="#FBBF24"
-        android:pathData="M30,36 L78,36 L84,48 L24,48 Z" />
-    <!-- Shop Awning Stripes -->
+        android:pathData="M78,61 L81,61 L81,78 L78,78 Z" />
+    <!-- Upward Trend Arrow -->
+    <path
+        android:strokeColor="#FDE68A"
+        android:strokeWidth="1.2"
+        android:pathData="M67,76 Q75,72 82,56" />
+    <path
+        android:fillColor="#FDE68A"
+        android:pathData="M82,53 L84,58 L79,57 Z" />
+
+    <!-- Fountain Pen (Purple & Gold) -->
+    <!-- Pen Barrel -->
+    <path
+        android:fillColor="#4C1D95"
+        android:strokeColor="#F59E0B"
+        android:strokeWidth="0.5"
+        android:pathData="M73,28 L76,31 L64,68 L61,65 Z" />
+    <!-- Pen Gold Ring / Cap Band -->
     <path
         android:fillColor="#F59E0B"
-        android:pathData="M38,36 L46,36 L43,48 L35,48 Z M54,36 L62,36 L59,48 L51,48 Z M70,36 L78,36 L75,48 L67,48 Z" />
-    <!-- Store Base Building -->
+        android:pathData="M70,37 L73,40 L72,42 L69,39 Z" />
+    <!-- Pen Gold Nib -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M28,48 L80,48 L80,78 L28,78 Z" />
-    <!-- Shop Doorway / Counter -->
-    <path
-        android:fillColor="#064E3B"
-        android:pathData="M48,56 L60,56 L60,78 L48,78 Z" />
-    <!-- Shop Window Left -->
-    <path
-        android:fillColor="#A7F3D0"
-        android:pathData="M33,54 L43,54 L43,66 L33,66 Z" />
-    <!-- Shop Window Right / Register -->
-    <path
-        android:fillColor="#A7F3D0"
-        android:pathData="M65,54 L75,54 L75,66 L65,66 Z" />
-    <!-- Cash / Coin Badge -->
+        android:fillColor="#FDE68A"
+        android:pathData="M61,65 L64,68 L59,73 L58,74 L59,70 Z" />
+
+    <!-- Calculator Medallion Badge (Bottom Left) -->
     <path
         android:fillColor="#F59E0B"
-        android:pathData="M54,28 A6,6 0 1,0 54.01,28 Z" />
+        android:pathData="M34,54 A12,12 0 1,0 34.01,54 Z" />
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M53,25 L55,25 L55,31 L53,31 Z M51.5,27 L56.5,27" />
+        android:fillColor="#3B0764"
+        android:strokeColor="#FDE68A"
+        android:strokeWidth="0.8"
+        android:pathData="M34,54 A10.5,10.5 0 1,0 34.01,54 Z" />
+
+    <!-- Calculator Screen -->
+    <path
+        android:fillColor="#FDE68A"
+        android:pathData="M29,48 L39,48 A1,1 0 0,1 40,49 L40,51 A1,1 0 0,1 39,52 L29,52 A1,1 0 0,1 28,51 L28,49 A1,1 0 0,1 29,48 Z" />
+
+    <!-- Calculator Buttons (+, -, *, =) -->
+    <!-- + -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="0.8"
+        android:pathData="M30.5,54.5 L30.5,57.5 M29,56 L32,56" />
+    <!-- - -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="0.8"
+        android:pathData="M36,56 L39,56" />
+    <!-- x -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="0.8"
+        android:pathData="M29.5,59.5 L31.5,61.5 M31.5,59.5 L29.5,61.5" />
+    <!-- = -->
+    <path
+        android:strokeColor="#F59E0B"
+        android:strokeWidth="0.8"
+        android:pathData="M36,59.5 L39,59.5 M36,61.5 L39,61.5" />
 </vector>

@@ -38,6 +38,7 @@ import com.example.data.model.CashLog
 import com.example.data.model.Product
 import com.example.data.model.TransactionRecord
 import com.example.ui.components.EditOrReturnSaleDialog
+import com.example.ui.components.NafiShopSmallLogo
 import com.example.ui.components.toIntOrNull
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.ShopViewModel
@@ -125,18 +126,22 @@ fun DashboardScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
-                                Text(
-                                    text = shopInfo.shopName,
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                                Text(
-                                    text = "${shopInfo.ownerName} • $todayDateFormatted",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color(0xFFD1FAE5)
-                                )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                NafiShopSmallLogo(size = 44.dp)
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = shopInfo.shopName,
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        text = "${shopInfo.ownerName} • $todayDateFormatted",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color(0xFFD1FAE5)
+                                    )
+                                }
                             }
                             // Google Cloud Status Pill
                             Surface(

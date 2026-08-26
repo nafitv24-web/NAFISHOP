@@ -31,6 +31,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.auth.AuthResult
+import com.example.ui.components.NafiShopFullBrandCard
+import com.example.ui.components.NafiShopLogoBadge
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.ShopViewModel
 
@@ -93,30 +95,23 @@ fun LoginScreen(
         ) {
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Header Logo & Firebase Cloud Icon
-            Surface(
-                shape = RoundedCornerShape(26.dp),
-                color = EmeraldPrimary.copy(alpha = 0.15f),
-                border = CardDefaults.outlinedCardBorder(),
-                modifier = Modifier.size(76.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Default.CloudSync,
-                        contentDescription = "Cloud Logo",
-                        tint = EmeraldPrimary,
-                        modifier = Modifier.size(42.dp)
-                    )
-                }
-            }
+            // Official App Logo Badge
+            NafiShopLogoBadge(size = 84.dp)
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             Text(
-                text = if (isBn) "NAFI SHOP 24 ক্লাউড" else "NAFI SHOP 24 Cloud",
+                text = if (isBn) "NAFI SHOP 24" else "NAFI SHOP 24",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.ExtraBold,
                 color = Color.White
+            )
+
+            Text(
+                text = if (isBn) "নাফি শপ ২৪ • হিসাবের বিশ্বস্ত সঙ্গী" else "Complete Digital Business Khata",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFFFDE68A),
+                fontWeight = FontWeight.Medium
             )
 
             // Firebase Status Pill
