@@ -2,6 +2,8 @@ package com.example.data.repository
 
 import com.example.data.local.*
 import com.example.data.model.*
+import com.example.util.CalculationHelper
+import com.example.util.CalculationHelper.round2
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -31,10 +33,16 @@ class ShopRepository(private val database: AppDatabase) {
     val allCashLogs: Flow<List<CashLog>> = cashLogDao.getAllCashLogs()
 
     suspend fun saveProduct(product: Product) = withContext(Dispatchers.IO) {
-        if (product.id == 0L) {
-            productDao.insertProduct(product)
+        val sanitized = product.copy(
+            buyPrice = round2(product.buyPrice),
+            sellPrice = round2(product.sellPrice),
+            stockQuantity = round2(product.stockQuantity),
+            minStockAlert = round2(product.minStockAlert)
+        )
+        if (sanitized.id == 0L) {
+            productDao.insertProduct(sanitized)
         } else {
-            productDao.updateProduct(product)
+            productDao.updateProduct(sanitized)
         }
     }
 
@@ -50,10 +58,11 @@ class ShopRepository(private val database: AppDatabase) {
         note: String = "স্টক ইন"
     ) = withContext(Dispatchers.IO) {
         val existing = productDao.getProductById(productId) ?: return@withContext
-        val updatedBuy = buyPrice ?: existing.buyPrice
-        val updatedSell = sellPrice ?: existing.sellPrice
+        val updatedBuy = round2(buyPrice ?: existing.buyPrice)
+        val updatedSell = round2(sellPrice ?: existing.sellPrice)
+        val cleanQty = round2(quantity)
         val updatedProduct = existing.copy(
-            stockQuantity = existing.stockQuantity + quantity,
+            stockQuantity = round2(existing.stockQuantity + cleanQty),
             buyPrice = updatedBuy,
             sellPrice = updatedSell
         )
@@ -64,11 +73,11 @@ class ShopRepository(private val database: AppDatabase) {
             invoiceNumber = "STK-${System.currentTimeMillis() % 100000}",
             productId = productId,
             productName = existing.name,
-            quantity = quantity,
+            quantity = cleanQty,
             unit = existing.unit,
             unitPrice = updatedBuy,
             costPrice = updatedBuy,
-            totalAmount = quantity * updatedBuy,
+            totalAmount = round2(cleanQty * updatedBuy),
             profitAmount = 0.0,
             paymentMethod = "CASH",
             note = note,
@@ -83,7 +92,8 @@ class ShopRepository(private val database: AppDatabase) {
         reason: String
     ) = withContext(Dispatchers.IO) {
         val existing = productDao.getProductById(productId) ?: return@withContext
-        val newStock = (existing.stockQuantity - quantity).coerceAtLeast(0.0)
+        val cleanQty = round2(quantity)
+        val newStock = round2((existing.stockQuantity - cleanQty).coerceAtLeast(0.0))
         productDao.updateStock(productId, newStock)
 
         val tx = TransactionRecord(
@@ -91,12 +101,12 @@ class ShopRepository(private val database: AppDatabase) {
             invoiceNumber = "DMG-${System.currentTimeMillis() % 100000}",
             productId = productId,
             productName = existing.name,
-            quantity = quantity,
+            quantity = cleanQty,
             unit = existing.unit,
             unitPrice = existing.buyPrice,
             costPrice = existing.buyPrice,
-            totalAmount = quantity * existing.buyPrice,
-            profitAmount = -(quantity * existing.buyPrice),
+            totalAmount = round2(cleanQty * existing.buyPrice),
+            profitAmount = -round2(cleanQty * existing.buyPrice),
             paymentMethod = "ADJUST",
             note = reason,
             timestamp = System.currentTimeMillis()
@@ -122,8 +132,8 @@ class ShopRepository(private val database: AppDatabase) {
         for ((_, group) in groups) {
             if (group.size > 1) {
                 val survivor = group.first()
-                val totalCombinedDue = group.sumOf { it.totalDue }
-                val totalCombinedPurchased = group.sumOf { it.totalPurchased }
+                val totalCombinedDue = round2(group.sumOf { it.totalDue })
+                val totalCombinedPurchased = round2(group.sumOf { it.totalPurchased })
                 val bestPhone = group.firstOrNull { it.phone.isNotBlank() }?.phone ?: survivor.phone
                 val bestAddress = group.firstOrNull { it.address.isNotBlank() }?.address ?: survivor.address
                 val bestImage = group.firstOrNull { it.imageUri.isNotBlank() }?.imageUri ?: survivor.imageUri
@@ -148,6 +158,33 @@ class ShopRepository(private val database: AppDatabase) {
                 }
             }
         }
+        reconcileCustomerLedgers()
+    }
+
+    /**
+     * Complete Ledger Reconciliation:
+     * Audits and re-calculates every customer's total due by matching with their DueLogs.
+     * Prevents any mathematical discrepancies or calculation errors.
+     */
+    suspend fun reconcileCustomerLedgers() = withContext(Dispatchers.IO) {
+        val customers = customerDao.getAllCustomersList()
+        for (cust in customers) {
+            val logs: List<DueLog> = dueLogDao.getDueLogsListForCustomer(cust.id)
+            if (logs.isNotEmpty()) {
+                var calculatedDue = 0.0
+                for (log in logs) {
+                    if (log.type == "DUE_GIVEN") {
+                        calculatedDue += log.amount
+                    } else if (log.type == "DUE_COLLECTED") {
+                        calculatedDue -= log.amount
+                    }
+                }
+                calculatedDue = round2(calculatedDue.coerceAtLeast(0.0))
+                if (round2(cust.totalDue) != calculatedDue) {
+                    customerDao.setCustomerDue(cust.id, calculatedDue, System.currentTimeMillis())
+                }
+            }
+        }
     }
 
     private fun Double.formatQty(): String = if (this % 1.0 == 0.0) this.toInt().toString() else this.toString()
@@ -166,10 +203,13 @@ class ShopRepository(private val database: AppDatabase) {
 
         var grossTotal = 0.0
         for (item in cartItems) {
-            grossTotal += item.total
+            grossTotal += round2(item.total)
         }
-        val netTotal = (grossTotal - discount).coerceAtLeast(0.0)
-        val calculatedDue = (netTotal - paidAmount).coerceAtLeast(0.0)
+        grossTotal = round2(grossTotal)
+        val cleanDiscount = round2(discount)
+        val netTotal = round2((grossTotal - cleanDiscount).coerceAtLeast(0.0))
+        val cleanPaid = round2(paidAmount)
+        val calculatedDue = round2((netTotal - cleanPaid).coerceAtLeast(0.0))
 
         // 1. Process each cart item & decrease stock
         for (item in cartItems) {
@@ -177,26 +217,29 @@ class ShopRepository(private val database: AppDatabase) {
             productDao.decreaseStock(product.id, item.quantity)
 
             val itemRatio = if (grossTotal > 0) item.total / grossTotal else 0.0
-            val itemDiscount = discount * itemRatio
-            val finalItemTotal = item.total - itemDiscount
-            val itemCost = product.buyPrice * item.quantity
-            val itemProfit = finalItemTotal - itemCost
+            val itemDiscount = round2(cleanDiscount * itemRatio)
+            val finalItemTotal = round2((item.total - itemDiscount).coerceAtLeast(0.0))
+            val itemCost = round2(product.buyPrice * item.quantity)
+            val itemProfit = round2(finalItemTotal - itemCost)
+
+            val itemPaid = round2(cleanPaid * (if (netTotal > 0) finalItemTotal / netTotal else 1.0))
+            val itemDue = round2(calculatedDue * (if (netTotal > 0) finalItemTotal / netTotal else 1.0))
 
             val tx = TransactionRecord(
                 type = "SALE",
                 invoiceNumber = invoiceNumber,
                 productId = product.id,
                 productName = product.name,
-                quantity = item.quantity,
+                quantity = round2(item.quantity),
                 unit = product.unit,
-                unitPrice = item.customPrice,
-                costPrice = product.buyPrice,
+                unitPrice = round2(item.customPrice),
+                costPrice = round2(product.buyPrice),
                 totalAmount = finalItemTotal,
                 profitAmount = itemProfit,
                 customerName = customerName.ifBlank { "ক্যাশ কাস্টমার" },
                 customerPhone = customerPhone,
-                paidAmount = paidAmount * (if (netTotal > 0) finalItemTotal / netTotal else 1.0),
-                dueAmount = calculatedDue * (if (netTotal > 0) finalItemTotal / netTotal else 1.0),
+                paidAmount = itemPaid,
+                dueAmount = itemDue,
                 paymentMethod = paymentMethod,
                 note = note,
                 timestamp = now
@@ -260,12 +303,13 @@ class ShopRepository(private val database: AppDatabase) {
         val now = System.currentTimeMillis()
         val cleanName = name.trim()
         val cleanPhone = phone.trim()
+        val cleanDue = round2(initialDue)
 
         // Check if customer with this name or phone already exists
         val existing = customerDao.findExistingCustomer(cleanName, cleanPhone)
         if (existing != null) {
-            val updatedDue = existing.totalDue + initialDue
-            val updatedPurchased = existing.totalPurchased + initialDue
+            val updatedDue = round2(existing.totalDue + cleanDue)
+            val updatedPurchased = round2(existing.totalPurchased + cleanDue)
             customerDao.updateCustomer(
                 existing.copy(
                     name = if (cleanName.isNotBlank()) cleanName else existing.name,
@@ -277,14 +321,14 @@ class ShopRepository(private val database: AppDatabase) {
                     lastTransactionDate = now
                 )
             )
-            if (initialDue > 0) {
+            if (cleanDue > 0) {
                 dueLogDao.insertDueLog(
                     DueLog(
                         customerId = existing.id,
                         customerName = existing.name,
                         customerPhone = existing.phone,
                         type = "DUE_GIVEN",
-                        amount = initialDue,
+                        amount = cleanDue,
                         note = "বাকি যুক্ত করা হয়েছে",
                         timestamp = now
                     )
@@ -298,20 +342,20 @@ class ShopRepository(private val database: AppDatabase) {
                 name = cleanName,
                 phone = cleanPhone,
                 address = address,
-                totalDue = initialDue,
-                totalPurchased = initialDue,
+                totalDue = cleanDue,
+                totalPurchased = cleanDue,
                 imageUri = imageUri,
                 lastTransactionDate = now
             )
         )
-        if (initialDue > 0) {
+        if (cleanDue > 0) {
             dueLogDao.insertDueLog(
                 DueLog(
                     customerId = customerId,
                     customerName = cleanName,
                     customerPhone = cleanPhone,
                     type = "DUE_GIVEN",
-                    amount = initialDue,
+                    amount = cleanDue,
                     note = "পূর্বের বাকি হিসাব শুরু",
                     timestamp = now
                 )
@@ -320,12 +364,17 @@ class ShopRepository(private val database: AppDatabase) {
     }
 
     suspend fun updateCustomer(customer: Customer) = withContext(Dispatchers.IO) {
-        customerDao.updateCustomer(customer)
+        val sanitized = customer.copy(
+            totalDue = round2(customer.totalDue),
+            totalPurchased = round2(customer.totalPurchased)
+        )
+        customerDao.updateCustomer(sanitized)
     }
 
     suspend fun collectCustomerDuePayment(customer: Customer, amountPaid: Double, note: String) = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
-        val updatedDue = (customer.totalDue - amountPaid).coerceAtLeast(0.0)
+        val cleanPaid = round2(amountPaid)
+        val updatedDue = round2((customer.totalDue - cleanPaid).coerceAtLeast(0.0))
         customerDao.setCustomerDue(customer.id, updatedDue, now)
 
         dueLogDao.insertDueLog(
@@ -334,7 +383,7 @@ class ShopRepository(private val database: AppDatabase) {
                 customerName = customer.name,
                 customerPhone = customer.phone,
                 type = "DUE_COLLECTED",
-                amount = amountPaid,
+                amount = cleanPaid,
                 note = note.ifBlank { "বাকি আদায়" },
                 timestamp = now
             )
@@ -343,9 +392,10 @@ class ShopRepository(private val database: AppDatabase) {
 
     suspend fun giveCustomerAdditionalDue(customer: Customer, amountDue: Double, note: String) = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
-        val updatedDue = customer.totalDue + amountDue
-        val updatedPurchased = customer.totalPurchased + amountDue
-        customerDao.updateCustomerBalance(customer.id, amountDue, amountDue, now)
+        val cleanDue = round2(amountDue)
+        val updatedDue = round2(customer.totalDue + cleanDue)
+        val updatedPurchased = round2(customer.totalPurchased + cleanDue)
+        customerDao.updateCustomerBalance(customer.id, cleanDue, cleanDue, now)
 
         dueLogDao.insertDueLog(
             DueLog(
@@ -353,7 +403,7 @@ class ShopRepository(private val database: AppDatabase) {
                 customerName = customer.name,
                 customerPhone = customer.phone,
                 type = "DUE_GIVEN",
-                amount = amountDue,
+                amount = cleanDue,
                 note = note.ifBlank { "বাকি প্রদান" },
                 timestamp = now
             )
@@ -361,7 +411,7 @@ class ShopRepository(private val database: AppDatabase) {
     }
 
     suspend fun updateDueLog(dueLog: DueLog) = withContext(Dispatchers.IO) {
-        dueLogDao.updateDueLog(dueLog)
+        dueLogDao.updateDueLog(dueLog.copy(amount = round2(dueLog.amount)))
     }
 
     suspend fun deleteDueLog(dueLog: DueLog) = withContext(Dispatchers.IO) {
@@ -371,9 +421,9 @@ class ShopRepository(private val database: AppDatabase) {
 
         if (customer != null) {
             val updatedDue = if (dueLog.type == "DUE_GIVEN") {
-                (customer.totalDue - dueLog.amount).coerceAtLeast(0.0)
+                round2((customer.totalDue - dueLog.amount).coerceAtLeast(0.0))
             } else {
-                customer.totalDue + dueLog.amount
+                round2(customer.totalDue + dueLog.amount)
             }
             customerDao.setCustomerDue(customer.id, updatedDue, System.currentTimeMillis())
         }
@@ -399,7 +449,17 @@ class ShopRepository(private val database: AppDatabase) {
     }
 
     suspend fun updateTransaction(tx: TransactionRecord) = withContext(Dispatchers.IO) {
-        transactionDao.updateTransaction(tx)
+        transactionDao.updateTransaction(
+            tx.copy(
+                quantity = round2(tx.quantity),
+                unitPrice = round2(tx.unitPrice),
+                costPrice = round2(tx.costPrice),
+                totalAmount = round2(tx.totalAmount),
+                profitAmount = round2(tx.profitAmount),
+                paidAmount = round2(tx.paidAmount),
+                dueAmount = round2(tx.dueAmount)
+            )
+        )
     }
 
     suspend fun deleteTransaction(tx: TransactionRecord) = withContext(Dispatchers.IO) {
@@ -416,7 +476,7 @@ class ShopRepository(private val database: AppDatabase) {
         if (tx.dueAmount > 0) {
             val customer = customerDao.findExistingCustomer(tx.customerName, tx.customerPhone)
             if (customer != null) {
-                val updatedDue = (customer.totalDue - tx.dueAmount).coerceAtLeast(0.0)
+                val updatedDue = round2((customer.totalDue - tx.dueAmount).coerceAtLeast(0.0))
                 customerDao.setCustomerDue(customer.id, updatedDue, System.currentTimeMillis())
             }
             // Remove associated DueLog if matching invoice
@@ -429,7 +489,7 @@ class ShopRepository(private val database: AppDatabase) {
     }
 
     suspend fun returnSaleItem(tx: TransactionRecord, returnQty: Double, note: String) = withContext(Dispatchers.IO) {
-        val qtyToReturn = returnQty.coerceIn(0.1, tx.quantity)
+        val qtyToReturn = round2(returnQty.coerceIn(0.1, tx.quantity))
         val now = System.currentTimeMillis()
 
         // 1. Restock product into inventory
@@ -437,14 +497,14 @@ class ShopRepository(private val database: AppDatabase) {
             productDao.increaseStock(tx.productId, qtyToReturn)
         }
 
-        val returnedAmount = tx.unitPrice * qtyToReturn
+        val returnedAmount = round2(tx.unitPrice * qtyToReturn)
 
         // 2. Adjust customer due if transaction had due
         if (tx.dueAmount > 0) {
             val customer = customerDao.findExistingCustomer(tx.customerName, tx.customerPhone)
             if (customer != null) {
-                val dueReduction = returnedAmount.coerceAtMost(tx.dueAmount)
-                val updatedDue = (customer.totalDue - dueReduction).coerceAtLeast(0.0)
+                val dueReduction = round2(returnedAmount.coerceAtMost(tx.dueAmount))
+                val updatedDue = round2((customer.totalDue - dueReduction).coerceAtLeast(0.0))
                 customerDao.setCustomerDue(customer.id, updatedDue, now)
 
                 dueLogDao.insertDueLog(
@@ -465,12 +525,12 @@ class ShopRepository(private val database: AppDatabase) {
         if (qtyToReturn >= tx.quantity) {
             transactionDao.deleteTransaction(tx)
         } else {
-            val remainingQty = tx.quantity - qtyToReturn
-            val remainingTotal = (tx.unitPrice * remainingQty).coerceAtLeast(0.0)
-            val remainingCost = tx.costPrice * remainingQty
-            val remainingProfit = remainingTotal - remainingCost
-            val remainingPaid = (tx.paidAmount - returnedAmount).coerceAtLeast(0.0)
-            val remainingDue = (tx.dueAmount - returnedAmount).coerceAtLeast(0.0)
+            val remainingQty = round2(tx.quantity - qtyToReturn)
+            val remainingTotal = round2((tx.unitPrice * remainingQty).coerceAtLeast(0.0))
+            val remainingCost = round2(tx.costPrice * remainingQty)
+            val remainingProfit = round2(remainingTotal - remainingCost)
+            val remainingPaid = round2((tx.paidAmount - returnedAmount).coerceAtLeast(0.0))
+            val remainingDue = round2((tx.dueAmount - returnedAmount).coerceAtLeast(0.0))
 
             transactionDao.updateTransaction(
                 tx.copy(
@@ -492,19 +552,21 @@ class ShopRepository(private val database: AppDatabase) {
         newCustomerName: String,
         newNote: String
     ) = withContext(Dispatchers.IO) {
-        val qtyDiff = oldTx.quantity - newQuantity
+        val cleanQty = round2(newQuantity)
+        val cleanPrice = round2(newUnitPrice)
+        val qtyDiff = round2(oldTx.quantity - cleanQty)
         if (oldTx.productId > 0 && qtyDiff != 0.0) {
             productDao.increaseStock(oldTx.productId, qtyDiff) // if newQuantity is less, qtyDiff > 0 (restock)
         }
 
-        val newTotal = newQuantity * newUnitPrice
-        val newCost = oldTx.costPrice * newQuantity
-        val newProfit = newTotal - newCost
+        val newTotal = round2(cleanQty * cleanPrice)
+        val newCost = round2(oldTx.costPrice * cleanQty)
+        val newProfit = round2(newTotal - newCost)
 
         transactionDao.updateTransaction(
             oldTx.copy(
-                quantity = newQuantity,
-                unitPrice = newUnitPrice,
+                quantity = cleanQty,
+                unitPrice = cleanPrice,
                 totalAmount = newTotal,
                 profitAmount = newProfit,
                 customerName = newCustomerName.ifBlank { oldTx.customerName },
@@ -514,7 +576,12 @@ class ShopRepository(private val database: AppDatabase) {
     }
 
     suspend fun updateCashLog(cashLog: CashLog) = withContext(Dispatchers.IO) {
-        cashLogDao.updateCashLog(cashLog)
+        cashLogDao.updateCashLog(
+            cashLog.copy(
+                amount = round2(cashLog.amount),
+                balanceAfter = round2(cashLog.balanceAfter)
+            )
+        )
     }
 
     suspend fun deleteCashLog(cashLog: CashLog) = withContext(Dispatchers.IO) {
@@ -522,7 +589,7 @@ class ShopRepository(private val database: AppDatabase) {
     }
 
     suspend fun updateExpense(expense: Expense) = withContext(Dispatchers.IO) {
-        expenseDao.updateExpense(expense)
+        expenseDao.updateExpense(expense.copy(amount = round2(expense.amount)))
     }
 
     suspend fun deleteCustomer(customer: Customer) = withContext(Dispatchers.IO) {
@@ -530,11 +597,12 @@ class ShopRepository(private val database: AppDatabase) {
     }
 
     suspend fun addExpense(title: String, category: String, amount: Double, note: String) = withContext(Dispatchers.IO) {
+        val cleanAmount = round2(amount)
         expenseDao.insertExpense(
             Expense(
                 title = title,
                 category = category,
-                amount = amount,
+                amount = cleanAmount,
                 timestamp = System.currentTimeMillis(),
                 note = note
             )

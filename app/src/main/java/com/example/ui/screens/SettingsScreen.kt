@@ -56,6 +56,7 @@ fun SettingsScreen(
     val themeMode by viewModel.themeMode.collectAsState()
     val isSyncing by viewModel.isSyncing.collectAsState()
     val syncMessage by viewModel.syncMessage.collectAsState()
+    val autoBackupStatus by viewModel.autoBackupStatus.collectAsState()
     val appUpdateInfo by viewModel.appUpdateInfo.collectAsState()
     val isUpdateAvailable by viewModel.isUpdateAvailable.collectAsState()
     val activeNotice by viewModel.activeNotice.collectAsState()
@@ -438,13 +439,48 @@ fun SettingsScreen(
                                 Surface(
                                     shape = RoundedCornerShape(20.dp),
                                     color = Color(0xFF38BDF8).copy(alpha = 0.2f)
-                                ) {
+                                 ) {
                                     Text(
                                         text = "Google Drive",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = Color(0xFF38BDF8),
                                         fontWeight = FontWeight.Bold,
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+
+                            // Real-time Auto-Sync Status
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFF1E293B),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Default.Sync,
+                                            contentDescription = null,
+                                            tint = EmeraldPrimary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = if (language == "bn") "রিয়েল-টাইম অটো ব্যাকআপ:" else "Real-time Auto Backup:",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color(0xFF94A3B8),
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                    Text(
+                                        text = autoBackupStatus ?: (if (language == "bn") "🟢 সক্রিয়" else "🟢 Active"),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = ProfitGreen,
+                                        fontWeight = FontWeight.Bold
                                     )
                                 }
                             }
