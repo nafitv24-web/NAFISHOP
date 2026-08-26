@@ -54,6 +54,7 @@ fun InventoryScreen(
     val allProducts by viewModel.products.collectAsState()
     val expiringProducts by viewModel.expiringProducts.collectAsState()
     val expiredProducts by viewModel.expiredProducts.collectAsState()
+    val customCategories by viewModel.customCategories.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val selectedCategory by viewModel.selectedCategory.collectAsState()
     val shopInfo by viewModel.shopInfo.collectAsState()
@@ -73,10 +74,8 @@ fun InventoryScreen(
 
     var showBarcodeScannerModal by remember { mutableStateOf(false) }
 
-    val defaultCategories = listOf("সব", "মুদি সামগ্রী", "চাল ও ডাল", "তেল ও ঘি", "চা ও পানীয়", "ডিম ও দুগ্ধজাত", "প্রসাধন", "পরিষ্কারক", "অন্যান্য")
-    val categories = remember(allProducts) {
-        val customCats = allProducts.map { it.category.trim() }.filter { it.isNotBlank() && it != "সব" }
-        (listOf("সব") + (customCats + defaultCategories.filter { it != "সব" }).distinct())
+    val categories = remember(customCategories, language) {
+        listOf(if (language == "bn") "সব" else "All") + customCategories
     }
 
     val lowStockProducts = remember(allProducts) {
@@ -436,6 +435,7 @@ fun InventoryScreen(
             product = editingProduct,
             currency = currency,
             language = language,
+            savedCategories = customCategories,
             onDismiss = { showAddEditDialog = false },
             onSave = { savedProd ->
                 viewModel.saveProduct(savedProd)
@@ -539,16 +539,7 @@ fun ProductItemCard(
                     } else {
                         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                             Icon(
-                                when (product.category) {
-                                    "মুদি সামগ্রী" -> Icons.Default.LocalGroceryStore
-                                    "চাল ও ডাল" -> Icons.Default.Grass
-                                    "তেল ও ঘি" -> Icons.Default.Opacity
-                                    "চা ও পানীয়" -> Icons.Default.EmojiFoodBeverage
-                                    "ডিম ও দুগ্ধজাত" -> Icons.Default.Egg
-                                    "প্রসাধন" -> Icons.Default.Face
-                                    "পরিষ্কারক" -> Icons.Default.CleaningServices
-                                    else -> Icons.Default.Inventory2
-                                },
+                                Icons.Default.Category,
                                 contentDescription = null,
                                 tint = EmeraldPrimary,
                                 modifier = Modifier.size(26.dp)
@@ -770,13 +761,14 @@ fun AddEditProductDialog(
     product: Product?,
     currency: String,
     language: String,
+    savedCategories: List<String> = emptyList(),
     onDismiss: () -> Unit,
     onSave: (Product) -> Unit
 ) {
     val context = LocalContext.current
     var name by remember { mutableStateOf(product?.name ?: "") }
     var barcode by remember { mutableStateOf(product?.barcode ?: "") }
-    var category by remember { mutableStateOf(product?.category ?: "মুদি সামগ্রী") }
+    var category by remember { mutableStateOf(product?.category ?: "") }
     var buyPriceStr by remember { mutableStateOf(product?.buyPrice?.toString()?.replace(".0", "") ?: "") }
     var sellPriceStr by remember { mutableStateOf(product?.sellPrice?.toString()?.replace(".0", "") ?: "") }
     var stockStr by remember { mutableStateOf(product?.stockQuantity?.toString()?.replace(".0", "") ?: "10") }
@@ -792,8 +784,6 @@ fun AddEditProductDialog(
             imageUri = uri.toString()
         }
     }
-
-    val categories = listOf("মুদি সামগ্রী", "চাল ও ডাল", "তেল ও ঘি", "চা ও পানীয়", "ডিম ও দুগ্ধজাত", "প্রসাধন", "পরিষ্কারক", "অন্যান্য")
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -902,12 +892,12 @@ fun AddEditProductDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Category Text Input & Chips
+                // Category Text Input & Dynamic Saved Categories Chips
                 OutlinedTextField(
                     value = category,
                     onValueChange = { category = it },
                     label = { Text(if (language == "bn") "ক্যাটাগরি লিখুন বা বাছাই করুন" else "Category Name (Type or Select)") },
-                    placeholder = { Text(if (language == "bn") "যেমন: মুদি, ফার্মেসি, প্রসাধন..." else "e.g. Grocery, Stationery...") },
+                    placeholder = { Text(if (language == "bn") "যেমন: পানীয়, বেকারি, স্টেশনারি..." else "e.g. Beverages, Bakery, Stationery...") },
                     leadingIcon = { Icon(Icons.Default.Category, contentDescription = null, tint = EmeraldPrimary) },
                     trailingIcon = {
                         if (category.isNotBlank()) {
@@ -922,22 +912,31 @@ fun AddEditProductDialog(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                Text(
-                    text = if (language == "bn") "জনপ্রিয় ক্যাটাগরি তালিকা (ট্যাপ করুন):" else "Quick suggestions (Tap to select):",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.padding(vertical = 4.dp)
-                ) {
-                    items(categories) { cat ->
-                        FilterChip(
-                            selected = category.trim().equals(cat.trim(), ignoreCase = true),
-                            onClick = { category = cat },
-                            label = { Text(cat, style = MaterialTheme.typography.labelSmall) }
-                        )
+                if (savedCategories.isNotEmpty()) {
+                    Text(
+                        text = if (language == "bn") "সংরক্ষিত ক্যাটাগরি (ট্যাপ করে সিলেক্ট করুন):" else "Your Categories (Tap to choose):",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = EmeraldPrimary
+                    )
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    ) {
+                        items(savedCategories) { cat ->
+                            FilterChip(
+                                selected = category.trim().equals(cat.trim(), ignoreCase = true),
+                                onClick = { category = cat },
+                                label = { Text(cat, style = MaterialTheme.typography.labelSmall) }
+                            )
+                        }
                     }
+                } else {
+                    Text(
+                        text = if (language == "bn") "উপরে আপনার পছন্দমতো ক্যাটাগরি লিখে সেভ করুন।" else "Type your own category above and save.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))

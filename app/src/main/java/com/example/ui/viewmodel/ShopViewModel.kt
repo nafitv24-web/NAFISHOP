@@ -77,6 +77,30 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     private val _language = MutableStateFlow(prefs.getString("app_language", "bn") ?: "bn")
     val language: StateFlow<String> = _language.asStateFlow()
 
+    // User-Defined Custom Categories (no hardcoded sample categories)
+    private val _customCategories = MutableStateFlow<List<String>>(
+        prefs.getStringSet("custom_user_categories", emptySet())?.toList()?.filter { it.isNotBlank() && it != "সব" && it != "All" }?.sorted() ?: emptyList()
+    )
+    val customCategories: StateFlow<List<String>> = combine(_customCategories, products) { userCats, prodList ->
+        val prodCats = prodList.map { it.category.trim() }.filter { it.isNotBlank() && it != "সব" && it != "All" }
+        (userCats + prodCats).distinct().sorted()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun addCustomCategory(newCategory: String) {
+        val trimmed = newCategory.trim()
+        if (trimmed.isNotBlank() && trimmed != "সব" && trimmed != "All") {
+            val updated = (_customCategories.value + trimmed).distinct().sorted()
+            _customCategories.value = updated
+            prefs.edit().putStringSet("custom_user_categories", updated.toSet()).apply()
+        }
+    }
+
+    fun removeCustomCategory(categoryToRemove: String) {
+        val updated = _customCategories.value.filter { it != categoryToRemove }
+        _customCategories.value = updated
+        prefs.edit().putStringSet("custom_user_categories", updated.toSet()).apply()
+    }
+
     private val _isLoggedIn = MutableStateFlow(prefs.getBoolean("is_logged_in", false) || firebaseAuth.isUserLoggedIn)
     val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
 
@@ -614,6 +638,10 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
 
     // Product Management
     fun saveProduct(product: Product) {
+        val cat = product.category.trim()
+        if (cat.isNotBlank() && cat != "সব" && cat != "All") {
+            addCustomCategory(cat)
+        }
         viewModelScope.launch {
             repository.saveProduct(product)
         }

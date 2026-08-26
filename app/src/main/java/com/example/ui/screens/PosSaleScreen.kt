@@ -39,6 +39,7 @@ fun PosSaleScreen(
     onSaleCompleted: (String) -> Unit
 ) {
     val products by viewModel.products.collectAsState()
+    val customCategories by viewModel.customCategories.collectAsState()
     val cartItems by viewModel.cartItems.collectAsState()
     val customers by viewModel.customers.collectAsState()
     val customerName by viewModel.cartCustomerName.collectAsState()
@@ -57,10 +58,8 @@ fun PosSaleScreen(
     var showAddCustomerInPosDialog by remember { mutableStateOf(false) }
     var customerSearchQuery by remember { mutableStateOf("") }
 
-    val defaultCategories = listOf("সব", "মুদি সামগ্রী", "চাল ও ডাল", "তেল ও ঘি", "চা ও পানীয়", "ডিম ও দুগ্ধজাত", "প্রসাধন", "পরিষ্কারক", "অন্যান্য")
-    val categories = remember(products) {
-        val customCats = products.map { it.category.trim() }.filter { it.isNotBlank() && it != "সব" }
-        (listOf("সব") + (customCats + defaultCategories.filter { it != "সব" }).distinct())
+    val categories = remember(customCategories, language) {
+        listOf(if (language == "bn") "সব" else "All") + customCategories
     }
 
     val filteredProducts = remember(products, searchQuery, selectedCategory) {

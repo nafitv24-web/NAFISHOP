@@ -32,6 +32,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.data.model.CashLog
 import com.example.data.model.Product
 import com.example.data.model.TransactionRecord
@@ -1706,13 +1707,16 @@ fun CashHistoryDialog(
 
     val netBalance = totalIncome - totalExpense
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
         Card(
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
             modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.92f)
+                .fillMaxWidth(0.96f)
+                .fillMaxHeight(0.94f)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Header (Title, Search, Close)
@@ -1748,7 +1752,7 @@ fun CashHistoryDialog(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(
                                     modifier = Modifier
-                                        .size(32.dp)
+                                        .size(34.dp)
                                         .background(Color(0xFF3B82F6).copy(alpha = 0.2f), CircleShape),
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -1756,16 +1760,23 @@ fun CashHistoryDialog(
                                         Icons.Default.AccountBalanceWallet,
                                         contentDescription = null,
                                         tint = Color(0xFF60A5FA),
-                                        modifier = Modifier.size(18.dp)
+                                        modifier = Modifier.size(20.dp)
                                     )
                                 }
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = if (language == "bn") "নগদ বই" else "Cash Book",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = if (language == "bn") "নগদ ক্যাশ বই" else "Cash Book",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        text = if (language == "bn") "ক্যাশ লেনদেনের সম্পূর্ণ হিসাব" else "Complete cash transaction log",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFF94A3B8)
+                                    )
+                                }
                             }
                         }
 
@@ -1773,7 +1784,7 @@ fun CashHistoryDialog(
                             IconButton(onClick = {
                                 isSearchActive = !isSearchActive
                                 if (!isSearchActive) searchQuery = ""
-                            }, modifier = Modifier.size(32.dp)) {
+                            }, modifier = Modifier.size(36.dp)) {
                                 Icon(
                                     if (isSearchActive) Icons.Default.Close else Icons.Default.Search,
                                     contentDescription = "Search",
@@ -1781,7 +1792,7 @@ fun CashHistoryDialog(
                                 )
                             }
                             Spacer(modifier = Modifier.width(4.dp))
-                            IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                            IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
                                 Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
                             }
                         }
@@ -1831,52 +1842,93 @@ fun CashHistoryDialog(
                     }
                 }
 
-                // Table Header Bar (তারিখ | নোট | আয় | খরচ)
+                // Summary Dashboard (মোট আয় | মোট খরচ | নিট ব্যালেন্স)
                 Surface(
-                    color = Color(0xFF1E293B),
-                    border = BorderStroke(0.5.dp, Color(0xFF334155)),
-                    modifier = Modifier.fillMaxWidth()
+                    color = Color(0xFF0F172A),
+                    border = BorderStroke(1.dp, Color(0xFF334155)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = if (language == "bn") "তারিখ" else "Date",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF94A3B8),
-                            modifier = Modifier.weight(1.2f)
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = if (language == "bn") "মোট আয় (+)" else "Total In (+)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF94A3B8),
+                                fontSize = 11.sp
+                            )
+                            Text(
+                                text = "$currency${totalIncome.toIntOrNull() ?: totalIncome}",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF4ADE80)
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .width(1.dp)
+                                .height(28.dp)
+                                .background(Color(0xFF334155))
                         )
-                        Text(
-                            text = if (language == "bn") "নোট" else "Note",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF94A3B8),
-                            modifier = Modifier.weight(1.4f)
+
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = if (language == "bn") "মোট খরচ (-)" else "Total Out (-)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF94A3B8),
+                                fontSize = 11.sp
+                            )
+                            Text(
+                                text = "$currency${totalExpense.toIntOrNull() ?: totalExpense}",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFF87171)
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .width(1.dp)
+                                .height(28.dp)
+                                .background(Color(0xFF334155))
                         )
-                        Text(
-                            text = if (language == "bn") "আয়" else "In",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF4ADE80),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                            modifier = Modifier.weight(0.9f)
-                        )
-                        Text(
-                            text = if (language == "bn") "খরচ" else "Out",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFF87171),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                            modifier = Modifier.weight(0.9f)
-                        )
+
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = if (language == "bn") "হাতে ক্যাশ" else "Net Balance",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF94A3B8),
+                                fontSize = 11.sp
+                            )
+                            Text(
+                                text = "$currency${netBalance.toIntOrNull() ?: netBalance}",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = if (netBalance >= 0) Color(0xFF60A5FA) else Color(0xFFF87171)
+                            )
+                        }
                     }
                 }
 
-                // Table Body Rows
+                // Table Body Rows (Clean List Layout with no narrow column wrapping)
                 if (filteredLogs.isEmpty()) {
                     Box(
                         modifier = Modifier
@@ -1889,7 +1941,7 @@ fun CashHistoryDialog(
                                 Icons.Default.ReceiptLong,
                                 contentDescription = null,
                                 tint = Color(0xFF475569),
-                                modifier = Modifier.size(40.dp)
+                                modifier = Modifier.size(44.dp)
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
@@ -1904,6 +1956,8 @@ fun CashHistoryDialog(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
+                            .padding(horizontal = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         items(filteredLogs) { log ->
                             val isAddition = log.type in listOf("DEPOSIT", "DAY_END_CLOSING", "INCOME") || (log.type == "MANUAL_ADJUST" && log.amount >= 0)
@@ -1925,83 +1979,72 @@ fun CashHistoryDialog(
                                 Triple(dayOfWeekBn, dateStr, timeStr)
                             }
 
+                            val typeLabel = when (log.type) {
+                                "DEPOSIT" -> if (language == "bn") "ক্যাশ জমা" else "Deposit"
+                                "WITHDRAWAL" -> if (language == "bn") "ক্যাশ উত্তোলন" else "Withdrawal"
+                                "DAY_END_CLOSING" -> if (language == "bn") "বিক্রি জমা" else "Daily Sales"
+                                "INCOME" -> if (language == "bn") "নগদ আয়" else "Cash In"
+                                "EXPENSE" -> if (language == "bn") "নগদ খরচ" else "Cash Out"
+                                "MANUAL_ADJUST" -> if (language == "bn") "ব্যালেন্স সংশোধন" else "Adjust"
+                                else -> log.type
+                            }
+
                             Surface(
-                                color = Color(0xFF0F172A),
+                                color = Color(0xFF1E293B),
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(0.6.dp, Color(0xFF334155)),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable { editingLog = log }
                             ) {
-                                Column {
+                                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                                     Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        // 1. Date & Time
-                                        Column(modifier = Modifier.weight(1.2f)) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Surface(
+                                                color = if (isAddition) Color(0xFF16A34A).copy(alpha = 0.2f) else Color(0xFFDC2626).copy(alpha = 0.2f),
+                                                shape = RoundedCornerShape(4.dp)
+                                            ) {
+                                                Text(
+                                                    text = typeLabel,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (isAddition) Color(0xFF4ADE80) else Color(0xFFF87171),
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                    fontSize = 11.sp
+                                                )
+                                            }
                                             Text(
-                                                text = if (language == "bn") "${dateFormatted.first}, ${dateFormatted.second}" else dateFormatted.second,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = Color.White,
-                                                fontSize = 11.sp,
-                                                maxLines = 1,
-                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                            )
-                                            Text(
-                                                text = dateFormatted.third,
+                                                text = if (language == "bn") "${dateFormatted.first}, ${dateFormatted.second} • ${dateFormatted.third}" else "${dateFormatted.second} • ${dateFormatted.third}",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = Color(0xFF94A3B8),
-                                                fontSize = 9.sp
+                                                fontSize = 11.sp
                                             )
                                         }
 
-                                        // 2. Note
-                                        Column(modifier = Modifier.weight(1.4f)) {
-                                            Text(
-                                                text = log.note.ifBlank {
-                                                    when (log.type) {
-                                                        "DEPOSIT" -> if (language == "bn") "ক্যাশ জমা" else "Cash Deposit"
-                                                        "WITHDRAWAL" -> if (language == "bn") "ক্যাশ উত্তোলন" else "Cash Withdrawal"
-                                                        "DAY_END_CLOSING" -> if (language == "bn") "আজকের বিক্রি" else "Today's Sale"
-                                                        "MANUAL_ADJUST" -> if (language == "bn") "ব্যালেন্স সংশোধন" else "Balance Set"
-                                                        else -> log.type
-                                                    }
-                                                },
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = FontWeight.Medium,
-                                                color = Color.White,
-                                                fontSize = 12.sp,
-                                                maxLines = 2,
-                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                            )
-                                        }
-
-                                        // 3. Income Column (Green)
                                         Text(
-                                            text = if (isAddition) (log.amount.toIntOrNull()?.toString() ?: log.amount.toString()) else "",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF4ADE80),
-                                            textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                                            fontSize = 12.sp,
-                                            modifier = Modifier.weight(0.9f)
-                                        )
-
-                                        // 4. Expense Column (Red)
-                                        Text(
-                                            text = if (!isAddition) (log.amount.toIntOrNull()?.toString() ?: log.amount.toString()) else "",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color(0xFFF87171),
-                                            textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                                            fontSize = 12.sp,
-                                            modifier = Modifier.weight(0.9f)
+                                            text = "${if (isAddition) "+" else "-"}$currency${log.amount.toIntOrNull() ?: log.amount}",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = if (isAddition) Color(0xFF4ADE80) else Color(0xFFF87171)
                                         )
                                     }
 
-                                    HorizontalDivider(color = Color(0xFF1E293B), thickness = 0.6.dp)
+                                    if (log.note.isNotBlank()) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = log.note,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = Color(0xFFE2E8F0),
+                                            fontSize = 12.sp
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -2017,7 +2060,7 @@ fun CashHistoryDialog(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Button(
@@ -2026,12 +2069,12 @@ fun CashHistoryDialog(
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(40.dp)
+                                    .height(42.dp)
                             ) {
                                 Icon(Icons.Default.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = if (language == "bn") "আয়" else "In",
+                                    text = if (language == "bn") "+ আয় (Cash In)" else "+ Cash In",
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
@@ -2044,103 +2087,17 @@ fun CashHistoryDialog(
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(40.dp)
+                                    .height(42.dp)
                             ) {
                                 Icon(Icons.Default.Remove, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = if (language == "bn") "খরচ" else "Out",
+                                    text = if (language == "bn") "- খরচ (Cash Out)" else "- Cash Out",
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
                                 )
                             }
-                        }
-                    }
-                }
-
-                // Bottom Sticky Summary Footer (মোট আয় | মোট খরচ | ব্যালেন্স)
-                Surface(
-                    color = Color(0xFF0F172A),
-                    border = BorderStroke(1.dp, Color(0xFF334155)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = if (language == "bn") "মোট আয়" else "Total In",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF94A3B8),
-                                fontSize = 10.sp
-                            )
-                            Text(
-                                text = "$currency${totalIncome.toIntOrNull() ?: totalIncome}",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF4ADE80),
-                                fontSize = 12.sp
-                            )
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .width(1.dp)
-                                .height(24.dp)
-                                .background(Color(0xFF334155))
-                        )
-
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = if (language == "bn") "মোট খরচ" else "Total Out",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF94A3B8),
-                                fontSize = 10.sp
-                            )
-                            Text(
-                                text = "$currency${totalExpense.toIntOrNull() ?: totalExpense}",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFF87171),
-                                fontSize = 12.sp
-                            )
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .width(1.dp)
-                                .height(24.dp)
-                                .background(Color(0xFF334155))
-                        )
-
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = if (language == "bn") "ব্যালেন্স" else "Balance",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF94A3B8),
-                                fontSize = 10.sp
-                            )
-                            Text(
-                                text = "$currency${netBalance.toIntOrNull() ?: netBalance}",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = if (netBalance >= 0) Color(0xFF60A5FA) else Color(0xFFF87171),
-                                fontSize = 12.sp
-                            )
                         }
                     }
                 }

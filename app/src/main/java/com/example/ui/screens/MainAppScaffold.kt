@@ -57,6 +57,7 @@ fun MainAppScaffold(
     var currentScreen by remember { mutableStateOf(ShopScreen.DASHBOARD) }
     val language by viewModel.language.collectAsState()
     val shopInfo by viewModel.shopInfo.collectAsState()
+    val customCategories by viewModel.customCategories.collectAsState()
     val invoiceDetails by viewModel.currentInvoice.collectAsState()
 
     var showQuickStockInDialog by remember { mutableStateOf(false) }
@@ -242,6 +243,7 @@ fun MainAppScaffold(
                 product = null,
                 currency = shopInfo.currency,
                 language = language,
+                savedCategories = customCategories,
                 onDismiss = { showQuickStockInDialog = false },
                 onSave = { newProd ->
                     viewModel.saveProduct(newProd)
