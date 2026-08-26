@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.app.DatePickerDialog
 import android.content.Intent
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
@@ -90,9 +91,126 @@ fun DashboardScreen(
     var showCashHistoryDialog by remember { mutableStateOf(false) }
     var editingTransaction by remember { mutableStateOf<TransactionRecord?>(null) }
 
+    // Date Filter State for All Transactions: "TODAY", "YESTERDAY", "WEEK", "MONTH", "CUSTOM", "ALL"
+    var selectedDateFilter by remember { mutableStateOf("TODAY") }
+    var customDateTimestamp by remember { mutableStateOf<Long?>(null) }
+    var customDateLabel by remember { mutableStateOf("") }
+    var selectedTypeFilter by remember { mutableStateOf("ALL") } // "ALL", "SALE", "DUE", "STOCK_IN"
+    var txSearchQuery by remember { mutableStateOf("") }
+
     val todayDateFormatted = remember {
         val sdf = SimpleDateFormat("EEEE, d MMMM yyyy", if (language == "bn") Locale("bn", "BD") else Locale.ENGLISH)
         sdf.format(Date())
+    }
+
+    // Calculate time ranges for date filtering
+    val (dateRangeStart, dateRangeEnd, dateFilterDisplayName) = remember(selectedDateFilter, customDateTimestamp, language) {
+        val cal = Calendar.getInstance()
+        val nowTime = System.currentTimeMillis()
+        val dateDisplaySdf = SimpleDateFormat("d MMMM yyyy", if (language == "bn") Locale("bn", "BD") else Locale.ENGLISH)
+
+        when (selectedDateFilter) {
+            "TODAY" -> {
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+                val start = cal.timeInMillis
+                val end = start + 86400000L - 1L
+                Triple(start, end, if (language == "bn") "আজ (${dateDisplaySdf.format(Date(start))})" else "Today (${dateDisplaySdf.format(Date(start))})")
+            }
+            "YESTERDAY" -> {
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+                cal.add(Calendar.DAY_OF_YEAR, -1)
+                val start = cal.timeInMillis
+                val end = start + 86400000L - 1L
+                Triple(start, end, if (language == "bn") "গতকাল (${dateDisplaySdf.format(Date(start))})" else "Yesterday (${dateDisplaySdf.format(Date(start))})")
+            }
+            "WEEK" -> {
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+                cal.add(Calendar.DAY_OF_YEAR, -6)
+                val start = cal.timeInMillis
+                Triple(start, nowTime, if (language == "bn") "গত ৭ দিন" else "Last 7 Days")
+            }
+            "MONTH" -> {
+                cal.set(Calendar.DAY_OF_MONTH, 1)
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+                val start = cal.timeInMillis
+                Triple(start, nowTime, if (language == "bn") "চলতি মাস" else "This Month")
+            }
+            "CUSTOM" -> {
+                val target = customDateTimestamp ?: startOfToday
+                val start = target
+                val end = target + 86400000L - 1L
+                Triple(start, end, if (customDateLabel.isNotBlank()) customDateLabel else dateDisplaySdf.format(Date(target)))
+            }
+            else -> {
+                Triple(0L, Long.MAX_VALUE, if (language == "bn") "সব লেনদেন (সর্বকালীন)" else "All Transactions")
+            }
+        }
+    }
+
+    // Filter transactions based on date, type, and search query
+    val filteredTransactions = remember(allTransactions, dateRangeStart, dateRangeEnd, selectedTypeFilter, txSearchQuery) {
+        allTransactions.filter { tx ->
+            val matchDate = tx.timestamp in dateRangeStart..dateRangeEnd
+            val matchType = when (selectedTypeFilter) {
+                "SALE" -> tx.type == "SALE"
+                "DUE" -> tx.type == "SALE" && tx.dueAmount > 0
+                "STOCK_IN" -> tx.type == "STOCK_IN" || tx.type == "PURCHASE"
+                else -> true
+            }
+            val matchSearch = if (txSearchQuery.isBlank()) true else {
+                val q = txSearchQuery.trim().lowercase()
+                tx.productName.lowercase().contains(q) ||
+                tx.customerName.lowercase().contains(q) ||
+                tx.customerPhone.lowercase().contains(q) ||
+                tx.invoiceNumber.lowercase().contains(q) ||
+                tx.note.lowercase().contains(q)
+            }
+            matchDate && matchType && matchSearch
+        }
+    }
+
+    // Summary calculations for the filtered transactions
+    val filteredTotalSales = remember(filteredTransactions) {
+        filteredTransactions.filter { it.type == "SALE" }.sumOf { it.totalAmount }
+    }
+    val filteredTotalProfit = remember(filteredTransactions) {
+        filteredTransactions.filter { it.type == "SALE" }.sumOf { it.profitAmount }
+    }
+    val filteredTotalCashPaid = remember(filteredTransactions) {
+        filteredTransactions.filter { it.type == "SALE" }.sumOf { it.paidAmount }
+    }
+    val filteredTotalDue = remember(filteredTransactions) {
+        filteredTransactions.filter { it.type == "SALE" }.sumOf { it.dueAmount }
+    }
+
+    // Group transactions by formatted date string
+    val groupedTransactions = remember(filteredTransactions, language) {
+        val groupSdf = SimpleDateFormat("yyyyMMdd", Locale.US)
+        val headerSdf = SimpleDateFormat("EEEE, d MMMM yyyy", if (language == "bn") Locale("bn", "BD") else Locale.ENGLISH)
+        val todayStr = groupSdf.format(Date(startOfToday))
+        val yesterdayStr = groupSdf.format(Date(startOfToday - 86400000L))
+
+        filteredTransactions.groupBy { tx ->
+            val key = groupSdf.format(Date(tx.timestamp))
+            val dateLabel = when (key) {
+                todayStr -> if (language == "bn") "আজ • ${headerSdf.format(Date(tx.timestamp))}" else "Today • ${headerSdf.format(Date(tx.timestamp))}"
+                yesterdayStr -> if (language == "bn") "গতকাল • ${headerSdf.format(Date(tx.timestamp))}" else "Yesterday • ${headerSdf.format(Date(tx.timestamp))}"
+                else -> headerSdf.format(Date(tx.timestamp))
+            }
+            dateLabel
+        }
     }
 
     LazyColumn(
@@ -827,69 +945,399 @@ fun DashboardScreen(
             }
         }
 
-        // 6. Recent Transactions Feed
+        // 6. Interactive Date-Wise Transactions Explorer & Ledger
         item {
-            Row(
+            Card(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
             ) {
-                Text(
-                    text = if (language == "bn") "সাম্প্রতিক লেনদেন" else "Recent Transactions",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-
-                if (recentTxs.isNotEmpty()) {
-                    FilledTonalButton(
-                        onClick = {
-                            val pdfFile = PdfGenerator.generateTransactionsListPdf(
-                                context = context,
-                                shopName = shopInfo.shopName,
-                                title = if (language == "bn") "দোকানের লেনদেন রিপোর্ট (Transactions Record)" else "Shop Transactions Record",
-                                transactions = recentTxs,
-                                currency = currency
-                            )
-                            if (pdfFile != null) {
-                                PdfGenerator.openOrSharePdf(
-                                    context = context,
-                                    file = pdfFile,
-                                    chooserTitle = if (language == "bn") "লেনদেন PDF ডাউনলোড / শেয়ার" else "Download / Share Transactions PDF"
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp)
+                ) {
+                    // Header with Title and PDF Download
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.CalendarMonth,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
-                        },
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        ),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = if (language == "bn") "তারিখ অনুযায়ী সকল লেনদেন" else "Transactions by Date",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = dateFilterDisplayName,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+
+                        if (filteredTransactions.isNotEmpty()) {
+                            FilledTonalButton(
+                                onClick = {
+                                    val pdfFile = PdfGenerator.generateTransactionsListPdf(
+                                        context = context,
+                                        shopName = shopInfo.shopName,
+                                        title = if (language == "bn") "লেনদেন রিপোর্ট - $dateFilterDisplayName" else "Transactions Record - $dateFilterDisplayName",
+                                        transactions = filteredTransactions,
+                                        currency = currency
+                                    )
+                                    if (pdfFile != null) {
+                                        PdfGenerator.openOrSharePdf(
+                                            context = context,
+                                            file = pdfFile,
+                                            chooserTitle = if (language == "bn") "লেনদেন PDF ডাউনলোড / শেয়ার" else "Download / Share Transactions PDF"
+                                        )
+                                    }
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                ),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.height(32.dp)
+                            ) {
+                                Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (language == "bn") "PDF" else "PDF",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Date Filter Chips Row
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = if (language == "bn") "লেনদেন PDF" else "Transactions PDF",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold
+                        // 1. Today
+                        item {
+                            FilterChip(
+                                selected = selectedDateFilter == "TODAY",
+                                onClick = {
+                                    selectedDateFilter = "TODAY"
+                                    customDateTimestamp = null
+                                },
+                                label = { Text(if (language == "bn") "আজকে" else "Today", fontSize = 12.sp) },
+                                leadingIcon = if (selectedDateFilter == "TODAY") {
+                                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                                } else null,
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                        }
+
+                        // 2. Yesterday
+                        item {
+                            FilterChip(
+                                selected = selectedDateFilter == "YESTERDAY",
+                                onClick = {
+                                    selectedDateFilter = "YESTERDAY"
+                                    customDateTimestamp = null
+                                },
+                                label = { Text(if (language == "bn") "গতকাল" else "Yesterday", fontSize = 12.sp) },
+                                leadingIcon = if (selectedDateFilter == "YESTERDAY") {
+                                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                                } else null,
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                        }
+
+                        // 3. Last 7 Days
+                        item {
+                            FilterChip(
+                                selected = selectedDateFilter == "WEEK",
+                                onClick = {
+                                    selectedDateFilter = "WEEK"
+                                    customDateTimestamp = null
+                                },
+                                label = { Text(if (language == "bn") "গত ৭ দিন" else "7 Days", fontSize = 12.sp) },
+                                leadingIcon = if (selectedDateFilter == "WEEK") {
+                                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                                } else null,
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                        }
+
+                        // 4. This Month
+                        item {
+                            FilterChip(
+                                selected = selectedDateFilter == "MONTH",
+                                onClick = {
+                                    selectedDateFilter = "MONTH"
+                                    customDateTimestamp = null
+                                },
+                                label = { Text(if (language == "bn") "চলতি মাস" else "Month", fontSize = 12.sp) },
+                                leadingIcon = if (selectedDateFilter == "MONTH") {
+                                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                                } else null,
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                        }
+
+                        // 5. Custom Date Picker Button (Interactive Calendar Dialog)
+                        item {
+                            Button(
+                                onClick = {
+                                    val pickerCal = Calendar.getInstance()
+                                    if (customDateTimestamp != null) {
+                                        pickerCal.timeInMillis = customDateTimestamp!!
+                                    }
+                                    DatePickerDialog(
+                                        context,
+                                        { _, y, m, d ->
+                                            val selectedCal = Calendar.getInstance().apply {
+                                                set(Calendar.YEAR, y)
+                                                set(Calendar.MONTH, m)
+                                                set(Calendar.DAY_OF_MONTH, d)
+                                                set(Calendar.HOUR_OF_DAY, 0)
+                                                set(Calendar.MINUTE, 0)
+                                                set(Calendar.SECOND, 0)
+                                                set(Calendar.MILLISECOND, 0)
+                                            }
+                                            customDateTimestamp = selectedCal.timeInMillis
+                                            val customSdf = SimpleDateFormat("d MMMM yyyy", if (language == "bn") Locale("bn", "BD") else Locale.ENGLISH)
+                                            customDateLabel = customSdf.format(selectedCal.time)
+                                            selectedDateFilter = "CUSTOM"
+                                        },
+                                        pickerCal.get(Calendar.YEAR),
+                                        pickerCal.get(Calendar.MONTH),
+                                        pickerCal.get(Calendar.DAY_OF_MONTH)
+                                    ).show()
+                                },
+                                colors = if (selectedDateFilter == "CUSTOM") {
+                                    ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                } else {
+                                    ButtonDefaults.outlinedButtonColors()
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.height(32.dp)
+                            ) {
+                                Icon(Icons.Default.EditCalendar, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (selectedDateFilter == "CUSTOM" && customDateLabel.isNotBlank()) customDateLabel else (if (language == "bn") "তারিখ বাছুন 🗓️" else "Pick Date 🗓️"),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+
+                        // 6. All Time
+                        item {
+                            FilterChip(
+                                selected = selectedDateFilter == "ALL",
+                                onClick = {
+                                    selectedDateFilter = "ALL"
+                                    customDateTimestamp = null
+                                },
+                                label = { Text(if (language == "bn") "সব সময়" else "All Time", fontSize = 12.sp) },
+                                leadingIcon = if (selectedDateFilter == "ALL") {
+                                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                                } else null,
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Type Filter Chips & Search Bar Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Type chips
+                        FilterChip(
+                            selected = selectedTypeFilter == "ALL",
+                            onClick = { selectedTypeFilter = "ALL" },
+                            label = { Text(if (language == "bn") "সব" else "All", fontSize = 11.sp) },
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.height(28.dp)
+                        )
+                        FilterChip(
+                            selected = selectedTypeFilter == "SALE",
+                            onClick = { selectedTypeFilter = "SALE" },
+                            label = { Text(if (language == "bn") "🛍️ বিক্রি" else "Sales", fontSize = 11.sp) },
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.height(28.dp)
+                        )
+                        FilterChip(
+                            selected = selectedTypeFilter == "DUE",
+                            onClick = { selectedTypeFilter = "DUE" },
+                            label = { Text(if (language == "bn") "🟠 বাকি" else "Due", fontSize = 11.sp) },
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.height(28.dp)
+                        )
+                        FilterChip(
+                            selected = selectedTypeFilter == "STOCK_IN",
+                            onClick = { selectedTypeFilter = "STOCK_IN" },
+                            label = { Text(if (language == "bn") "📦 স্টক ইন" else "Stock", fontSize = 11.sp) },
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.height(28.dp)
                         )
                     }
-                } else {
-                    Text(
-                        text = "${recentTxs.size} ${if (language == "bn") "টি" else "items"}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Search input
+                    OutlinedTextField(
+                        value = txSearchQuery,
+                        onValueChange = { txSearchQuery = it },
+                        placeholder = {
+                            Text(
+                                if (language == "bn") "মেমো নং, কাস্টমার বা পণ্যের নাম দিয়ে খুঁজুন..." else "Search memo, customer, product...",
+                                fontSize = 12.sp
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
+                        },
+                        trailingIcon = {
+                            if (txSearchQuery.isNotBlank()) {
+                                IconButton(onClick = { txSearchQuery = "" }, modifier = Modifier.size(24.dp)) {
+                                    Icon(Icons.Default.Clear, contentDescription = "Clear", modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
                     )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Realtime Summary Mini Card for Selected Filter
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // 1. Total Sales
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = if (language == "bn") "মোট বিক্রি" else "Total Sales",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                                Text(
+                                    text = "$currency${filteredTotalSales.toIntOrNull() ?: filteredTotalSales}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = EmeraldPrimary
+                                )
+                            }
+
+                            VerticalDivider(modifier = Modifier.height(24.dp), color = MaterialTheme.colorScheme.outlineVariant)
+
+                            // 2. Realized Profit
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = if (language == "bn") "মোট লাভ" else "Profit",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                                Text(
+                                    text = "$currency${filteredTotalProfit.toIntOrNull() ?: String.format(Locale.US, "%.1f", filteredTotalProfit)}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (filteredTotalProfit >= 0) ProfitGreen else LossRed
+                                )
+                            }
+
+                            VerticalDivider(modifier = Modifier.height(24.dp), color = MaterialTheme.colorScheme.outlineVariant)
+
+                            // 3. Cash Paid
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = if (language == "bn") "নগদ আদায়" else "Cash In",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                                Text(
+                                    text = "$currency${filteredTotalCashPaid.toIntOrNull() ?: filteredTotalCashPaid}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = ProfitGreen
+                                )
+                            }
+
+                            VerticalDivider(modifier = Modifier.height(24.dp), color = MaterialTheme.colorScheme.outlineVariant)
+
+                            // 4. Total Due
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = if (language == "bn") "বাকি বিক্রি" else "Due Sales",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                                Text(
+                                    text = "$currency${filteredTotalDue.toIntOrNull() ?: filteredTotalDue}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (filteredTotalDue > 0) DueOrange else MaterialTheme.colorScheme.outline
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        if (recentTxs.isEmpty()) {
+        // 7. Grouped Chronological Transactions Feed
+        if (filteredTransactions.isEmpty()) {
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                 ) {
                     Box(
                         modifier = Modifier
@@ -897,26 +1345,76 @@ fun DashboardScreen(
                             .padding(28.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = if (language == "bn") "এখনও কোনো লেনদেন রেকর্ড হয়নি" else "No transactions recorded yet",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.outline
-                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Default.ReceiptLong,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.size(36.dp)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = if (language == "bn") "এই তারিখ / ফিল্টারে কোনো লেনদেন পাওয়া যায়নি" else "No transactions found for this date/filter",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.outline,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
                 }
             }
         } else {
-            items(recentTxs.take(10)) { tx ->
-                TransactionFeedItem(
-                    tx = tx,
-                    currency = currency,
-                    language = language,
-                    onClick = {
-                        if (tx.type == "SALE") {
-                            editingTransaction = tx
+            groupedTransactions.forEach { (dateHeader, txsInGroup) ->
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.Event,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = dateHeader,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            Text(
+                                text = "${txsInGroup.size} ${if (language == "bn") "টি লেনদেন" else "txs"}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
-                )
+                }
+
+                items(txsInGroup) { tx ->
+                    TransactionFeedItem(
+                        tx = tx,
+                        currency = currency,
+                        language = language,
+                        onClick = {
+                            if (tx.type == "SALE") {
+                                editingTransaction = tx
+                            }
+                        }
+                    )
+                }
             }
         }
     }

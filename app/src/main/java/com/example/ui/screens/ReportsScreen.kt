@@ -1,10 +1,12 @@
 package com.example.ui.screens
 
+import android.app.DatePickerDialog
 import android.content.Intent
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -43,39 +45,66 @@ fun ReportsScreen(
     val language by viewModel.language.collectAsState()
     val currency = shopInfo.currency
 
-    var selectedPeriod by remember { mutableStateOf("TODAY") } // TODAY, WEEK, MONTH, ALL
+    var selectedPeriod by remember { mutableStateOf("TODAY") } // TODAY, YESTERDAY, WEEK, MONTH, CUSTOM, ALL
+    var customTimestamp by remember { mutableStateOf<Long?>(null) }
+    var customLabel by remember { mutableStateOf("") }
     var editingTransaction by remember { mutableStateOf<TransactionRecord?>(null) }
 
-    val periodRange = remember(selectedPeriod) {
+    val dateDisplaySdf = remember(language) {
+        SimpleDateFormat("d MMMM yyyy", if (language == "bn") Locale("bn", "BD") else Locale.ENGLISH)
+    }
+
+    val periodRange = remember(selectedPeriod, customTimestamp) {
         val cal = Calendar.getInstance()
         val endTime = System.currentTimeMillis()
-        val startTime = when (selectedPeriod) {
+        when (selectedPeriod) {
             "TODAY" -> {
                 cal.set(Calendar.HOUR_OF_DAY, 0)
                 cal.set(Calendar.MINUTE, 0)
                 cal.set(Calendar.SECOND, 0)
                 cal.set(Calendar.MILLISECOND, 0)
-                cal.timeInMillis
+                val start = cal.timeInMillis
+                start to (start + 86400000L - 1L)
+            }
+            "YESTERDAY" -> {
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+                cal.add(Calendar.DAY_OF_YEAR, -1)
+                val start = cal.timeInMillis
+                start to (start + 86400000L - 1L)
             }
             "WEEK" -> {
-                cal.add(Calendar.DAY_OF_YEAR, -7)
-                cal.timeInMillis
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+                cal.add(Calendar.DAY_OF_YEAR, -6)
+                cal.timeInMillis to endTime
             }
             "MONTH" -> {
-                cal.add(Calendar.DAY_OF_YEAR, -30)
-                cal.timeInMillis
+                cal.set(Calendar.DAY_OF_MONTH, 1)
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+                cal.timeInMillis to endTime
             }
-            else -> 0L
+            "CUSTOM" -> {
+                val start = customTimestamp ?: System.currentTimeMillis()
+                start to (start + 86400000L - 1L)
+            }
+            else -> 0L to Long.MAX_VALUE
         }
-        startTime to endTime
     }
 
     val periodTransactions = remember(transactions, periodRange) {
-        transactions.filter { it.timestamp >= periodRange.first && it.timestamp <= periodRange.second }
+        transactions.filter { it.timestamp in periodRange.first..periodRange.second }
     }
 
     val periodExpenses = remember(expenses, periodRange) {
-        expenses.filter { it.timestamp >= periodRange.first && it.timestamp <= periodRange.second }
+        expenses.filter { it.timestamp in periodRange.first..periodRange.second }
     }
 
     // Calculations
@@ -99,9 +128,11 @@ fun ReportsScreen(
     }
 
     val periodTitle = when (selectedPeriod) {
-        "TODAY" -> if (language == "bn") "আজকের হিসাব রিপোর্ট" else "Today's Report"
+        "TODAY" -> if (language == "bn") "আজকের হিসাব রিপোর্ট (${dateDisplaySdf.format(Date(periodRange.first))})" else "Today's Report (${dateDisplaySdf.format(Date(periodRange.first))})"
+        "YESTERDAY" -> if (language == "bn") "গতকালের হিসাব রিপোর্ট (${dateDisplaySdf.format(Date(periodRange.first))})" else "Yesterday's Report (${dateDisplaySdf.format(Date(periodRange.first))})"
         "WEEK" -> if (language == "bn") "গত ৭ দিনের রিপোর্ট" else "Last 7 Days Report"
-        "MONTH" -> if (language == "bn") "গত ৩০ দিনের রিপোর্ট" else "Last 30 Days Report"
+        "MONTH" -> if (language == "bn") "চলতি মাসের রিপোর্ট" else "This Month's Report"
+        "CUSTOM" -> if (customLabel.isNotBlank()) customLabel else dateDisplaySdf.format(Date(periodRange.first))
         else -> if (language == "bn") "সর্বকালের মোট রিপোর্ট" else "All Time Report"
     }
 
@@ -114,22 +145,110 @@ fun ReportsScreen(
     ) {
         // Period Tabs
         item {
-            Row(
+            LazyRow(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                listOf(
-                    "TODAY" to if (language == "bn") "আজ" else "Today",
-                    "WEEK" to if (language == "bn") "সপ্তাহ" else "Week",
-                    "MONTH" to if (language == "bn") "মাস" else "Month",
-                    "ALL" to if (language == "bn") "সব সময়" else "All"
-                ).forEach { (key, label) ->
+                item {
                     FilterChip(
-                        selected = selectedPeriod == key,
-                        onClick = { selectedPeriod = key },
-                        label = { Text(label, fontWeight = FontWeight.Bold) },
+                        selected = selectedPeriod == "TODAY",
+                        onClick = {
+                            selectedPeriod = "TODAY"
+                            customTimestamp = null
+                        },
+                        label = { Text(if (language == "bn") "আজ" else "Today", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                }
+                item {
+                    FilterChip(
+                        selected = selectedPeriod == "YESTERDAY",
+                        onClick = {
+                            selectedPeriod = "YESTERDAY"
+                            customTimestamp = null
+                        },
+                        label = { Text(if (language == "bn") "গতকাল" else "Yesterday", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                }
+                item {
+                    FilterChip(
+                        selected = selectedPeriod == "WEEK",
+                        onClick = {
+                            selectedPeriod = "WEEK"
+                            customTimestamp = null
+                        },
+                        label = { Text(if (language == "bn") "গত ৭ দিন" else "7 Days", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                }
+                item {
+                    FilterChip(
+                        selected = selectedPeriod == "MONTH",
+                        onClick = {
+                            selectedPeriod = "MONTH"
+                            customTimestamp = null
+                        },
+                        label = { Text(if (language == "bn") "চলতি মাস" else "Month", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                }
+                item {
+                    Button(
+                        onClick = {
+                            val pickerCal = Calendar.getInstance()
+                            if (customTimestamp != null) {
+                                pickerCal.timeInMillis = customTimestamp!!
+                            }
+                            DatePickerDialog(
+                                context,
+                                { _, y, m, d ->
+                                    val selectedCal = Calendar.getInstance().apply {
+                                        set(Calendar.YEAR, y)
+                                        set(Calendar.MONTH, m)
+                                        set(Calendar.DAY_OF_MONTH, d)
+                                        set(Calendar.HOUR_OF_DAY, 0)
+                                        set(Calendar.MINUTE, 0)
+                                        set(Calendar.SECOND, 0)
+                                        set(Calendar.MILLISECOND, 0)
+                                    }
+                                    customTimestamp = selectedCal.timeInMillis
+                                    customLabel = dateDisplaySdf.format(selectedCal.time)
+                                    selectedPeriod = "CUSTOM"
+                                },
+                                pickerCal.get(Calendar.YEAR),
+                                pickerCal.get(Calendar.MONTH),
+                                pickerCal.get(Calendar.DAY_OF_MONTH)
+                            ).show()
+                        },
+                        colors = if (selectedPeriod == "CUSTOM") {
+                            ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        } else {
+                            ButtonDefaults.outlinedButtonColors()
+                        },
                         shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.weight(1f)
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.height(34.dp)
+                    ) {
+                        Icon(Icons.Default.EditCalendar, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (selectedPeriod == "CUSTOM" && customLabel.isNotBlank()) customLabel else (if (language == "bn") "তারিখ বাছুন 🗓️" else "Pick Date 🗓️"),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+                item {
+                    FilterChip(
+                        selected = selectedPeriod == "ALL",
+                        onClick = {
+                            selectedPeriod = "ALL"
+                            customTimestamp = null
+                        },
+                        label = { Text(if (language == "bn") "সব সময়" else "All", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
+                        shape = RoundedCornerShape(10.dp)
                     )
                 }
             }
