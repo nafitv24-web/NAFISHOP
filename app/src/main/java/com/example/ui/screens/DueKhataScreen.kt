@@ -590,7 +590,7 @@ fun CustomerKhataCard(
                 if (customer.totalDue > 0 && customer.phone.isNotBlank()) {
                     IconButton(
                         onClick = {
-                            val msg = "শ্রদ্ধেয় ${customer.name}, $shopName এ আপনার মোট বকেয়া বাকি আছে $currency${customer.totalDue}। অনুগ্রহ করে সুবিধামতো পরিশোধ করার অনুরোধ রইল। ধন্যবাদ।"
+                            val msg = "শ্রদ্ধেয় ${customer.name}, $shopName এ আপনার মোট বকেয়া বাকি আছে $currency${customer.totalDue}। অনুগ্রহ করে সুবিধামতো পরিশোধ করার অনুরোধ রইল। ধন্যবাদ।\n-------------------------\n${com.example.util.CustomerSmsHelper.SPONSOR_FOOTER}"
                             val sendIntent = Intent().apply {
                                 action = Intent.ACTION_SEND
                                 putExtra(Intent.EXTRA_TEXT, msg)
@@ -1363,7 +1363,7 @@ fun CustomerFullHistoryDialog(
                     // Send Message Option
                     FilledTonalButton(
                         onClick = {
-                            val msg = "শ্রদ্ধেয় ${customer.name}, $shopName এ আপনার মোট বাকি আছে $currency${customer.totalDue}। অনুগ্রহ করে দ্রুত পরিশোধ করার অনুরোধ রইল। ধন্যবাদ।"
+                            val msg = "শ্রদ্ধেয় ${customer.name}, $shopName এ আপনার মোট বাকি আছে $currency${customer.totalDue}। অনুগ্রহ করে দ্রুত পরিশোধ করার অনুরোধ রইল। ধন্যবাদ।\n-------------------------\n${com.example.util.CustomerSmsHelper.SPONSOR_FOOTER}"
                             val sendIntent = Intent().apply {
                                 action = Intent.ACTION_SEND
                                 putExtra(Intent.EXTRA_TEXT, msg)

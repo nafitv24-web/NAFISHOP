@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import android.content.Intent
+import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -18,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -27,6 +30,7 @@ import com.example.data.model.Expense
 import com.example.ui.components.toIntOrNull
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.ShopViewModel
+import com.example.util.PdfGenerator
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -36,6 +40,7 @@ fun ExpenseScreen(
     viewModel: ShopViewModel,
     initiallyShowAddDialog: Boolean = false
 ) {
+    val context = LocalContext.current
     val expenses by viewModel.expenses.collectAsState()
     val shopInfo by viewModel.shopInfo.collectAsState()
     val language by viewModel.language.collectAsState()
@@ -140,17 +145,89 @@ fun ExpenseScreen(
                 }
             }
 
-            // Category Filter Chips
-            LazyRow(
-                modifier = Modifier.padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            // Category Filter Chips & Export Actions
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                items(categories) { cat ->
-                    FilterChip(
-                        selected = selectedCategoryFilter == cat,
-                        onClick = { selectedCategoryFilter = cat },
-                        label = { Text(cat, style = MaterialTheme.typography.labelSmall) }
-                    )
+                LazyRow(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(categories) { cat ->
+                        FilterChip(
+                            selected = selectedCategoryFilter == cat,
+                            onClick = { selectedCategoryFilter = cat },
+                            label = { Text(cat, style = MaterialTheme.typography.labelSmall) }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(6.dp))
+
+                // PDF Export Button
+                IconButton(
+                    onClick = {
+                        val pdfFile = PdfGenerator.generateExpensesPdf(
+                            context = context,
+                            shopName = shopInfo.shopName,
+                            expenses = filteredExpenses,
+                            currency = currency
+                        )
+                        if (pdfFile != null) {
+                            PdfGenerator.openOrSharePdf(
+                                context = context,
+                                file = pdfFile,
+                                chooserTitle = if (language == "bn") "খরচের হিসাব PDF শেয়ার করুন" else "Share Expenses PDF"
+                            )
+                        } else {
+                            Toast.makeText(context, "PDF তৈরি করতে সমস্যা হয়েছে", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(Color(0xFFFEF2F2), RoundedCornerShape(8.dp))
+                ) {
+                    Icon(Icons.Default.PictureAsPdf, contentDescription = "PDF", tint = LossRed, modifier = Modifier.size(18.dp))
+                }
+
+                Spacer(modifier = Modifier.width(4.dp))
+
+                // Share Text Button
+                IconButton(
+                    onClick = {
+                        val totalExp = filteredExpenses.sumOf { it.amount }
+                        val shareTxt = buildString {
+                            appendLine("📑 ${shopInfo.shopName} - খরচের হিসাব বিবরণী")
+                            appendLine("ফিল্টার: $selectedCategoryFilter")
+                            appendLine("মোট এন্ট্রি: ${filteredExpenses.size} টি")
+                            appendLine("-----------------------------")
+                            filteredExpenses.take(20).forEachIndexed { idx, exp ->
+                                appendLine("${idx + 1}. ${exp.title} (${exp.category}): $currency${exp.amount.toIntOrNull() ?: exp.amount}")
+                            }
+                            if (filteredExpenses.size > 20) {
+                                appendLine("... এবং আরও ${filteredExpenses.size - 20} টি")
+                            }
+                            appendLine("-----------------------------")
+                            appendLine("সর্বমোট খরচ: $currency${totalExp.toIntOrNull() ?: totalExp}")
+                            appendLine("-----------------------------")
+                            appendLine(com.example.util.CustomerSmsHelper.SPONSOR_FOOTER)
+                        }
+                        val sendIntent = Intent().apply {
+                            action = Intent.ACTION_SEND
+                            putExtra(Intent.EXTRA_TEXT, shareTxt)
+                            type = "text/plain"
+                        }
+                        context.startActivity(Intent.createChooser(sendIntent, "Share Expenses"))
+                    },
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(Color(0xFFF1F5F9), RoundedCornerShape(8.dp))
+                ) {
+                    Icon(Icons.Default.Share, contentDescription = "Share", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                 }
             }
 

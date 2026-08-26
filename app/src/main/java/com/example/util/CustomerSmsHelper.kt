@@ -8,6 +8,10 @@ import com.example.ui.components.toIntOrNull
 
 object CustomerSmsHelper {
 
+    const val SPONSOR_HEADER = "সৌজন্যে নাফি এন্ড নাজমুল টেলিকম"
+    const val SPONSOR_URL = "https://nfiptvserver.blogspot.com/"
+    const val SPONSOR_FOOTER = "সৌজন্যে নাফি এন্ড নাজমুল টেলিকম\nhttps://nfiptvserver.blogspot.com/"
+
     /**
      * Builds the complete customer message containing:
      * - Shop Name & Header
@@ -17,6 +21,7 @@ object CustomerSmsHelper {
      * - Today's New Due amount
      * - Previous Due (পূর্বের বাকি)
      * - Total Outstanding Due (সর্বমোট বর্তমান বকেয়া = পূর্বের বাকি + আজকের বাকি)
+     * - Sponsor Footer with link
      */
     fun buildDueSaleMessage(
         shopName: String,
@@ -56,6 +61,8 @@ object CustomerSmsHelper {
             if (shopPhone.isNotBlank()) {
                 appendLine("দোকান যোগাযোগ: $shopPhone")
             }
+            appendLine("-------------------------")
+            appendLine(SPONSOR_FOOTER)
         }
     }
 
@@ -97,6 +104,8 @@ object CustomerSmsHelper {
             if (shopPhone.isNotBlank()) {
                 appendLine("যোগাযোগ: $shopPhone")
             }
+            appendLine("-------------------------")
+            appendLine(SPONSOR_FOOTER)
         }
     }
 

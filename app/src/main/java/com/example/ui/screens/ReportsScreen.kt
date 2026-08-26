@@ -176,6 +176,8 @@ fun ReportsScreen(
                                         appendLine("দোকানের মোট খরচ: $currency$totalExpensesSum")
                                         appendLine("-----------------------------")
                                         appendLine("✨ নিট লাভ (Net Profit): $currency$netProfit")
+                                        appendLine("-----------------------------")
+                                        appendLine(com.example.util.CustomerSmsHelper.SPONSOR_FOOTER)
                                     }
                                     val sendIntent = Intent().apply {
                                         action = Intent.ACTION_SEND

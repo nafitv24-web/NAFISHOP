@@ -468,6 +468,8 @@ fun InvoiceDialog(
                                 }
                                 appendLine("পেমেন্ট মাধ্যম: ${invoice.paymentMethod}")
                                 appendLine("ধন্যবাদ!")
+                                appendLine("-----------------------------")
+                                appendLine(com.example.util.CustomerSmsHelper.SPONSOR_FOOTER)
                             }
                             val sendIntent = Intent().apply {
                                 action = Intent.ACTION_SEND
