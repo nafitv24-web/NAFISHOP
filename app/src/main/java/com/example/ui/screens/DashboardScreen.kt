@@ -56,11 +56,28 @@ fun DashboardScreen(
     val summary by viewModel.dashboardSummary.collectAsState()
     val lowStockItems by viewModel.lowStockProducts.collectAsState()
     val recentTxs by viewModel.recentTransactions.collectAsState()
+    val allTransactions by viewModel.allTransactions.collectAsState()
+    val customers by viewModel.customers.collectAsState()
+    val dueLogs by viewModel.dueLogs.collectAsState()
     val shopInfo by viewModel.shopInfo.collectAsState()
     val language by viewModel.language.collectAsState()
     val cashLogs by viewModel.cashLogs.collectAsState()
     val mainBalance = shopInfo.mainBalance
     val currency = shopInfo.currency
+
+    val calendar = remember {
+        Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+    }
+    val startOfToday = calendar.timeInMillis
+
+    val todayDueSalesList = remember(allTransactions) {
+        allTransactions.filter { it.timestamp >= startOfToday && it.type == "SALE" && it.dueAmount > 0 }
+    }
 
     var showAddCashDialog by remember { mutableStateOf(false) }
     var showWithdrawCashDialog by remember { mutableStateOf(false) }
@@ -166,6 +183,13 @@ fun DashboardScreen(
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
                                 )
+                                if (summary.todayDueSales > 0) {
+                                    Text(
+                                        text = "${if (language == "bn") "নগদ:" else "Cash:"} $currency${summary.todayCashSales.toIntOrNull() ?: summary.todayCashSales}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFFA7F3D0)
+                                    )
+                                }
                             }
                             Box(
                                 modifier = Modifier
@@ -194,7 +218,7 @@ fun DashboardScreen(
                             )
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
-                                    text = if (language == "bn") "মোট বাকি" else "Total Due",
+                                    text = if (language == "bn") "মোট বকেয়া বাকি" else "Total Due",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = Color(0xFFFED7AA)
                                 )
@@ -204,6 +228,13 @@ fun DashboardScreen(
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFFFDBA74)
                                 )
+                                if (summary.todayDueSales > 0) {
+                                    Text(
+                                        text = "+$currency${summary.todayDueSales.toIntOrNull() ?: summary.todayDueSales} ${if (language == "bn") "আজকে" else "today"}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFFFED7AA)
+                                    )
+                                }
                             }
                         }
                     }
@@ -522,6 +553,227 @@ fun DashboardScreen(
                                                 color = LossRed,
                                                 fontWeight = FontWeight.Bold
                                             )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 5.5. Today's Due Sales & Customers (আজকে কার কতো টাকার কোন পণ্যের বাকি নিয়েছে)
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, Color(0xFFFDBA74).copy(alpha = 0.6f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(Color(0xFFFFF7ED), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.AccountBalanceWallet,
+                                    contentDescription = null,
+                                    tint = DueOrange,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = if (language == "bn") "আজকের বাকিতে বিক্রি ও কাস্টমার তালিকা" else "Today's Credit Sales & Due",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = if (language == "bn") "আজকের মোট বাকি: $currency${summary.todayDueSales.toIntOrNull() ?: summary.todayDueSales} (ক্যাশে যোগ হয়নি)" else "Today's Due: $currency${summary.todayDueSales}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = DueOrange,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+
+                        TextButton(onClick = onNavigateToDue) {
+                            Text(
+                                text = if (language == "bn") "বাকি খাতা" else "Due Khata",
+                                color = DueOrange,
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+
+                    if (todayDueSalesList.isEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFFFAFAFA),
+                            border = CardDefaults.outlinedCardBorder(),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = ProfitGreen, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (language == "bn") "আজকে নতুন কোনো বাকি দেওয়া হয়নি।" else "No credit sales recorded today.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                        }
+                    } else {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            todayDueSalesList.forEach { tx ->
+                                val matchingCust = customers.find {
+                                    (tx.customerPhone.isNotBlank() && it.phone == tx.customerPhone) ||
+                                    (tx.customerName.isNotBlank() && it.name.equals(tx.customerName, ignoreCase = true))
+                                }
+                                val custTotalDue = matchingCust?.totalDue ?: tx.dueAmount
+                                val prevDue = (custTotalDue - tx.dueAmount).coerceAtLeast(0.0)
+
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = Color(0xFFFFFBEB),
+                                    border = BorderStroke(1.dp, Color(0xFFFDE68A)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(10.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = tx.customerName.ifBlank { "কাস্টমার" },
+                                                    style = MaterialTheme.typography.titleSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFF78350F)
+                                                )
+                                                if (tx.customerPhone.isNotBlank()) {
+                                                    Text(
+                                                        text = "📞 ${tx.customerPhone}",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = Color(0xFF92400E)
+                                                    )
+                                                }
+                                            }
+
+                                            Column(horizontalAlignment = Alignment.End) {
+                                                Text(
+                                                    text = "আজকের বাকি: $currency${tx.dueAmount.toIntOrNull() ?: tx.dueAmount}",
+                                                    style = MaterialTheme.typography.titleSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = LossRed
+                                                )
+                                                Text(
+                                                    text = "মোট বর্তমান বকেয়া: $currency${custTotalDue.toIntOrNull() ?: custTotalDue}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFFB45309)
+                                                )
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        // Product detail
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = Color.White,
+                                            border = CardDefaults.outlinedCardBorder(),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(Icons.Default.ShoppingBag, contentDescription = null, tint = StockBlue, modifier = Modifier.size(14.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = "পণ্য: ${tx.productName} (${tx.quantity.toIntOrNull() ?: tx.quantity} ${tx.unit}) • মোট বিল: $currency${tx.totalAmount.toIntOrNull() ?: tx.totalAmount} (জমা: $currency${tx.paidAmount.toIntOrNull() ?: tx.paidAmount})",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = Color(0xFF334155),
+                                                    maxLines = 2
+                                                )
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(6.dp))
+
+                                        // SMS and WhatsApp Actions for this specific customer
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            val smsMsg = com.example.util.CustomerSmsHelper.buildDueSaleMessage(
+                                                shopName = shopInfo.shopName,
+                                                shopPhone = shopInfo.phone,
+                                                customerName = tx.customerName.ifBlank { "সম্মানিত ক্রেতা" },
+                                                invoiceNo = tx.invoiceNumber,
+                                                purchasedItemsSummary = "• ${tx.productName} (${tx.quantity.toIntOrNull() ?: tx.quantity} ${tx.unit}) = $currency${tx.totalAmount.toIntOrNull() ?: tx.totalAmount}",
+                                                saleTotal = tx.totalAmount,
+                                                paidAmount = tx.paidAmount,
+                                                todayNewDue = tx.dueAmount,
+                                                previousDue = prevDue,
+                                                totalCurrentDue = custTotalDue,
+                                                currency = currency
+                                            )
+
+                                            Button(
+                                                onClick = {
+                                                    com.example.util.CustomerSmsHelper.sendDirectSms(
+                                                        context = context,
+                                                        phone = tx.customerPhone,
+                                                        message = smsMsg
+                                                    )
+                                                },
+                                                colors = ButtonDefaults.buttonColors(containerColor = DueOrange),
+                                                shape = RoundedCornerShape(8.dp),
+                                                modifier = Modifier.weight(1f),
+                                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                            ) {
+                                                Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(if (language == "bn") "এসএমএস পাঠান" else "Send SMS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                            }
+
+                                            OutlinedButton(
+                                                onClick = {
+                                                    com.example.util.CustomerSmsHelper.sendWhatsAppMessage(
+                                                        context = context,
+                                                        phone = tx.customerPhone,
+                                                        message = smsMsg
+                                                    )
+                                                },
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = ProfitGreen),
+                                                shape = RoundedCornerShape(8.dp),
+                                                modifier = Modifier.weight(1f),
+                                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                            ) {
+                                                Icon(Icons.Default.Chat, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(if (language == "bn") "হোয়াটসঅ্যাপ" else "WhatsApp", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                            }
                                         }
                                     }
                                 }
@@ -1012,11 +1264,10 @@ fun DayEndSettlementDialog(
     onDismiss: () -> Unit,
     onConfirm: (settledAmount: Double, note: String) -> Unit
 ) {
-    // The net cash generated today is calculated accurately:
-    // Today's total sales (cash portion) or total sales
-    val defaultClosingAmount = summary.todaySales
+    // The actual cash received today from sales & due collections (excluding unpaid due sales):
+    val defaultClosingAmount = summary.todayCashSales + summary.todayCollectedDue
     var customAmountStr by remember { mutableStateOf(defaultClosingAmount.toIntOrNull()?.toString() ?: defaultClosingAmount.toString()) }
-    var note by remember { mutableStateOf("আজকের দিনের মোট বিক্রির ক্যাশ ক্লোজিং") }
+    var note by remember { mutableStateOf("আজকের দিনের নগদ বিক্রি ও আদায় ক্যাশ ক্লোজিং") }
 
     val settledAmount = customAmountStr.toDoubleOrNull() ?: 0.0
     val newExpectedBalance = currentMainBalance + settledAmount
@@ -1060,7 +1311,7 @@ fun DayEndSettlementDialog(
                                 color = EmeraldPrimary
                             )
                             Text(
-                                text = if (language == "bn") "বিক্রির ক্যাশ ড্রয়ার হিসাব মিলান" else "Reconcile register with main cash",
+                                text = if (language == "bn") "নগদ বিক্রি ও আদায় মূল ক্যাশে যুক্তকরণ" else "Reconcile register with main cash",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.outline
                             )
@@ -1075,7 +1326,7 @@ fun DayEndSettlementDialog(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
-                    text = if (language == "bn") "দোকানের মূল ক্যাশে সারাদিনের বিক্রি সরাসরি যোগ হয় না। দিনশেষে ক্যাশ ড্রয়ারে থাকা বিক্রির টাকা গুনে মূল ক্যাশে যুক্ত করুন।" else "Sales are held in the register and not auto-added to main cash. Settle the counted cash at the end of the day.",
+                    text = if (language == "bn") "বাকিতে বিক্রি সরাসরি মোট বাকিতে জমা হয়। দিনশেষে ড্রয়ারে থাকা আজকের নগদ বিক্রি ও বাকি আদায়ের আসল ক্যাশ গুনে মূল ক্যাশে যুক্ত করুন।" else "Due sales are recorded in Total Due. Only actual cash collected should be added to main balance.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1102,20 +1353,48 @@ fun DayEndSettlementDialog(
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(
-                                text = if (language == "bn") "২. আজকের মোট বিক্রি (+):" else "2. Today's Total Sales (+):",
+                                text = if (language == "bn") "২. আজকের নগদ বিক্রি (+):" else "2. Today's Cash Sales (+):",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = ProfitGreen
                             )
                             Text(
-                                text = "+$currency${summary.todaySales.toIntOrNull() ?: summary.todaySales}",
+                                text = "+$currency${summary.todayCashSales.toIntOrNull() ?: summary.todayCashSales}",
                                 fontWeight = FontWeight.Bold,
                                 color = ProfitGreen
                             )
                         }
+                        if (summary.todayCollectedDue > 0) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(
+                                    text = if (language == "bn") "৩. আজকের বাকি আদায় (+):" else "3. Today's Due Collected (+):",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = EmeraldPrimary
+                                )
+                                Text(
+                                    text = "+$currency${summary.todayCollectedDue.toIntOrNull() ?: summary.todayCollectedDue}",
+                                    fontWeight = FontWeight.Bold,
+                                    color = EmeraldPrimary
+                                )
+                            }
+                        }
+                        if (summary.todayDueSales > 0) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(
+                                    text = if (language == "bn") "৪. আজকের বাকিতে বিক্রি (বকেয়া):" else "4. Today's Due Sales (Credit):",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = DueOrange
+                                )
+                                Text(
+                                    text = "$currency${summary.todayDueSales.toIntOrNull() ?: summary.todayDueSales} (ক্যাশে যোগ হবে না)",
+                                    fontWeight = FontWeight.Bold,
+                                    color = DueOrange
+                                )
+                            }
+                        }
                         if (summary.todayExpenses > 0) {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(
-                                    text = if (language == "bn") "৩. আজকের খরচ (-):" else "3. Today's Expenses (-):",
+                                    text = if (language == "bn") "৫. আজকের খরচ (-):" else "5. Today's Expenses (-):",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = LossRed
                                 )
@@ -1139,6 +1418,26 @@ fun DayEndSettlementDialog(
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = EmeraldPrimary
+                            )
+                        }
+                    }
+                }
+
+                if (summary.todayDueSales > 0) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFFFFFBEB),
+                        border = BorderStroke(1.dp, Color(0xFFFDE68A)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Info, contentDescription = null, tint = Color(0xFFB45309), modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (language == "bn") "বাকিতে বিক্রি ৳${summary.todayDueSales.toIntOrNull() ?: summary.todayDueSales} টাকা বকেয়া থাকায় ক্যাশে যোগ হবে না, মোট বাকিতে আছে।" else "Due sales are tracked in Total Due and not in cash drawer.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF92400E)
                             )
                         }
                     }

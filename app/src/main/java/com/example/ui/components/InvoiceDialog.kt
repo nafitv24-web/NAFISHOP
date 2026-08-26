@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import android.content.Intent
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -8,6 +9,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Share
@@ -275,11 +278,24 @@ fun InvoiceDialog(
                         value = "$currency${invoice.paidAmount.toIntOrNull() ?: invoice.paidAmount}",
                         color = ProfitGreen
                     )
-                    if (invoice.dueAmount > 0) {
+                    if (invoice.dueAmount > 0 || invoice.totalCurrentDue > 0) {
                         InvoiceSummaryRow(
-                            label = if (language == "bn") "বাকি টাকা:" else "Due Balance:",
+                            label = if (language == "bn") "আজকের নতুন বাকি:" else "Today's New Due:",
                             value = "$currency${invoice.dueAmount.toIntOrNull() ?: invoice.dueAmount}",
                             color = DueOrange,
+                            isBold = true
+                        )
+                        if (invoice.previousDue > 0) {
+                            InvoiceSummaryRow(
+                                label = if (language == "bn") "পূর্বের বাকি ছিল:" else "Previous Due:",
+                                value = "$currency${invoice.previousDue.toIntOrNull() ?: invoice.previousDue}",
+                                color = Color(0xFF64748B)
+                            )
+                        }
+                        InvoiceSummaryRow(
+                            label = if (language == "bn") "সর্বমোট বর্তমান বকেয়া:" else "Total Current Due:",
+                            value = "$currency${invoice.totalCurrentDue.toIntOrNull() ?: invoice.totalCurrentDue}",
+                            color = LossRed,
                             isBold = true
                         )
                     }
@@ -308,6 +324,89 @@ fun InvoiceDialog(
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF0F172A)
                         )
+                    }
+
+                    // Send SMS to Customer Card (If Due exists or customer has phone)
+                    if (invoice.customerPhone.isNotBlank() || invoice.dueAmount > 0) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFFFFF7ED),
+                            border = BorderStroke(1.dp, Color(0xFFFED7AA)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text(
+                                    text = if (language == "bn") "📱 কাস্টমারকে এসএমএস / নোটিফিকেশন পাঠান" else "📱 Send SMS to Customer",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF9A3412)
+                                )
+                                Text(
+                                    text = if (language == "bn") "পূর্বের বকেয়া ও আজকের কেনা পণ্যসহ মোট বাকি পাঠানো হবে" else "Includes previous balance, purchased items & total due",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFFC2410C)
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    val itemsSummary = invoice.items.joinToString("\n") {
+                                        "• ${it.product.name} (${it.quantity.toIntOrNull() ?: it.quantity} ${it.product.unit}) = $currency${it.total.toIntOrNull() ?: it.total}"
+                                    }
+                                    val dueSms = com.example.util.CustomerSmsHelper.buildDueSaleMessage(
+                                        shopName = invoice.shopName,
+                                        shopPhone = invoice.shopPhone,
+                                        customerName = invoice.customerName,
+                                        invoiceNo = invoice.invoiceNumber,
+                                        purchasedItemsSummary = itemsSummary,
+                                        saleTotal = invoice.grandTotal,
+                                        paidAmount = invoice.paidAmount,
+                                        todayNewDue = invoice.dueAmount,
+                                        previousDue = invoice.previousDue,
+                                        totalCurrentDue = invoice.totalCurrentDue,
+                                        currency = currency
+                                    )
+
+                                    Button(
+                                        onClick = {
+                                            com.example.util.CustomerSmsHelper.sendDirectSms(
+                                                context = context,
+                                                phone = invoice.customerPhone,
+                                                message = dueSms
+                                            )
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.buttonColors(containerColor = DueOrange),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                                    ) {
+                                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(if (language == "bn") "এসএমএস পাঠান" else "Send SMS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = {
+                                            com.example.util.CustomerSmsHelper.sendWhatsAppMessage(
+                                                context = context,
+                                                phone = invoice.customerPhone,
+                                                message = dueSms
+                                            )
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = ProfitGreen),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                                    ) {
+                                        Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(if (language == "bn") "হোয়াটসঅ্যাপ" else "WhatsApp", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))

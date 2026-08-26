@@ -180,8 +180,10 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         expenses,
         customers,
         products,
-        _shopInfo
-    ) { txs, exps, custs, prods, info ->
+        combine(dueLogs, _shopInfo) { dues, info -> Pair(dues, info) }
+    ) { txs, exps, custs, prods, dueAndInfo ->
+        val dues = dueAndInfo.first
+        val info = dueAndInfo.second
         val calendar = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, 0)
             set(Calendar.MINUTE, 0)
@@ -193,21 +195,32 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         val todayTxs = txs.filter { it.timestamp >= startOfToday }
         val todaySales = todayTxs.filter { it.type == "SALE" }.sumOf { it.totalAmount }
         val todayCashSales = todayTxs.filter { it.type == "SALE" }.sumOf { it.paidAmount }
+        val todayDueSales = todayTxs.filter { it.type == "SALE" }.sumOf { it.dueAmount }
+
+        val todayCollectedDue = dues.filter { it.timestamp >= startOfToday && it.type == "DUE_COLLECTED" }.sumOf { it.amount }
+        val todayNewDueGiven = dues.filter { it.timestamp >= startOfToday && it.type == "DUE_GIVEN" }.sumOf { it.amount }
+
         val todayPurchases = todayTxs.filter { it.type == "STOCK_IN" || it.type == "PURCHASE" }.sumOf { it.totalAmount }
         val todaySalesProfit = todayTxs.filter { it.type == "SALE" }.sumOf { it.profitAmount }
 
         val todayExps = exps.filter { it.timestamp >= startOfToday }.sumOf { it.amount }
         val todayNetProfit = todaySalesProfit - todayExps
-        val todayNetCashFlow = todayCashSales - todayExps
+        val todayNetCashFlow = (todayCashSales + todayCollectedDue) - todayExps
 
         val totalDue = custs.sumOf { it.totalDue }
         val totalStockVal = prods.sumOf { it.stockQuantity * it.sellPrice }
         val lowCount = prods.count { it.stockQuantity <= it.minStockAlert }
 
+        val todayEstimatedDrawerCash = (todayCashSales + todayCollectedDue - todayExps).coerceAtLeast(0.0)
+
         DashboardSummary(
             mainBalance = info.mainBalance,
             todaySales = todaySales,
             todayCashSales = todayCashSales,
+            todayDueSales = todayDueSales,
+            todayCollectedDue = todayCollectedDue,
+            todayNewDueGiven = todayNewDueGiven,
+            todayEstimatedDrawerCash = todayEstimatedDrawerCash,
             todayPurchases = todayPurchases,
             todayProfit = todayNetProfit,
             todayExpenses = todayExps,
@@ -672,6 +685,15 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         val discount = cartDiscount.value
         val note = cartNote.value
 
+        val cleanName = customerName.trim()
+        val cleanPhone = customerPhone.trim()
+        val existingCust = customers.value.find {
+            (cleanPhone.isNotBlank() && it.phone == cleanPhone) ||
+            (cleanName.isNotBlank() && cleanName != "ক্যাশ কাস্টমার" && it.name.equals(cleanName, ignoreCase = true))
+        }
+        val prevDue = existingCust?.totalDue ?: 0.0
+        val updatedTotalDue = prevDue + due
+
         viewModelScope.launch {
             val invoiceNo = repository.processSale(
                 cartItems = items,
@@ -696,6 +718,8 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                 grandTotal = net,
                 paidAmount = paid,
                 dueAmount = due,
+                previousDue = prevDue,
+                totalCurrentDue = updatedTotalDue,
                 paymentMethod = paymentMethod,
                 timestamp = System.currentTimeMillis()
             )
@@ -1349,6 +1373,8 @@ data class InvoiceDetails(
     val grandTotal: Double,
     val paidAmount: Double,
     val dueAmount: Double,
+    val previousDue: Double = 0.0,
+    val totalCurrentDue: Double = 0.0,
     val paymentMethod: String,
     val timestamp: Long
 )

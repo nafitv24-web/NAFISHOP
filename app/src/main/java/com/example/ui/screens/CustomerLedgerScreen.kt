@@ -274,13 +274,18 @@ fun CustomerLedgerScreen(
                     if (currentCustomer.phone.isNotBlank()) {
                         IconButton(
                             onClick = {
-                                val msg = "শ্রদ্ধেয় ${currentCustomer.name}, ${shopInfo.shopName} এ আপনার বর্তমান বকেয়া বাকি $currency${currentCustomer.totalDue.toIntOrNull() ?: currentCustomer.totalDue}। অনুগ্রহ করে সুবিধামতো পরিশোধ করার অনুরোধ রইল। ধন্যবাদ।"
-                                val sendIntent = Intent().apply {
-                                    action = Intent.ACTION_SEND
-                                    putExtra(Intent.EXTRA_TEXT, msg)
-                                    type = "text/plain"
-                                }
-                                context.startActivity(Intent.createChooser(sendIntent, "মেসেজ / WhatsApp পাঠান"))
+                                val msg = com.example.util.CustomerSmsHelper.buildLedgerTransactionMessage(
+                                    shopName = shopInfo.shopName,
+                                    shopPhone = shopInfo.phone,
+                                    customerName = currentCustomer.name,
+                                    type = "STATEMENT",
+                                    amount = 0.0,
+                                    note = "বকেয়া বাকি তাগাদা",
+                                    previousDue = currentCustomer.totalDue,
+                                    totalCurrentDue = currentCustomer.totalDue,
+                                    currency = currency
+                                )
+                                com.example.util.CustomerSmsHelper.sendDirectSms(context, currentCustomer.phone, msg)
                             }
                         ) {
                             Icon(Icons.Default.Share, contentDescription = "Share Statement")
@@ -651,6 +656,8 @@ fun CustomerLedgerScreen(
             currency = currency,
             language = language,
             products = products,
+            shopName = shopInfo.shopName,
+            shopPhone = shopInfo.phone,
             onDismiss = { showAddTransactionDialog = false },
             onSave = { type, amount, note, timestamp ->
                 if (type == "GIVEN") {
@@ -808,6 +815,8 @@ fun AddLedgerTransactionDialog(
     currency: String,
     language: String,
     products: List<Product>,
+    shopName: String = "",
+    shopPhone: String = "",
     onDismiss: () -> Unit,
     onSave: (type: String, amount: Double, note: String, timestamp: Long) -> Unit
 ) {
@@ -1092,13 +1101,20 @@ fun AddLedgerTransactionDialog(
                     OutlinedButton(
                         onClick = {
                             val enteredAmount = amountStr.toDoubleOrNull() ?: 0.0
-                            val msg = "শ্রদ্ধেয় ${customer.name}, ${if (selectedType == "GIVEN") "আপনার বাকি প্রদান: $currency$enteredAmount" else "আপনার জমা গ্রহণ: $currency$enteredAmount"}। মোট বকেয়া বাকি: $currency${customer.totalDue}।"
-                            val sendIntent = Intent().apply {
-                                action = Intent.ACTION_SEND
-                                putExtra(Intent.EXTRA_TEXT, msg)
-                                type = "text/plain"
-                            }
-                            context.startActivity(Intent.createChooser(sendIntent, "বার্তা পাঠান"))
+                            val prevDue = customer.totalDue
+                            val totalCurrentDue = if (selectedType == "GIVEN") prevDue + enteredAmount else (prevDue - enteredAmount).coerceAtLeast(0.0)
+                            val msg = com.example.util.CustomerSmsHelper.buildLedgerTransactionMessage(
+                                shopName = shopName,
+                                shopPhone = shopPhone,
+                                customerName = customer.name,
+                                type = selectedType,
+                                amount = enteredAmount,
+                                note = note,
+                                previousDue = prevDue,
+                                totalCurrentDue = totalCurrentDue,
+                                currency = currency
+                            )
+                            com.example.util.CustomerSmsHelper.sendDirectSms(context, customer.phone, msg)
                         },
                         modifier = Modifier
                             .weight(1f)
