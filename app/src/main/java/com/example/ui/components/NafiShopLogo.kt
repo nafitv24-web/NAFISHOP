@@ -79,7 +79,7 @@ fun NafiShopFullBrandCard(
     Card(
         shape = RoundedCornerShape(20.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = CardDefaults.outlinedCardBorder(),
         modifier = modifier.fillMaxWidth()
     ) {
@@ -156,14 +156,14 @@ fun NafiShopFullBrandCard(
                         text = "NAFI SHOP 24",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Black,
-                        color = Color(0xFF1E1B4B),
+                        color = MaterialTheme.colorScheme.onSurface,
                         letterSpacing = 1.sp
                     )
                     Text(
                         text = "নাফি শপ ২৪",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.ExtraBold,
-                        color = Color(0xFFD97706)
+                        color = AmberTertiary
                     )
                 }
             }
@@ -173,7 +173,7 @@ fun NafiShopFullBrandCard(
                 Text(
                     text = tagline,
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF475569),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.Medium
                 )
             }
@@ -209,74 +209,155 @@ private fun drawNafiShopIcon(scope: DrawScope) {
         val w = size.width
         val h = size.height
 
-        // White Notepad Body
-        val sheetLeft = w * 0.15f
-        val sheetTop = h * 0.15f
-        val sheetW = w * 0.70f
-        val sheetH = h * 0.70f
+        // Outer Dark Purple / Gold accent background base
+        val padLeft = w * 0.12f
+        val padTop = h * 0.12f
+        val padW = w * 0.76f
+        val padH = h * 0.76f
 
-        // Shadow & Notepad
+        // Ledger Notebook Shadow
         drawRoundRect(
-            color = Color(0x30000000),
-            topLeft = Offset(sheetLeft + w * 0.03f, sheetTop + h * 0.03f),
-            size = Size(sheetW, sheetH),
-            cornerRadius = CornerRadius(w * 0.06f, w * 0.06f)
+            color = Color(0x35000000),
+            topLeft = Offset(padLeft + w * 0.03f, padTop + h * 0.03f),
+            size = Size(padW, padH),
+            cornerRadius = CornerRadius(w * 0.08f, w * 0.08f)
         )
+
+        // Purple Notebook Cover Binding
+        drawRoundRect(
+            color = Color(0xFF2E1065),
+            topLeft = Offset(padLeft, padTop),
+            size = Size(padW, padH),
+            cornerRadius = CornerRadius(w * 0.08f, w * 0.08f)
+        )
+
+        // Gold Ledger Outer Stroke
+        drawRoundRect(
+            brush = Brush.linearGradient(
+                colors = listOf(Color(0xFFFDE68A), Color(0xFFD97706), Color(0xFFFDE68A)),
+                start = Offset(padLeft, padTop),
+                end = Offset(padLeft + padW, padTop + padH)
+            ),
+            topLeft = Offset(padLeft, padTop),
+            size = Size(padW, padH),
+            cornerRadius = CornerRadius(w * 0.08f, w * 0.08f),
+            style = Stroke(width = w * 0.025f)
+        )
+
+        // White Ledger Page
+        val pageLeft = padLeft + padW * 0.09f
+        val pageTop = padTop + padH * 0.08f
+        val pageW = padW * 0.82f
+        val pageH = padH * 0.84f
+
         drawRoundRect(
             color = Color(0xFFFDFBF7),
-            topLeft = Offset(sheetLeft, sheetTop),
-            size = Size(sheetW, sheetH),
-            cornerRadius = CornerRadius(w * 0.06f, w * 0.06f)
+            topLeft = Offset(pageLeft, pageTop),
+            size = Size(pageW, pageH),
+            cornerRadius = CornerRadius(w * 0.04f, w * 0.04f)
         )
 
-        // Ruled lines
-        val lineStroke = Stroke(width = w * 0.02f, cap = StrokeCap.Round)
-        val lineCount = 4
-        for (i in 1..lineCount) {
-            val y = sheetTop + (sheetH / (lineCount + 1)) * i
+        // Notebook Left Binding Strip (Purple)
+        drawRoundRect(
+            color = Color(0xFF4C1D95),
+            topLeft = Offset(pageLeft, pageTop),
+            size = Size(pageW * 0.16f, pageH),
+            cornerRadius = CornerRadius(w * 0.03f, w * 0.03f)
+        )
+
+        // Spiral Punch Rings
+        val punchYOffsets = listOf(0.20f, 0.40f, 0.60f, 0.80f)
+        for (py in punchYOffsets) {
+            drawCircle(
+                color = Color(0xFFFDE68A),
+                radius = w * 0.022f,
+                center = Offset(pageLeft + pageW * 0.08f, pageTop + pageH * py)
+            )
+        }
+
+        // Ruled Accounting Table Lines on Page
+        val lineXStart = pageLeft + pageW * 0.24f
+        val lineXEnd = pageLeft + pageW * 0.92f
+        val lineRows = listOf(0.25f, 0.45f, 0.65f, 0.82f)
+        for (r in lineRows) {
+            val ly = pageTop + pageH * r
             drawLine(
                 color = Color(0xFFCBD5E1),
-                start = Offset(sheetLeft + sheetW * 0.18f, y),
-                end = Offset(sheetLeft + sheetW * 0.85f, y),
-                strokeWidth = lineStroke.width
+                start = Offset(lineXStart, ly),
+                end = Offset(lineXEnd, ly),
+                strokeWidth = w * 0.018f,
+                cap = StrokeCap.Round
             )
         }
 
         // Calculator Badge in bottom left
-        val calcRadius = w * 0.20f
-        val calcCenter = Offset(w * 0.30f, h * 0.70f)
+        val calcRadius = w * 0.22f
+        val calcCenter = Offset(w * 0.32f, h * 0.72f)
+        
+        // Calculator outer glow/gold rim
         drawCircle(
-            color = Color(0xFFF59E0B),
+            brush = Brush.radialGradient(
+                colors = listOf(Color(0xFFFDE68A), Color(0xFFD97706)),
+                center = calcCenter,
+                radius = calcRadius
+            ),
             radius = calcRadius,
             center = calcCenter
         )
+        // Calculator inner dark purple fill
         drawCircle(
-            color = Color(0xFF3B0764),
-            radius = calcRadius * 0.88f,
+            color = Color(0xFF2E1065),
+            radius = calcRadius * 0.86f,
             center = calcCenter
         )
-        // Calculator screen
+        // Calculator screen (Amber)
         drawRoundRect(
             color = Color(0xFFFDE68A),
-            topLeft = Offset(calcCenter.x - calcRadius * 0.55f, calcCenter.y - calcRadius * 0.55f),
-            size = Size(calcRadius * 1.1f, calcRadius * 0.35f),
-            cornerRadius = CornerRadius(2f, 2f)
+            topLeft = Offset(calcCenter.x - calcRadius * 0.54f, calcCenter.y - calcRadius * 0.56f),
+            size = Size(calcRadius * 1.08f, calcRadius * 0.36f),
+            cornerRadius = CornerRadius(w * 0.015f, w * 0.015f)
         )
+        // Calculator screen digits bar
+        drawRoundRect(
+            color = Color(0xFF1E1B4B),
+            topLeft = Offset(calcCenter.x - calcRadius * 0.40f, calcCenter.y - calcRadius * 0.45f),
+            size = Size(calcRadius * 0.80f, calcRadius * 0.15f),
+            cornerRadius = CornerRadius(w * 0.008f, w * 0.008f)
+        )
+        // Calculator keypad buttons (+, -, ×, =)
+        val btnRadius = calcRadius * 0.16f
+        drawCircle(color = Color.White, radius = btnRadius, center = Offset(calcCenter.x - calcRadius * 0.30f, calcCenter.y + calcRadius * 0.05f))
+        drawCircle(color = Color.White, radius = btnRadius, center = Offset(calcCenter.x + calcRadius * 0.30f, calcCenter.y + calcRadius * 0.05f))
+        drawCircle(color = Color.White, radius = btnRadius, center = Offset(calcCenter.x - calcRadius * 0.30f, calcCenter.y + calcRadius * 0.46f))
+        drawCircle(color = Color(0xFFF59E0B), radius = btnRadius, center = Offset(calcCenter.x + calcRadius * 0.30f, calcCenter.y + calcRadius * 0.46f))
 
-        // Pen on right
-        val penStart = Offset(w * 0.82f, h * 0.20f)
-        val penEnd = Offset(w * 0.58f, h * 0.65f)
+        // Gold Fountain Pen (Diagonal across right top)
+        val penStart = Offset(w * 0.86f, h * 0.18f)
+        val penEnd = Offset(w * 0.58f, h * 0.62f)
+
+        // Pen barrel (Purple with gold accents)
         drawLine(
-            color = Color(0xFFF59E0B),
+            brush = Brush.linearGradient(
+                colors = listOf(Color(0xFF6D28D9), Color(0xFF3B0764))
+            ),
             start = penStart,
             end = penEnd,
-            strokeWidth = w * 0.07f,
+            strokeWidth = w * 0.085f,
             cap = StrokeCap.Round
         )
+        // Pen gold center ring
         drawLine(
-            color = Color(0xFF4C1D95),
-            start = penStart,
-            end = Offset(w * 0.65f, h * 0.53f),
+            color = Color(0xFFFDE68A),
+            start = Offset(w * 0.78f, h * 0.30f),
+            end = Offset(w * 0.74f, h * 0.36f),
+            strokeWidth = w * 0.095f,
+            cap = StrokeCap.Round
+        )
+        // Pen gold nib tip
+        drawLine(
+            color = Color(0xFFF59E0B),
+            start = penEnd,
+            end = Offset(w * 0.52f, h * 0.70f),
             strokeWidth = w * 0.05f,
             cap = StrokeCap.Round
         )

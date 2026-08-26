@@ -114,30 +114,6 @@ fun LoginScreen(
                 fontWeight = FontWeight.Medium
             )
 
-            // Firebase Status Pill
-            Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = Color(0xFF1E293B),
-                modifier = Modifier.padding(top = 6.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .background(Color(0xFF10B981), CircleShape)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Firebase Project: nafishop-54e99",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF94A3B8)
-                    )
-                }
-            }
-
             Spacer(modifier = Modifier.height(20.dp))
 
             // Main Auth Card
@@ -489,7 +465,7 @@ fun LoginScreen(
                                     isLoading = false
                                     when (result) {
                                         is AuthResult.Success -> {
-                                            successMessage = if (isBn) "Firebase-এ অ্যাকাউন্ট সফলভাবে তৈরি হয়েছে!" else "Account created successfully on Firebase!"
+                                            successMessage = if (isBn) "অ্যাকাউন্ট সফলভাবে তৈরি হয়েছে!" else "Account created successfully!"
                                             Toast.makeText(context, successMessage, Toast.LENGTH_SHORT).show()
                                             onLoginSuccess()
                                         }
@@ -506,7 +482,7 @@ fun LoginScreen(
                                     isLoading = false
                                     when (result) {
                                         is AuthResult.Success -> {
-                                            successMessage = if (isBn) "Firebase-এ লগইন সফল হয়েছে!" else "Signed in successfully!"
+                                            successMessage = if (isBn) "লগইন সফল হয়েছে!" else "Signed in successfully!"
                                             Toast.makeText(context, successMessage, Toast.LENGTH_SHORT).show()
                                             onLoginSuccess()
                                         }
@@ -548,9 +524,9 @@ fun LoginScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = if (screenMode == AuthScreenMode.SIGN_UP) {
-                                    if (isBn) "Firebase অ্যাকাউন্ট তৈরি করুন" else "Create Firebase Account"
+                                    if (isBn) "নতুন অ্যাকাউন্ট তৈরি করুন" else "Create New Account"
                                 } else {
-                                    if (isBn) "Firebase লগইন করুন" else "Sign In with Firebase"
+                                    if (isBn) "লগইন করুন" else "Sign In"
                                 },
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.titleMedium,
@@ -576,7 +552,7 @@ fun LoginScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Column {
                                 Text(
-                                    text = if (isBn) "Firebase ও গুগল ক্লাউড সুরক্ষা" else "Firebase & Cloud Protection",
+                                    text = if (isBn) "ক্লাউড ডেটা সুরক্ষা" else "Cloud Data Protection",
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White

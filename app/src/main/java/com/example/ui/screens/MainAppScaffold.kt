@@ -59,6 +59,7 @@ fun MainAppScaffold(
 
     var currentScreen by remember { mutableStateOf(ShopScreen.DASHBOARD) }
     val language by viewModel.language.collectAsState()
+    val themeMode by viewModel.themeMode.collectAsState()
     val shopInfo by viewModel.shopInfo.collectAsState()
     val customCategories by viewModel.customCategories.collectAsState()
     val invoiceDetails by viewModel.currentInvoice.collectAsState()
@@ -104,6 +105,15 @@ fun MainAppScaffold(
                         }
                     },
                     actions = {
+                        // Dark / Light Mode Toggle Button
+                        IconButton(onClick = { viewModel.toggleDarkMode() }) {
+                            Icon(
+                                imageVector = if (themeMode == "DARK") Icons.Default.LightMode else Icons.Default.DarkMode,
+                                contentDescription = "Toggle Dark/Light Mode",
+                                tint = if (themeMode == "DARK") AmberTertiary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
                         // News / Notice action icon
                         IconButton(onClick = {
                             if (activeNotice != null) {

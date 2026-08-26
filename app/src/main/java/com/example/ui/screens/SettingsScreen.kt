@@ -53,6 +53,7 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     val shopInfo by viewModel.shopInfo.collectAsState()
     val language by viewModel.language.collectAsState()
+    val themeMode by viewModel.themeMode.collectAsState()
     val isSyncing by viewModel.isSyncing.collectAsState()
     val syncMessage by viewModel.syncMessage.collectAsState()
     val appUpdateInfo by viewModel.appUpdateInfo.collectAsState()
@@ -218,6 +219,50 @@ fun SettingsScreen(
                         Switch(
                             checked = language == "bn",
                             onCheckedChange = { viewModel.toggleLanguage() }
+                        )
+                    }
+
+                    Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+                    // Dark Mode / Light Mode Option
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.toggleDarkMode() }
+                            .padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (themeMode == "DARK") Icons.Default.DarkMode else Icons.Default.LightMode,
+                                contentDescription = null,
+                                tint = if (themeMode == "DARK") AmberTertiary else MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = if (language == "bn") "ডার্ক মোড / লাইট মোড" else "Dark Mode / Light Mode",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = when (themeMode) {
+                                        "DARK" -> if (language == "bn") "বর্তমানে: ডার্ক মোড চালু" else "Current: Dark Mode"
+                                        "LIGHT" -> if (language == "bn") "বর্তমানে: লাইট মোড চালু" else "Current: Light Mode"
+                                        else -> if (language == "bn") "বর্তমানে: সিস্টেম ডিফল্ট" else "Current: System Default"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                        }
+
+                        Switch(
+                            checked = themeMode == "DARK",
+                            onCheckedChange = { isDark ->
+                                viewModel.setThemeMode(if (isDark) "DARK" else "LIGHT")
+                            }
                         )
                     }
 
@@ -868,7 +913,7 @@ fun SettingsScreen(
                             Icon(Icons.Default.CloudQueue, contentDescription = null, tint = EmeraldPrimary, modifier = Modifier.size(24.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (language == "bn") "Firebase ও গুগল অ্যাকাউন্ট" else "Firebase & Google Account",
+                                text = if (language == "bn") "অনলাইন ক্লাউড অ্যাকাউন্ট" else "Online Cloud Account",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
@@ -878,7 +923,7 @@ fun SettingsScreen(
                             color = EmeraldPrimary.copy(alpha = 0.15f)
                         ) {
                             Text(
-                                text = "nafishop-54e99",
+                                text = if (language == "bn") "সংযুক্ত" else "Connected",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = EmeraldPrimary,
                                 fontWeight = FontWeight.Bold,

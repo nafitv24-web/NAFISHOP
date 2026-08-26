@@ -73,9 +73,13 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
 
     private val prefs = application.getSharedPreferences("shop_khata_prefs", android.content.Context.MODE_PRIVATE)
 
-    // Language & Shop Profile State
+    // Language, Theme & Shop Profile State
     private val _language = MutableStateFlow(prefs.getString("app_language", "bn") ?: "bn")
     val language: StateFlow<String> = _language.asStateFlow()
+
+    // App Theme Mode: "SYSTEM", "LIGHT", "DARK"
+    private val _themeMode = MutableStateFlow(prefs.getString("app_theme_mode", "SYSTEM") ?: "SYSTEM")
+    val themeMode: StateFlow<String> = _themeMode.asStateFlow()
 
     // User-Defined Custom Categories (no hardcoded sample categories)
     private val _customCategories = MutableStateFlow<List<String>>(
@@ -289,6 +293,17 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         val next = if (_language.value == "bn") "en" else "bn"
         _language.value = next
         prefs.edit().putString("app_language", next).apply()
+    }
+
+    fun setThemeMode(mode: String) {
+        // "LIGHT", "DARK", "SYSTEM"
+        _themeMode.value = mode
+        prefs.edit().putString("app_theme_mode", mode).apply()
+    }
+
+    fun toggleDarkMode() {
+        val next = if (_themeMode.value == "DARK") "LIGHT" else "DARK"
+        setThemeMode(next)
     }
 
     fun updateShopInfo(
