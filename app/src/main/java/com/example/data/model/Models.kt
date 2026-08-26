@@ -109,6 +109,7 @@ data class DashboardSummary(
     val todayProfit: Double = 0.0,
     val todayRealizedProfit: Double = 0.0,
     val todayDueProfit: Double = 0.0,
+    val todayProfitMargin: Double = 0.0,
     val todayExpenses: Double = 0.0,
     val todayNetCashFlow: Double = 0.0,
     val totalOutstandingDue: Double = 0.0,

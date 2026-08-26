@@ -226,9 +226,11 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         val todayNewDueGiven = dues.filter { it.timestamp >= startOfToday && it.type == "DUE_GIVEN" }.sumOf { it.amount }
 
         val todayPurchases = todayTxs.filter { it.type == "STOCK_IN" || it.type == "PURCHASE" }.sumOf { it.totalAmount }
+        // 1. Pure Product Sales Profit (লাভ শুধুমাত্র পণ্য বিক্রি থেকে)
         val todaySalesProfit = todaySalesTxs.sumOf { it.profitAmount }
+        val todayProfitMarginRate = if (todaySales > 0) (todaySalesProfit / todaySales) * 100.0 else 0.0
 
-        // Calculate Realized Cash Profit vs Unrealized Due Profit
+        // Calculate Realized Cash Profit vs Unrealized Due Profit from sold products
         var todayRealizedGrossProfit = 0.0
         var todayDueGrossProfit = 0.0
         for (sale in todaySalesTxs) {
@@ -242,8 +244,6 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         val todayExps = exps.filter { it.timestamp >= startOfToday }.sumOf { it.amount }
-        val todayNetProfit = todaySalesProfit - todayExps
-        val todayRealizedNetProfit = todayRealizedGrossProfit - todayExps
         val todayNetCashFlow = (todayCashSales + todayCollectedDue) - todayExps
 
         val totalDue = custs.sumOf { it.totalDue }
@@ -261,9 +261,10 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             todayNewDueGiven = todayNewDueGiven,
             todayEstimatedDrawerCash = todayEstimatedDrawerCash,
             todayPurchases = todayPurchases,
-            todayProfit = todayNetProfit,
-            todayRealizedProfit = todayRealizedNetProfit,
+            todayProfit = todaySalesProfit,
+            todayRealizedProfit = todayRealizedGrossProfit,
             todayDueProfit = todayDueGrossProfit,
+            todayProfitMargin = todayProfitMarginRate,
             todayExpenses = todayExps,
             todayNetCashFlow = todayNetCashFlow,
             totalOutstandingDue = totalDue,
@@ -622,7 +623,6 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         prefs.edit().putFloat("main_balance", newBal.toFloat()).apply()
         viewModelScope.launch {
             repository.recordCashLog("WITHDRAWAL", amount, newBal, reason, timestamp)
-            repository.addExpense(reason, category, amount, reason)
         }
     }
 
