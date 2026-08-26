@@ -9,6 +9,7 @@ import com.example.data.auth.FirebaseAuthManager
 import com.example.data.auth.AuthResult
 import com.example.data.firebase.FirebaseRealtimeManager
 import com.example.data.firebase.FirebaseOperationResult
+import com.example.data.firebase.FirebaseUserAccount
 import com.google.firebase.auth.FirebaseUser
 import com.example.data.local.AppDatabase
 import com.example.data.model.*
@@ -242,6 +243,16 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _noticeHistory = MutableStateFlow<List<AppNotice>>(emptyList())
     val noticeHistory: StateFlow<List<AppNotice>> = _noticeHistory.asStateFlow()
+
+    // Registered Users state (Admin Panel)
+    private val _registeredUsers = MutableStateFlow<List<FirebaseUserAccount>>(emptyList())
+    val registeredUsers: StateFlow<List<FirebaseUserAccount>> = _registeredUsers.asStateFlow()
+
+    private val _isLoadingUsers = MutableStateFlow(false)
+    val isLoadingUsers: StateFlow<Boolean> = _isLoadingUsers.asStateFlow()
+
+    private val _usersErrorMessage = MutableStateFlow<String?>(null)
+    val usersErrorMessage: StateFlow<String?> = _usersErrorMessage.asStateFlow()
 
     private val _adminPin: MutableStateFlow<String>
     val adminPin: StateFlow<String>
@@ -1604,6 +1615,46 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             return true
         }
         return false
+    }
+
+    /**
+     * Load all registered user accounts for Admin Dashboard
+     */
+    fun loadAllRegisteredUsers(onComplete: ((Int) -> Unit)? = null) {
+        viewModelScope.launch {
+            _isLoadingUsers.value = true
+            _usersErrorMessage.value = null
+            try {
+                val cloudUsers = firebaseRealtime.fetchAllUsers()
+                if (cloudUsers.isNotEmpty()) {
+                    _registeredUsers.value = cloudUsers
+                    _isLoadingUsers.value = false
+                    onComplete?.invoke(cloudUsers.size)
+                } else {
+                    // Fallback to local accounts if any
+                    val currentEmail = _shopInfo.value.userEmail
+                    val fallbackList = if (currentEmail.isNotBlank()) {
+                        listOf(
+                            FirebaseUserAccount(
+                                email = currentEmail,
+                                passwordHash = "",
+                                shopName = _shopInfo.value.shopName,
+                                ownerName = _shopInfo.value.ownerName,
+                                createdAt = System.currentTimeMillis() - 86400000L,
+                                lastLoginAt = System.currentTimeMillis()
+                            )
+                        )
+                    } else emptyList()
+                    _registeredUsers.value = fallbackList
+                    _isLoadingUsers.value = false
+                    onComplete?.invoke(fallbackList.size)
+                }
+            } catch (e: Exception) {
+                _isLoadingUsers.value = false
+                _usersErrorMessage.value = "ইউজার তালিকা লোড করতে সমস্যা: ${e.localizedMessage}"
+                onComplete?.invoke(_registeredUsers.value.size)
+            }
+        }
     }
 }
 

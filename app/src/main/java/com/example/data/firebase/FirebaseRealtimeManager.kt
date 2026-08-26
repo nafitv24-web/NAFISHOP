@@ -401,4 +401,44 @@ class FirebaseRealtimeManager {
             FirebaseOperationResult(false, "নোটিশ মুছতে সমস্যা: ${e.localizedMessage}")
         }
     }
+
+    /**
+     * Fetch all registered user accounts from Firebase Realtime Database
+     */
+    suspend fun fetchAllUsers(): List<FirebaseUserAccount> = withContext(Dispatchers.IO) {
+        try {
+            val url = "$DATABASE_URL/users.json"
+            val req = Request.Builder().url(url).get().build()
+            val resp = client.newCall(req).execute()
+            val body = resp.body?.string()
+            if (resp.isSuccessful && !body.isNullOrBlank() && body != "null") {
+                val json = JSONObject(body)
+                val list = mutableListOf<FirebaseUserAccount>()
+                val keys = json.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    val userObj = json.optJSONObject(key)
+                    if (userObj != null) {
+                        val email = userObj.optString("email", key.replace("_dot_", ".").replace("_at_", "@"))
+                        list.add(
+                            FirebaseUserAccount(
+                                email = email,
+                                passwordHash = "",
+                                shopName = userObj.optString("shopName", "NAFI SHOP 24"),
+                                ownerName = userObj.optString("ownerName", "দোকানদার"),
+                                createdAt = userObj.optLong("createdAt", System.currentTimeMillis()),
+                                lastLoginAt = userObj.optLong("lastLoginAt", System.currentTimeMillis())
+                            )
+                        )
+                    }
+                }
+                list.sortedByDescending { it.createdAt }
+            } else {
+                emptyList()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Fetch all users failed", e)
+            emptyList()
+        }
+    }
 }

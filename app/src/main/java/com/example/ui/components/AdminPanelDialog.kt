@@ -1,5 +1,8 @@
 package com.example.ui.components
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -32,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.data.firebase.FirebaseUserAccount
 import com.example.data.model.AppNotice
 import com.example.data.model.AppUpdateInfo
 import com.example.ui.theme.*
@@ -49,13 +53,22 @@ fun AdminPanelDialog(
     val language by viewModel.language.collectAsState()
     val currentUpdate by viewModel.appUpdateInfo.collectAsState()
     val noticeHistory by viewModel.noticeHistory.collectAsState()
+    val registeredUsers by viewModel.registeredUsers.collectAsState()
+    val isLoadingUsers by viewModel.isLoadingUsers.collectAsState()
+    val usersErrorMessage by viewModel.usersErrorMessage.collectAsState()
 
     var isAuthenticated by remember { mutableStateOf(false) }
     var pinInput by remember { mutableStateOf("") }
     var pinError by remember { mutableStateOf(false) }
 
-    // Admin Tabs: 0: Breaking News / Notice, 1: Publish App Update, 2: Security & Password
+    // Admin Tabs: 0: Registered Users & Stats, 1: Breaking News / Notice, 2: Publish App Update, 3: Security & Password
     var selectedTab by remember { mutableStateOf(0) }
+
+    LaunchedEffect(isAuthenticated) {
+        if (isAuthenticated) {
+            viewModel.loadAllRegisteredUsers()
+        }
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -65,7 +78,7 @@ fun AdminPanelDialog(
             shape = RoundedCornerShape(20.dp),
             modifier = Modifier
                 .fillMaxWidth(0.95f)
-                .fillMaxHeight(0.88f),
+                .fillMaxHeight(0.92f),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -104,7 +117,7 @@ fun AdminPanelDialog(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = if (language == "bn") "নিউজ নোটিশ, আপডেট ও নিরাপত্তা" else "News Notices, Updates & Security",
+                                    text = if (language == "bn") "ইউজার তালিকা, নোটিশ ও আপডেট" else "Users, Notices & Updates",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.outline
                                 )
@@ -138,42 +151,58 @@ fun AdminPanelDialog(
                     )
                 } else {
                     // Tab Bar
-                    TabRow(
+                    ScrollableTabRow(
                         selectedTabIndex = selectedTab,
                         containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        edgePadding = 8.dp,
                         divider = {}
                     ) {
                         Tab(
                             selected = selectedTab == 0,
-                            onClick = { selectedTab = 0 },
+                            onClick = {
+                                selectedTab = 0
+                                viewModel.loadAllRegisteredUsers()
+                            },
                             text = {
                                 Text(
-                                    text = if (language == "bn") "নিউজ নোটিশ" else "News & Notice",
+                                    text = "${if (language == "bn") "ইউজার তালিকা" else "Users"} (${registeredUsers.size})",
                                     fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal,
                                     fontSize = 12.sp
                                 )
                             },
-                            icon = { Icon(Icons.Default.Campaign, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                            icon = { Icon(Icons.Default.People, contentDescription = null, modifier = Modifier.size(18.dp)) }
                         )
                         Tab(
                             selected = selectedTab == 1,
                             onClick = { selectedTab = 1 },
                             text = {
                                 Text(
-                                    text = if (language == "bn") "অ্যাপ আপডেট" else "App Update",
+                                    text = if (language == "bn") "নিউজ নোটিশ" else "News & Notice",
                                     fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal,
                                     fontSize = 12.sp
                                 )
                             },
-                            icon = { Icon(Icons.Default.SystemUpdate, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                            icon = { Icon(Icons.Default.Campaign, contentDescription = null, modifier = Modifier.size(18.dp)) }
                         )
                         Tab(
                             selected = selectedTab == 2,
                             onClick = { selectedTab = 2 },
                             text = {
                                 Text(
-                                    text = if (language == "bn") "পাসওয়ার্ড সেটিং" else "Security",
+                                    text = if (language == "bn") "অ্যাপ আপডেট" else "App Update",
                                     fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Normal,
+                                    fontSize = 12.sp
+                                )
+                            },
+                            icon = { Icon(Icons.Default.SystemUpdate, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                        )
+                        Tab(
+                            selected = selectedTab == 3,
+                            onClick = { selectedTab = 3 },
+                            text = {
+                                Text(
+                                    text = if (language == "bn") "পাসওয়ার্ড সেটিং" else "Security",
+                                    fontWeight = if (selectedTab == 3) FontWeight.Bold else FontWeight.Normal,
                                     fontSize = 12.sp
                                 )
                             },
@@ -187,7 +216,22 @@ fun AdminPanelDialog(
                             .padding(16.dp)
                     ) {
                         when (selectedTab) {
-                            0 -> AdminBroadcastNoticeTab(
+                            0 -> AdminUsersTab(
+                                users = registeredUsers,
+                                isLoading = isLoadingUsers,
+                                errorMessage = usersErrorMessage,
+                                language = language,
+                                onRefresh = {
+                                    viewModel.loadAllRegisteredUsers { count ->
+                                        Toast.makeText(
+                                            context,
+                                            if (language == "bn") "মোট $count টি অ্যাকাউন্ট লোড হয়েছে" else "Loaded $count user accounts",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                }
+                            )
+                            1 -> AdminBroadcastNoticeTab(
                                 noticeHistory = noticeHistory,
                                 language = language,
                                 onSendNotice = { notice ->
@@ -201,7 +245,7 @@ fun AdminPanelDialog(
                                     }
                                 }
                             )
-                            1 -> AdminPublishUpdateTab(
+                            2 -> AdminPublishUpdateTab(
                                 currentUpdate = currentUpdate,
                                 currentAppVersion = viewModel.currentAppVersion,
                                 currentVersionCode = viewModel.currentVersionCode,
@@ -212,7 +256,7 @@ fun AdminPanelDialog(
                                     }
                                 }
                             )
-                            2 -> AdminSecurityTab(
+                            3 -> AdminSecurityTab(
                                 language = language,
                                 onChangePin = { oldPin, newPin ->
                                     val success = viewModel.changeAdminPin(oldPin, newPin)
@@ -870,6 +914,377 @@ private fun AdminSecurityTab(
             Icon(Icons.Default.Check, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
             Text(if (language == "bn") "পাসওয়ার্ড সেভ করুন" else "Save Password", fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun AdminUsersTab(
+    users: List<FirebaseUserAccount>,
+    isLoading: Boolean,
+    errorMessage: String?,
+    language: String,
+    onRefresh: () -> Unit
+) {
+    val context = LocalContext.current
+    var searchQuery by remember { mutableStateOf("") }
+
+    val filteredUsers = remember(users, searchQuery) {
+        if (searchQuery.isBlank()) users
+        else {
+            val q = searchQuery.trim().lowercase()
+            users.filter {
+                it.email.lowercase().contains(q) ||
+                it.shopName.lowercase().contains(q) ||
+                it.ownerName.lowercase().contains(q)
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Summary & Refresh Bar
+        Card(
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .background(EmeraldPrimary.copy(alpha = 0.15f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.PeopleAlt,
+                            contentDescription = null,
+                            tint = EmeraldPrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = if (language == "bn") "সর্বমোট রেজিস্টার্ড ইউজার" else "Total Registered Users",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "${users.size} ${if (language == "bn") "টি একাউন্ট" else "Accounts"}",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = EmeraldPrimary
+                            )
+                        }
+                    }
+                }
+
+                IconButton(
+                    onClick = onRefresh,
+                    enabled = !isLoading,
+                    modifier = Modifier
+                        .background(MaterialTheme.colorScheme.surface, CircleShape)
+                        .size(38.dp)
+                ) {
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = EmeraldPrimary,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = "Refresh",
+                            tint = EmeraldPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Search Bar
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            label = { Text(if (language == "bn") "জিমেইল বা দোকানের নাম দিয়ে খুঁজুন" else "Search by Gmail or Shop Name") },
+            placeholder = { Text("example@gmail.com") },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = EmeraldPrimary) },
+            trailingIcon = {
+                if (searchQuery.isNotBlank()) {
+                    IconButton(onClick = { searchQuery = "" }) {
+                        Icon(Icons.Default.Clear, contentDescription = "Clear")
+                    }
+                }
+            },
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        if (errorMessage != null && users.isEmpty()) {
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = LossRed)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = errorMessage,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = LossRed,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = onRefresh) {
+                        Text(if (language == "bn") "আবার চেষ্টা" else "Retry")
+                    }
+                }
+            }
+        }
+
+        if (isLoading && users.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(color = EmeraldPrimary)
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = if (language == "bn") "Firebase ক্লাউড থেকে ইউজার তালিকা লোড হচ্ছে..." else "Loading users from Firebase...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+            }
+        } else if (filteredUsers.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Default.PersonOff,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = if (searchQuery.isNotBlank())
+                            (if (language == "bn") "'$searchQuery' নামে কোনো অ্যাকাউন্ট পাওয়া যায়নি" else "No account matches '$searchQuery'")
+                        else
+                            (if (language == "bn") "এখনও কোনো অ্যাকাউন্ট তালিকা পাওয়া যায়নি" else "No accounts found"),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(onClick = onRefresh) {
+                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(if (language == "bn") "তালিকাসমূহ রিফ্রেশ করুন" else "Refresh List")
+                    }
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(filteredUsers, key = { it.email + it.createdAt }) { user ->
+                    UserAccountCard(
+                        user = user,
+                        language = language,
+                        onCopyEmail = { email ->
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                            val clip = ClipData.newPlainText("User Email", email)
+                            clipboard?.setPrimaryClip(clip)
+                            Toast.makeText(
+                                context,
+                                if (language == "bn") "ইমেইল কপি হয়েছে: $email" else "Email copied: $email",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UserAccountCard(
+    user: FirebaseUserAccount,
+    language: String,
+    onCopyEmail: (String) -> Unit
+) {
+    val dateFormat = remember { SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault()) }
+    val createdStr = remember(user.createdAt) {
+        if (user.createdAt > 0) dateFormat.format(Date(user.createdAt)) else "-"
+    }
+    val lastLoginStr = remember(user.lastLoginAt) {
+        if (user.lastLoginAt > 0) dateFormat.format(Date(user.lastLoginAt)) else "-"
+    }
+
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = EmeraldPrimary.copy(alpha = 0.15f),
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = (user.shopName.firstOrNull() ?: user.email.firstOrNull() ?: 'U').toString().uppercase(),
+                                fontWeight = FontWeight.Bold,
+                                color = EmeraldPrimary,
+                                fontSize = 16.sp
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = user.shopName.ifBlank { "NAFI SHOP 24" },
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "${if (language == "bn") "মালিক: " else "Owner: "}${user.ownerName.ifBlank { "দোকানদার" }}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = Color(0xFFDCFCE7)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .background(ProfitGreen, CircleShape)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (language == "bn") "সক্রিয়" else "Active",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = ProfitGreen,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Email with Copy Button
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onCopyEmail(user.email) }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            Icons.Default.Email,
+                            contentDescription = null,
+                            tint = StockBlue,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = user.email,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1
+                        )
+                    }
+
+                    Icon(
+                        Icons.Default.ContentCopy,
+                        contentDescription = "Copy",
+                        tint = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Dates Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "${if (language == "bn") "তৈরি: " else "Joined: "}$createdStr",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline,
+                    fontSize = 11.sp
+                )
+                Text(
+                    text = "${if (language == "bn") "সর্বশেষ: " else "Last Active: "}$lastLoginStr",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline,
+                    fontSize = 11.sp
+                )
+            }
         }
     }
 }
