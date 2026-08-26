@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -43,10 +44,11 @@ fun CashBookScreen(
     val language by viewModel.language.collectAsState()
     val currency = shopInfo.currency
 
-    // Filter states: "ALL" (সব), "DAILY" (দৈনিক), "WEEKLY" (সাপ্তাহিক), "MONTHLY" (মাসিক), "YEARLY" (বার্ষিক)
-    var selectedPeriod by remember { mutableStateOf("ALL") }
+    // Filter states: "সব", "দৈনিক", "সাপ্তাহিক", "মাসিক", "বার্ষিক"
+    var selectedPeriod by remember { mutableStateOf("সব") }
     var searchQuery by remember { mutableStateOf("") }
     var isSearchActive by remember { mutableStateOf(false) }
+    var showBalanceToggle by remember { mutableStateOf(true) }
 
     // Dialog states
     var showIncomeDialog by remember { mutableStateOf(false) }
@@ -100,14 +102,30 @@ fun CashBookScreen(
         }.timeInMillis
     }
 
-    // Filtered logs
-    val filteredLogs = remember(cashLogs, selectedPeriod, searchQuery) {
-        cashLogs.filter { log ->
+    // Calculate chronological running balance from oldest to newest
+    val allLogsWithBalance = remember(cashLogs) {
+        val sortedAsc = cashLogs.sortedBy { it.timestamp }
+        var currentBal = 0.0
+        val withBal = sortedAsc.map { log ->
+            val isAdd = log.type in listOf("DEPOSIT", "DAY_END_CLOSING", "INCOME") || (log.type == "MANUAL_ADJUST" && log.amount >= 0)
+            if (isAdd) {
+                currentBal += log.amount
+            } else {
+                currentBal -= log.amount
+            }
+            CashLogDisplayItem(log = log, isAddition = isAdd, runningBalance = currentBal)
+        }
+        withBal.reversed() // newest first for display
+    }
+
+    val filteredDisplayLogs = remember(allLogsWithBalance, selectedPeriod, searchQuery) {
+        allLogsWithBalance.filter { item ->
+            val log = item.log
             val matchesPeriod = when (selectedPeriod) {
-                "DAILY" -> log.timestamp >= startOfDay
-                "WEEKLY" -> log.timestamp >= startOfWeek
-                "MONTHLY" -> log.timestamp >= startOfMonth
-                "YEARLY" -> log.timestamp >= startOfYear
+                "দৈনিক", "DAILY", "Daily" -> log.timestamp >= startOfDay
+                "সাপ্তাহিক", "WEEKLY", "Weekly" -> log.timestamp >= startOfWeek
+                "মাসিক", "MONTHLY", "Monthly" -> log.timestamp >= startOfMonth
+                "বার্ষিক", "YEARLY", "Yearly" -> log.timestamp >= startOfYear
                 else -> true
             }
             val matchesSearch = if (searchQuery.isBlank()) true else {
@@ -119,17 +137,12 @@ fun CashBookScreen(
         }
     }
 
-    // Total Income & Expense calculations
-    val totalIncome = remember(filteredLogs) {
-        filteredLogs.filter { log ->
-            log.type in listOf("DEPOSIT", "DAY_END_CLOSING", "INCOME") || (log.type == "MANUAL_ADJUST" && log.amount >= 0)
-        }.sumOf { it.amount }
+    val totalIncome = remember(filteredDisplayLogs) {
+        filteredDisplayLogs.filter { it.isAddition }.sumOf { it.log.amount }
     }
 
-    val totalExpense = remember(filteredLogs) {
-        filteredLogs.filter { log ->
-            log.type in listOf("WITHDRAWAL", "EXPENSE")
-        }.sumOf { it.amount }
+    val totalExpense = remember(filteredDisplayLogs) {
+        filteredDisplayLogs.filter { !it.isAddition }.sumOf { it.log.amount }
     }
 
     val netBalance = totalIncome - totalExpense
@@ -147,18 +160,37 @@ fun CashBookScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(end = 8.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedContainerColor = MaterialTheme.colorScheme.surface,
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surface
-                            )
+                            shape = RoundedCornerShape(10.dp)
                         )
                     } else {
-                        Text(
-                            text = if (language == "bn") "নগদ বই" else "Cash Book",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(Color(0xFFFFEDD5), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = if (language == "bn") "ক" else "C",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = DueOrange
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = if (language == "bn") "নগদ ক্যাশ বই" else "Cash Book",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = if (language == "bn") "ক্যাশ লেনদেন ও ব্যালেন্স হিসাব" else "Cash transaction history",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                        }
                     }
                 },
                 navigationIcon = {
@@ -189,138 +221,119 @@ fun CashBookScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(Color(0xFF0F172A)) // Dark slate backdrop matching modern Cash Book theme
+                .background(MaterialTheme.colorScheme.surface)
         ) {
-            // Period Filter Bar (সব, দৈনিক, সাপ্তাহিক, মাসিক, বার্ষিক)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), thickness = 0.5.dp)
+
+            // Subheader (Transaction Count + Balance Toggle + Period Filter Chips)
             Surface(
-                color = Color(0xFF1E293B),
+                color = MaterialTheme.colorScheme.surface,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    val filters = listOf(
-                        "ALL" to (if (language == "bn") "সব" else "All"),
-                        "DAILY" to (if (language == "bn") "দৈনিক" else "Daily"),
-                        "WEEKLY" to (if (language == "bn") "সাপ্তাহিক" else "Weekly"),
-                        "MONTHLY" to (if (language == "bn") "মাসিক" else "Monthly"),
-                        "YEARLY" to (if (language == "bn") "বার্ষিক" else "Yearly")
-                    )
+                Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${if (language == "bn") "লেনদেন" else "Transactions"} ${filteredDisplayLogs.size}",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
 
-                    filters.forEach { (key, label) ->
-                        val isSelected = selectedPeriod == key
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (isSelected) Color(0xFF3B82F6) else Color(0xFF334155),
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { selectedPeriod = key }
-                        ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = label,
+                                text = if (language == "bn") "ব্যালেন্স" else "Balance",
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                color = Color.White,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(vertical = 8.dp)
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Switch(
+                                checked = showBalanceToggle,
+                                onCheckedChange = { showBalanceToggle = it },
+                                modifier = Modifier.height(28.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Period Filter Chips (সব, দৈনিক, সাপ্তাহিক, মাসিক, বার্ষিক)
+                    val filters = listOf("সব", "দৈনিক", "সাপ্তাহিক", "মাসিক", "বার্ষিক")
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(filters) { filterName ->
+                            FilterChip(
+                                selected = selectedPeriod == filterName,
+                                onClick = { selectedPeriod = filterName },
+                                label = {
+                                    Text(
+                                        text = filterName,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = if (selectedPeriod == filterName) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
+                                shape = RoundedCornerShape(8.dp)
                             )
                         }
                     }
                 }
             }
 
-            // Summary Dashboard Banner (মোট আয় | মোট খরচ | নিট ব্যালেন্স)
+            // Table Column Header (Dark slate strip matching screenshot)
             Surface(
-                color = Color(0xFF0F172A),
-                border = BorderStroke(1.dp, Color(0xFF334155)),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                shape = RoundedCornerShape(12.dp)
+                color = Color(0xFF334155),
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = if (language == "bn") "মোট আয় (+)" else "Total In (+)",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF94A3B8),
-                            fontSize = 11.sp
-                        )
-                        Text(
-                            text = "$currency${totalIncome.toIntOrNull() ?: totalIncome}",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF4ADE80)
-                        )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .width(1.dp)
-                            .height(28.dp)
-                            .background(Color(0xFF334155))
+                    Text(
+                        text = if (language == "bn") "তারিখ ও বিবরণ" else "Date & Details",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        modifier = Modifier.weight(1.5f)
                     )
-
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = if (language == "bn") "মোট খরচ (-)" else "Total Out (-)",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF94A3B8),
-                            fontSize = 11.sp
-                        )
-                        Text(
-                            text = "$currency${totalExpense.toIntOrNull() ?: totalExpense}",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFF87171)
-                        )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .width(1.dp)
-                            .height(28.dp)
-                            .background(Color(0xFF334155))
+                    Text(
+                        text = if (language == "bn") "জমা" else "Received",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF4ADE80), // Green
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.weight(0.9f)
                     )
-
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
+                    Text(
+                        text = if (language == "bn") "প্রদত্ত" else "Given",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFF87171), // Red
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.weight(0.9f)
+                    )
+                    if (showBalanceToggle) {
                         Text(
-                            text = if (language == "bn") "হাতে ক্যাশ" else "Net Balance",
-                            style = MaterialTheme.typography.labelSmall,
+                            text = if (language == "bn") "ব্যালেন্স" else "Balance",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
                             color = Color(0xFF94A3B8),
-                            fontSize = 11.sp
-                        )
-                        Text(
-                            text = "$currency${netBalance.toIntOrNull() ?: netBalance}",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = if (netBalance >= 0) Color(0xFF60A5FA) else Color(0xFFF87171)
+                            textAlign = TextAlign.End,
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
             }
 
-            // Table Body / LazyColumn of Cash Log Rows
-            if (filteredLogs.isEmpty()) {
+            // Table Body Rows (Clean List Layout with running balance)
+            if (filteredDisplayLogs.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -329,16 +342,16 @@ fun CashBookScreen(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
-                            Icons.Default.AccountBalanceWallet,
+                            Icons.Default.ReceiptLong,
                             contentDescription = null,
-                            tint = Color(0xFF475569),
+                            tint = MaterialTheme.colorScheme.outlineVariant,
                             modifier = Modifier.size(48.dp)
                         )
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = if (language == "bn") "কোনো ক্যাশ এন্ট্রি পাওয়া যায়নি" else "No Cash Book Entries",
+                            text = if (language == "bn") "কোনো ক্যাশ লেনদেন পাওয়া যায়নি" else "No cash transactions found",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color(0xFF94A3B8)
+                            color = MaterialTheme.colorScheme.outline
                         )
                     }
                 }
@@ -347,33 +360,18 @@ fun CashBookScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .padding(horizontal = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    items(filteredLogs) { log ->
-                        val isAddition = log.type in listOf("DEPOSIT", "DAY_END_CLOSING", "INCOME") || (log.type == "MANUAL_ADJUST" && log.amount >= 0)
-                        
-                        val dateFormatted = remember(log.timestamp) {
-                            val cal = Calendar.getInstance().apply { timeInMillis = log.timestamp }
-                            val dayOfWeekBn = when (cal.get(Calendar.DAY_OF_WEEK)) {
-                                Calendar.SATURDAY -> "শনি"
-                                Calendar.SUNDAY -> "রবি"
-                                Calendar.MONDAY -> "সোম"
-                                Calendar.TUESDAY -> "মঙ্গল"
-                                Calendar.WEDNESDAY -> "বুধ"
-                                Calendar.THURSDAY -> "বৃহস্পতি"
-                                Calendar.FRIDAY -> "শুক্র"
-                                else -> ""
-                            }
-                            val dateStr = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date(log.timestamp))
-                            val timeStr = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(log.timestamp))
-                            Triple(dayOfWeekBn, dateStr, timeStr)
+                    items(filteredDisplayLogs, key = { it.log.id }) { item ->
+                        val log = item.log
+                        val isAddition = item.isAddition
+                        val dateFormatted = remember(log.timestamp, language) {
+                            formatLedgerDate(log.timestamp, language)
                         }
 
                         val typeLabel = when (log.type) {
                             "DEPOSIT" -> if (language == "bn") "ক্যাশ জমা" else "Deposit"
                             "WITHDRAWAL" -> if (language == "bn") "ক্যাশ উত্তোলন" else "Withdrawal"
-                            "DAY_END_CLOSING" -> if (language == "bn") "বিক্রি জমা" else "Daily Sales"
+                            "DAY_END_CLOSING" -> if (language == "bn") "বিক্রি ক্যাশ জমা" else "Daily Sales"
                             "INCOME" -> if (language == "bn") "নগদ আয়" else "Cash In"
                             "EXPENSE" -> if (language == "bn") "নগদ খরচ" else "Cash Out"
                             "MANUAL_ADJUST" -> if (language == "bn") "ব্যালেন্স সংশোধন" else "Adjust"
@@ -381,203 +379,219 @@ fun CashBookScreen(
                         }
 
                         Surface(
-                            color = Color(0xFF1E293B),
-                            shape = RoundedCornerShape(10.dp),
-                            border = BorderStroke(0.6.dp, Color(0xFF334155)),
+                            color = MaterialTheme.colorScheme.surface,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { editingLog = log }
                         ) {
-                            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Surface(
-                                            color = if (isAddition) Color(0xFF16A34A).copy(alpha = 0.2f) else Color(0xFFDC2626).copy(alpha = 0.2f),
-                                            shape = RoundedCornerShape(4.dp)
-                                        ) {
-                                            Text(
-                                                text = typeLabel,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (isAddition) Color(0xFF4ADE80) else Color(0xFFF87171),
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                                fontSize = 11.sp
-                                            )
-                                        }
-                                        Text(
-                                            text = if (language == "bn") "${dateFormatted.first}, ${dateFormatted.second} • ${dateFormatted.third}" else "${dateFormatted.second} • ${dateFormatted.third}",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = Color(0xFF94A3B8),
-                                            fontSize = 11.sp
-                                        )
-                                    }
-
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Column 1: Date & Note / Type
+                                Column(modifier = Modifier.weight(1.5f)) {
                                     Text(
-                                        text = "${if (isAddition) "+" else "-"}$currency${log.amount.toIntOrNull() ?: log.amount}",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = if (isAddition) Color(0xFF4ADE80) else Color(0xFFF87171)
+                                        text = dateFormatted,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = if (log.note.isNotBlank()) "${log.note} • $typeLabel" else typeLabel,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.outline,
+                                        maxLines = 2
                                     )
                                 }
 
-                                if (log.note.isNotBlank()) {
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = log.note,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = Color(0xFFE2E8F0),
-                                        fontSize = 12.sp
-                                    )
+                                // Column 2: জমা (Deposit / Sales / Cash In - Green)
+                                Box(
+                                    modifier = Modifier.weight(0.9f),
+                                    contentAlignment = Alignment.CenterEnd
+                                ) {
+                                    if (isAddition) {
+                                        Text(
+                                            text = "$currency${log.amount.toIntOrNull() ?: log.amount}",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = ProfitGreen
+                                        )
+                                    }
+                                }
+
+                                // Column 3: প্রদত্ত / খরচ (Expense / Withdrawal - Red)
+                                Box(
+                                    modifier = Modifier.weight(0.9f),
+                                    contentAlignment = Alignment.CenterEnd
+                                ) {
+                                    if (!isAddition) {
+                                        Text(
+                                            text = "$currency${log.amount.toIntOrNull() ?: log.amount}",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = LossRed
+                                        )
+                                    }
+                                }
+
+                                // Column 4: Running Balance
+                                if (showBalanceToggle) {
+                                    Box(
+                                        modifier = Modifier.weight(1f),
+                                        contentAlignment = Alignment.CenterEnd
+                                    ) {
+                                        val bal = item.runningBalance
+                                        Text(
+                                            text = "${if (bal < 0) "-" else ""}$currency${Math.abs(bal).toIntOrNull() ?: Math.abs(bal)}",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (bal < 0) LossRed else DueOrange
+                                        )
+                                    }
                                 }
                             }
                         }
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                            thickness = 0.5.dp
+                        )
                     }
                 }
             }
 
-            // Bottom Sticky Action Buttons (আয় / খরচ)
-            Surface(
-                color = Color(0xFF1E293B),
-                modifier = Modifier.fillMaxWidth()
+            // Bottom Sticky Section (2 Buttons: Green '↓ জমা' & Red '↑ প্রদত্ত' + Dark Summary Ribbon)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(bottom = 8.dp)
             ) {
+                // Two Large Action Buttons matching screenshot
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // Green Income Button
+                    // Green "জমা" Button
                     Button(
                         onClick = { showIncomeDialog = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A)),
-                        shape = RoundedCornerShape(10.dp),
                         modifier = Modifier
                             .weight(1f)
-                            .height(44.dp)
+                            .height(46.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = ProfitGreen),
+                        shape = RoundedCornerShape(10.dp)
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.ArrowDownward, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (language == "bn") "আয়" else "Cash In",
+                            text = if (language == "bn") "জমা" else "Deposit",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                     }
 
-                    // Red Expense Button
+                    // Red "প্রদত্ত" Button (Expense / Cash Out)
                     Button(
                         onClick = { showExpenseDialog = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
-                        shape = RoundedCornerShape(10.dp),
                         modifier = Modifier
                             .weight(1f)
-                            .height(44.dp)
+                            .height(46.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = LossRed),
+                        shape = RoundedCornerShape(10.dp)
                     ) {
-                        Icon(Icons.Default.Remove, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.ArrowUpward, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (language == "bn") "খরচ" else "Cash Out",
+                            text = if (language == "bn") "প্রদত্ত" else "Given",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                     }
                 }
-            }
 
-            // Bottom Sticky Summary Footer (মোট আয় | মোট খরচ | ব্যালেন্স)
-            Surface(
-                color = Color(0xFF0F172A),
-                border = BorderStroke(1.dp, Color(0xFF334155)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
+                // 3-Column Summary Ribbon matching screenshot
+                Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(horizontal = 12.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFF1E293B),
+                    border = BorderStroke(1.dp, Color(0xFF334155))
                 ) {
-                    // Column 1: মোট আয়
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = if (language == "bn") "মোট আয়" else "Total In",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF94A3B8),
-                            fontSize = 11.sp
-                        )
-                        Text(
-                            text = "$currency${totalIncome.toIntOrNull() ?: totalIncome}",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF4ADE80),
-                            fontSize = 13.sp
-                        )
-                    }
-
-                    Box(
+                    Row(
                         modifier = Modifier
-                            .width(1.dp)
-                            .height(28.dp)
-                            .background(Color(0xFF334155))
-                    )
-
-                    // Column 2: মোট খরচ
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp, horizontal = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceAround,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = if (language == "bn") "মোট খরচ" else "Total Out",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF94A3B8),
-                            fontSize = 11.sp
-                        )
-                        Text(
-                            text = "$currency${totalExpense.toIntOrNull() ?: totalExpense}",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFF87171),
-                            fontSize = 13.sp
-                        )
-                    }
+                        // Total Collected / জমা
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = if (language == "bn") "মোট জমা" else "Total Received",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF94A3B8)
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "$currency${totalIncome.toIntOrNull() ?: totalIncome}",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF4ADE80)
+                            )
+                        }
 
-                    Box(
-                        modifier = Modifier
-                            .width(1.dp)
-                            .height(28.dp)
-                            .background(Color(0xFF334155))
-                    )
+                        VerticalDivider(modifier = Modifier.height(26.dp), color = Color(0xFF475569))
 
-                    // Column 3: ব্যালেন্স
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = if (language == "bn") "ব্যালেন্স" else "Balance",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF94A3B8),
-                            fontSize = 11.sp
-                        )
-                        Text(
-                            text = "$currency${netBalance.toIntOrNull() ?: netBalance}",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = if (netBalance >= 0) Color(0xFF60A5FA) else Color(0xFFF87171),
-                            fontSize = 13.sp
-                        )
+                        // Total Given / প্রদত্ত
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = if (language == "bn") "মোট প্রদত্ত" else "Total Given",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF94A3B8)
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "$currency${totalExpense.toIntOrNull() ?: totalExpense}",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFF87171)
+                            )
+                        }
+
+                        VerticalDivider(modifier = Modifier.height(26.dp), color = Color(0xFF475569))
+
+                        // Balance
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.weight(1.2f)
+                        ) {
+                            Text(
+                                text = if (language == "bn") "ব্যালেন্স" else "Balance",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF94A3B8)
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "$currency${netBalance.toIntOrNull() ?: netBalance} ক্যাশ",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = if (netBalance >= 0) Color(0xFF4ADE80) else Color(0xFFF87171)
+                            )
+                        }
                     }
                 }
             }
