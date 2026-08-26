@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.content.Intent
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -163,7 +164,7 @@ fun DashboardScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Big Net Profit & Sales Overview banner
+                        // Big Net Profit & Sales Overview banner (Cash on top, Due below, Cash profit on top, Due profit below)
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -171,6 +172,7 @@ fun DashboardScreen(
                                 .padding(12.dp),
                             horizontalArrangement = Arrangement.SpaceAround
                         ) {
+                            // 1. আজকের বিক্রি (নগদ টাকা উপরে, বাকি টাকা নিচে)
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
                                     text = if (language == "bn") "আজকের বিক্রি" else "Today's Sales",
@@ -178,25 +180,34 @@ fun DashboardScreen(
                                     color = Color(0xFFD1FAE5)
                                 )
                                 Text(
-                                    text = "$currency${summary.todaySales.toIntOrNull() ?: summary.todaySales}",
+                                    text = "$currency${summary.todayCashSales.toIntOrNull() ?: summary.todayCashSales}",
                                     style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
+                                    fontWeight = FontWeight.ExtraBold,
                                     color = Color.White
                                 )
+                                Text(
+                                    text = if (language == "bn") "নগদ বিক্রি (উপরে)" else "Cash Sales",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFFA7F3D0),
+                                    fontSize = 10.sp
+                                )
                                 if (summary.todayDueSales > 0) {
+                                    Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = "${if (language == "bn") "নগদ:" else "Cash:"} $currency${summary.todayCashSales.toIntOrNull() ?: summary.todayCashSales}",
+                                        text = "${if (language == "bn") "বাকি:" else "Due:"} $currency${summary.todayDueSales.toIntOrNull() ?: summary.todayDueSales}",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = Color(0xFFA7F3D0)
+                                        color = Color(0xFFFED7AA),
+                                        fontWeight = FontWeight.Bold
                                     )
                                 }
                             }
                             Box(
                                 modifier = Modifier
                                     .width(1.dp)
-                                    .height(36.dp)
+                                    .height(44.dp)
                                     .background(Color(0x40FFFFFF))
                             )
+                            // 2. আজকের লাভ (নগদ লাভ উপরে, বাকির লাভ নিচে - যেহেতু বাকি টাকা হাতে পায়নি)
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
                                     text = if (language == "bn") "আজকের লাভ" else "Today's Profit",
@@ -204,18 +215,34 @@ fun DashboardScreen(
                                     color = Color(0xFFFDE68A)
                                 )
                                 Text(
-                                    text = "$currency${summary.todayProfit.toIntOrNull() ?: summary.todayProfit}",
+                                    text = "$currency${summary.todayRealizedProfit.toIntOrNull() ?: summary.todayRealizedProfit}",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = if (summary.todayProfit >= 0) Color(0xFFFDE68A) else Color(0xFFFCA5A5)
+                                    color = if (summary.todayRealizedProfit >= 0) Color(0xFFFDE68A) else Color(0xFFFCA5A5)
                                 )
+                                Text(
+                                    text = if (language == "bn") "নগদ লাভ (হাতে)" else "Cash Profit",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFFFEF08A),
+                                    fontSize = 10.sp
+                                )
+                                if (summary.todayDueProfit > 0) {
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "${if (language == "bn") "বাকির লাভ:" else "Due Profit:"} $currency${summary.todayDueProfit.toIntOrNull() ?: summary.todayDueProfit}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFFFED7AA),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                             Box(
                                 modifier = Modifier
                                     .width(1.dp)
-                                    .height(36.dp)
+                                    .height(44.dp)
                                     .background(Color(0x40FFFFFF))
                             )
+                            // 3. মোট বকেয়া বাকি
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
                                     text = if (language == "bn") "মোট বকেয়া বাকি" else "Total Due",
@@ -228,13 +255,11 @@ fun DashboardScreen(
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFFFDBA74)
                                 )
-                                if (summary.todayDueSales > 0) {
-                                    Text(
-                                        text = "+$currency${summary.todayDueSales.toIntOrNull() ?: summary.todayDueSales} ${if (language == "bn") "আজকে" else "today"}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color(0xFFFED7AA)
-                                    )
-                                }
+                                Text(
+                                    text = if (summary.todayDueSales > 0) "+$currency${summary.todayDueSales.toIntOrNull() ?: summary.todayDueSales} ${if (language == "bn") "আজকে" else "today"}" else (if (language == "bn") "কাস্টমার বাকি" else "Outstanding"),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFFFED7AA)
+                                )
                             }
                         }
                     }
@@ -1788,107 +1813,354 @@ fun TransactionFeedItem(
     language: String,
     onClick: (() -> Unit)? = null
 ) {
+    val context = LocalContext.current
     val dateStr = remember(tx.timestamp) {
-        SimpleDateFormat("hh:mm a, d MMM", Locale.getDefault()).format(Date(tx.timestamp))
+        SimpleDateFormat("d MMM yyyy, hh:mm a", Locale.getDefault()).format(Date(tx.timestamp))
     }
 
     val isSale = tx.type == "SALE"
-    val isStockIn = tx.type == "STOCK_IN"
+    val isStockIn = tx.type == "STOCK_IN" || tx.type == "PURCHASE"
     val isDamage = tx.type == "STOCK_OUT_DAMAGE"
+
+    val isDueSale = isSale && tx.dueAmount > 0
+    val isFullDue = isSale && tx.dueAmount > 0 && tx.paidAmount == 0.0
+    val isPartialDue = isSale && tx.dueAmount > 0 && tx.paidAmount > 0.0
+
+    // Cash profit vs due profit for this transaction
+    val cashRatio = if (isSale && tx.totalAmount > 0) (tx.paidAmount / tx.totalAmount).coerceIn(0.0, 1.0) else 1.0
+    val realizedProfit = if (isSale) tx.profitAmount * cashRatio else 0.0
+    val dueProfit = if (isSale) tx.profitAmount * (1.0 - cashRatio) else 0.0
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .then(
-                if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
-            ),
-        shape = RoundedCornerShape(12.dp),
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = CardDefaults.outlinedCardBorder()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(
-                        when {
-                            isSale -> ProfitGreen.copy(alpha = 0.12f)
-                            isStockIn -> StockBlue.copy(alpha = 0.12f)
-                            else -> LossRed.copy(alpha = 0.12f)
-                        },
-                        CircleShape
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    when {
-                        isSale -> Icons.Default.ShoppingCart
-                        isStockIn -> Icons.Default.AddBusiness
-                        else -> Icons.Default.DeleteOutline
-                    },
-                    contentDescription = null,
-                    tint = when {
-                        isSale -> ProfitGreen
-                        isStockIn -> StockBlue
-                        else -> LossRed
-                    },
-                    modifier = Modifier.size(20.dp)
-                )
+        elevation = CardDefaults.cardElevation(1.dp),
+        border = BorderStroke(
+            1.dp,
+            when {
+                isFullDue -> Color(0xFFFECACA)
+                isPartialDue -> Color(0xFFFED7AA)
+                isSale -> Color(0xFFBBF7D0)
+                isStockIn -> Color(0xFFBFDBFE)
+                else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
             }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = tx.productName,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+        )
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            // Header: Date & Time + Type Badge + Invoice No
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Type Badge
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = when {
+                        isFullDue -> Color(0xFFFEF2F2)
+                        isPartialDue -> Color(0xFFFFF7ED)
+                        isSale -> Color(0xFFF0FDF4)
+                        isStockIn -> Color(0xFFEFF6FF)
+                        else -> Color(0xFFF8FAFC)
+                    },
+                    border = BorderStroke(
+                        1.dp,
+                        when {
+                            isFullDue -> Color(0xFFFECACA)
+                            isPartialDue -> Color(0xFFFFEDD5)
+                            isSale -> Color(0xFFDCFCE7)
+                            isStockIn -> Color(0xFFDBEAFE)
+                            else -> Color(0xFFE2E8F0)
+                        }
                     )
-                    if (isSale) {
-                        Spacer(modifier = Modifier.width(4.dp))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Icon(
-                            Icons.Default.Edit,
-                            contentDescription = "Edit or Return",
-                            tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
-                            modifier = Modifier.size(14.dp)
+                            imageVector = when {
+                                isSale -> Icons.Default.ShoppingCart
+                                isStockIn -> Icons.Default.AddBusiness
+                                else -> Icons.Default.Inventory
+                            },
+                            contentDescription = null,
+                            tint = when {
+                                isFullDue -> LossRed
+                                isPartialDue -> DueOrange
+                                isSale -> ProfitGreen
+                                isStockIn -> StockBlue
+                                else -> Color(0xFF64748B)
+                            },
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = when {
+                                isFullDue -> if (language == "bn") "সম্পূর্ণ বাকি বিক্রি" else "Full Due Sale"
+                                isPartialDue -> if (language == "bn") "আংশিক বাকি বিক্রি" else "Partial Due Sale"
+                                isSale -> if (language == "bn") "নগদ বিক্রি" else "Cash Sale"
+                                isStockIn -> if (language == "bn") "স্টক ইন / ক্রয়" else "Stock In / Purchase"
+                                else -> if (language == "bn") "স্টক সমন্বয়" else "Adjustment"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = when {
+                                isFullDue -> LossRed
+                                isPartialDue -> DueOrange
+                                isSale -> ProfitGreen
+                                isStockIn -> StockBlue
+                                else -> Color(0xFF64748B)
+                            }
                         )
                     }
                 }
-                Text(
-                    text = "${if (isSale) "বিক্রি" else if (isStockIn) "স্টক ইন" else "সমন্বয়"} • ${tx.quantity.toIntOrNull() ?: tx.quantity} ${tx.unit} • $dateStr",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
-                if (tx.customerName.isNotBlank() && tx.customerName != "ক্যাশ কাস্টমার") {
+
+                // Date & Time
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.AccessTime,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(3.dp))
                     Text(
-                        text = "ক্রেতা: ${tx.customerName}",
+                        text = dateStr,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.outline
                     )
                 }
             }
 
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = "${if (isSale) "+" else "-"}$currency${tx.totalAmount.toIntOrNull() ?: tx.totalAmount}",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isSale) ProfitGreen else Color(0xFF1E293B)
-                )
-                if (isSale && tx.profitAmount != 0.0) {
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Middle Section: Product Details & Customer Name
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "${if (language == "bn") "লাভ: " else "Profit: "}$currency${tx.profitAmount.toIntOrNull() ?: tx.profitAmount}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (tx.profitAmount >= 0) ProfitGreen else LossRed,
-                        fontWeight = FontWeight.SemiBold
+                        text = tx.productName,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "${tx.quantity.toIntOrNull() ?: tx.quantity} ${tx.unit}  •  ${if (language == "bn") "দর: " else "Rate: "}$currency${tx.unitPrice.toIntOrNull() ?: tx.unitPrice}/${tx.unit}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    if (tx.customerName.isNotBlank() && tx.customerName != "ক্যাশ কাস্টমার") {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.Person,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "${if (language == "bn") "কাস্টমার: " else "Customer: "}${tx.customerName}${if (tx.customerPhone.isNotBlank()) " (${tx.customerPhone})" else ""}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
+                    if (tx.invoiceNumber.isNotBlank()) {
+                        Text(
+                            text = "${if (language == "bn") "মেমো নং: #" else "Memo: #"}${tx.invoiceNumber}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+
+                    if (tx.note.isNotBlank()) {
+                        Text(
+                            text = "${if (language == "bn") "নোট: " else "Note: "}${tx.note}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF64748B)
+                        )
+                    }
+                }
+
+                // Total Bill Badge
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = if (isSale) (if (language == "bn") "মোট বিল" else "Total Bill") else (if (language == "bn") "মোট খরচ" else "Total"),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                    Text(
+                        text = "$currency${tx.totalAmount.toIntOrNull() ?: tx.totalAmount}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (isSale) MaterialTheme.colorScheme.onSurface else Color(0xFF1E293B)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Structured Mizan Ledger Breakdown (Cash vs Due vs Profit)
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (isSale) {
+                        // 1. নগদ জমা
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = if (language == "bn") "নগদ জমা" else "Cash Paid",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF166534)
+                            )
+                            Text(
+                                text = "+$currency${tx.paidAmount.toIntOrNull() ?: tx.paidAmount}",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = ProfitGreen
+                            )
+                        }
+
+                        VerticalDivider(modifier = Modifier.height(22.dp), color = MaterialTheme.colorScheme.outlineVariant)
+
+                        // 2. বাকি
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = if (language == "bn") "বাকি" else "Due",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (tx.dueAmount > 0) Color(0xFF9A3412) else Color(0xFF166534)
+                            )
+                            Text(
+                                text = if (tx.dueAmount > 0) "$currency${tx.dueAmount.toIntOrNull() ?: tx.dueAmount}" else (if (language == "bn") "নেই" else "None"),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (tx.dueAmount > 0) DueOrange else ProfitGreen
+                            )
+                        }
+
+                        VerticalDivider(modifier = Modifier.height(22.dp), color = MaterialTheme.colorScheme.outlineVariant)
+
+                        // 3. লাভ (নগদ লাভ ও বাকির লাভ)
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = if (language == "bn") "নগদ লাভ" else "Cash Profit",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF15803D)
+                            )
+                            Text(
+                                text = "$currency${realizedProfit.toIntOrNull() ?: String.format(Locale.US, "%.1f", realizedProfit)}",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (realizedProfit >= 0) ProfitGreen else LossRed
+                            )
+                        }
+
+                        if (dueProfit > 0) {
+                            VerticalDivider(modifier = Modifier.height(22.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = if (language == "bn") "বাকির লাভ" else "Due Profit",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFFB45309)
+                                )
+                                Text(
+                                    text = "$currency${dueProfit.toIntOrNull() ?: String.format(Locale.US, "%.1f", dueProfit)}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = DueOrange
+                                )
+                            }
+                        }
+                    } else {
+                        // Stock In details
+                        Column {
+                            Text(
+                                text = if (language == "bn") "ক্রয়কৃত পরিমাণ" else "Purchased Qty",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                            Text(
+                                text = "${tx.quantity.toIntOrNull() ?: tx.quantity} ${tx.unit}",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = StockBlue
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = if (language == "bn") "পেমেন্ট মাধ্যম" else "Payment Method",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                            Text(
+                                text = tx.paymentMethod,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Action Row: Quick buttons for edit, view invoice, SMS
+            if (isSale) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (tx.customerPhone.isNotBlank()) {
+                        TextButton(
+                            onClick = {
+                                val msg = "শ্রদ্ধেয় ${tx.customerName}, মেমো #${tx.invoiceNumber} এ পণ্য: ${tx.productName} (${tx.quantity} ${tx.unit}), মোট বিল: $currency${tx.totalAmount}, নগদ জমা: $currency${tx.paidAmount}, বাকি: $currency${tx.dueAmount}।"
+                                val sendIntent = Intent().apply {
+                                    action = Intent.ACTION_SEND
+                                    putExtra(Intent.EXTRA_TEXT, msg)
+                                    type = "text/plain"
+                                }
+                                context.startActivity(Intent.createChooser(sendIntent, "মেসেজ / WhatsApp পাঠান"))
+                            },
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                            modifier = Modifier.height(28.dp)
+                        ) {
+                            Icon(Icons.Default.Share, contentDescription = "Share", modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(if (language == "bn") "শেয়ার" else "Share", style = MaterialTheme.typography.labelSmall)
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+
+                    OutlinedButton(
+                        onClick = { onClick?.invoke() },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.height(28.dp)
+                    ) {
+                        Icon(Icons.Default.Edit, contentDescription = "Edit", modifier = Modifier.size(12.dp))
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(if (language == "bn") "এডিট / ফেরত" else "Edit / Return", style = MaterialTheme.typography.labelSmall)
+                    }
                 }
             }
         }

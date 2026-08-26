@@ -193,18 +193,33 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         val startOfToday = calendar.timeInMillis
 
         val todayTxs = txs.filter { it.timestamp >= startOfToday }
-        val todaySales = todayTxs.filter { it.type == "SALE" }.sumOf { it.totalAmount }
-        val todayCashSales = todayTxs.filter { it.type == "SALE" }.sumOf { it.paidAmount }
-        val todayDueSales = todayTxs.filter { it.type == "SALE" }.sumOf { it.dueAmount }
+        val todaySalesTxs = todayTxs.filter { it.type == "SALE" }
+        val todaySales = todaySalesTxs.sumOf { it.totalAmount }
+        val todayCashSales = todaySalesTxs.sumOf { it.paidAmount }
+        val todayDueSales = todaySalesTxs.sumOf { it.dueAmount }
 
         val todayCollectedDue = dues.filter { it.timestamp >= startOfToday && it.type == "DUE_COLLECTED" }.sumOf { it.amount }
         val todayNewDueGiven = dues.filter { it.timestamp >= startOfToday && it.type == "DUE_GIVEN" }.sumOf { it.amount }
 
         val todayPurchases = todayTxs.filter { it.type == "STOCK_IN" || it.type == "PURCHASE" }.sumOf { it.totalAmount }
-        val todaySalesProfit = todayTxs.filter { it.type == "SALE" }.sumOf { it.profitAmount }
+        val todaySalesProfit = todaySalesTxs.sumOf { it.profitAmount }
+
+        // Calculate Realized Cash Profit vs Unrealized Due Profit
+        var todayRealizedGrossProfit = 0.0
+        var todayDueGrossProfit = 0.0
+        for (sale in todaySalesTxs) {
+            if (sale.totalAmount > 0) {
+                val cashRatio = (sale.paidAmount / sale.totalAmount).coerceIn(0.0, 1.0)
+                todayRealizedGrossProfit += sale.profitAmount * cashRatio
+                todayDueGrossProfit += sale.profitAmount * (1.0 - cashRatio)
+            } else {
+                todayRealizedGrossProfit += sale.profitAmount
+            }
+        }
 
         val todayExps = exps.filter { it.timestamp >= startOfToday }.sumOf { it.amount }
         val todayNetProfit = todaySalesProfit - todayExps
+        val todayRealizedNetProfit = todayRealizedGrossProfit - todayExps
         val todayNetCashFlow = (todayCashSales + todayCollectedDue) - todayExps
 
         val totalDue = custs.sumOf { it.totalDue }
@@ -223,6 +238,8 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             todayEstimatedDrawerCash = todayEstimatedDrawerCash,
             todayPurchases = todayPurchases,
             todayProfit = todayNetProfit,
+            todayRealizedProfit = todayRealizedNetProfit,
+            todayDueProfit = todayDueGrossProfit,
             todayExpenses = todayExps,
             todayNetCashFlow = todayNetCashFlow,
             totalOutstandingDue = totalDue,
