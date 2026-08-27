@@ -293,10 +293,11 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         expenses,
         customers,
         products,
-        combine(dueLogs, _shopInfo) { dues, info -> Pair(dues, info) }
-    ) { txs, exps, custs, prods, dueAndInfo ->
-        val dues = dueAndInfo.first
-        val info = dueAndInfo.second
+        combine(dueLogs, _shopInfo, cashLogs) { dues, info, cLogs -> Triple(dues, info, cLogs) }
+    ) { txs, exps, custs, prods, extra ->
+        val dues = extra.first
+        val info = extra.second
+        val cLogs = extra.third
         val calendar = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, 0)
             set(Calendar.MINUTE, 0)
@@ -313,6 +314,9 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
 
         val todayCollectedDue = round2(dues.filter { it.timestamp >= startOfToday && it.type == "DUE_COLLECTED" }.sumOf { it.amount })
         val todayNewDueGiven = round2(dues.filter { it.timestamp >= startOfToday && it.type == "DUE_GIVEN" }.sumOf { it.amount })
+
+        val todayClosedCash = round2(cLogs.filter { it.timestamp >= startOfToday && it.type == "DAY_END_CLOSING" }.sumOf { it.amount })
+        val todayUnclosedCash = round2(((todayCashSales + todayCollectedDue) - todayClosedCash).coerceAtLeast(0.0))
 
         val todayPurchases = round2(todayTxs.filter { it.type == "STOCK_IN" || it.type == "PURCHASE" }.sumOf { it.totalAmount })
         // 1. Pure Product Sales Profit (লাভ শুধুমাত্র পণ্য বিক্রি থেকে)
@@ -341,7 +345,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         val totalStockVal = round2(prods.sumOf { it.stockQuantity * it.sellPrice })
         val lowCount = prods.count { it.stockQuantity <= it.minStockAlert }
 
-        val todayEstimatedDrawerCash = round2((todayCashSales + todayCollectedDue - todayExps).coerceAtLeast(0.0))
+        val todayEstimatedDrawerCash = round2((todayUnclosedCash - todayExps).coerceAtLeast(0.0))
 
         DashboardSummary(
             mainBalance = round2(info.mainBalance),
@@ -361,7 +365,9 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             totalOutstandingDue = totalDue,
             totalStockValue = totalStockVal,
             totalProductsCount = prods.size,
-            lowStockCount = lowCount
+            lowStockCount = lowCount,
+            todayClosedCash = todayClosedCash,
+            todayUnclosedCash = todayUnclosedCash
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DashboardSummary())
 
@@ -1101,7 +1107,24 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         newNote: String
     ) {
         viewModelScope.launch {
-            val updated = oldLog.copy(amount = round2(newAmount), note = newNote)
+            val cleanNewAmount = round2(newAmount)
+            val diff = cleanNewAmount - oldLog.amount
+            
+            // Adjust current main balance based on entry type
+            val curBal = _shopInfo.value.mainBalance
+            val newBal = when (oldLog.type) {
+                "DEPOSIT", "INCOME", "DAY_END_CLOSING" -> round2((curBal + diff).coerceAtLeast(0.0))
+                "WITHDRAWAL", "EXPENSE" -> round2((curBal - diff).coerceAtLeast(0.0))
+                "MANUAL_ADJUST" -> cleanNewAmount
+                else -> curBal
+            }
+            
+            if (newBal != curBal) {
+                _shopInfo.value = _shopInfo.value.copy(mainBalance = newBal)
+                prefs.edit().putFloat("main_balance", newBal.toFloat()).apply()
+            }
+
+            val updated = oldLog.copy(amount = cleanNewAmount, note = newNote, balanceAfter = newBal)
             repository.updateCashLog(updated)
             triggerInstantDriveBackup("ক্যাশ লগ সংশোধন")
         }
@@ -1109,6 +1132,19 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteCashLog(cashLog: CashLog) {
         viewModelScope.launch {
+            // Revert balance impact upon deletion
+            val curBal = _shopInfo.value.mainBalance
+            val newBal = when (cashLog.type) {
+                "DEPOSIT", "INCOME", "DAY_END_CLOSING" -> round2((curBal - cashLog.amount).coerceAtLeast(0.0))
+                "WITHDRAWAL", "EXPENSE" -> round2(curBal + cashLog.amount)
+                else -> curBal
+            }
+
+            if (newBal != curBal) {
+                _shopInfo.value = _shopInfo.value.copy(mainBalance = newBal)
+                prefs.edit().putFloat("main_balance", newBal.toFloat()).apply()
+            }
+
             repository.deleteCashLog(cashLog)
             triggerInstantDriveBackup("ক্যাশ লগ মুছে ফেলা")
         }

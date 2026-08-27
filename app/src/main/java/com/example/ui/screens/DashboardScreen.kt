@@ -853,13 +853,22 @@ fun DashboardScreen(
                                 .fillMaxWidth()
                                 .height(38.dp),
                             shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (summary.todayUnclosedCash > 0) EmeraldPrimary else MaterialTheme.colorScheme.secondary
+                            ),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                         ) {
                             Icon(Icons.Default.Payments, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
+                            val btnText = if (summary.todayUnclosedCash > 0) {
+                                if (language == "bn") "দিনশেষের বিক্রি ক্যাশ ক্লোজিং (+$currency${summary.todayUnclosedCash.toIntOrNull() ?: summary.todayUnclosedCash})"
+                                else "Day-End Cash Settle (+$currency${summary.todayUnclosedCash.toIntOrNull() ?: summary.todayUnclosedCash})"
+                            } else {
+                                if (language == "bn") "দিনশেষের বিক্রি ক্যাশ ক্লোজিং (ক্লোজড ✓ ৳০)"
+                                else "Day-End Cash Settle (Settled ✓ ৳0)"
+                            }
                             Text(
-                                text = if (language == "bn") "দিনশেষের বিক্রি ক্যাশ মেন ব্যালেন্সে যুক্ত করুন" else "Add Day-End Sales to Main Cash",
+                                text = btnText,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold
                             )
@@ -2274,9 +2283,11 @@ fun DayEndSettlementDialog(
     onDismiss: () -> Unit,
     onConfirm: (settledAmount: Double, note: String) -> Unit
 ) {
-    // The actual cash received today from sales & due collections (excluding unpaid due sales):
-    val defaultClosingAmount = summary.todayCashSales + summary.todayCollectedDue
-    var customAmountStr by remember { mutableStateOf(defaultClosingAmount.toIntOrNull()?.toString() ?: defaultClosingAmount.toString()) }
+    // The actual unclosed cash received today from sales & due collections:
+    val defaultClosingAmount = summary.todayUnclosedCash
+    var customAmountStr by remember(summary.todayUnclosedCash) { 
+        mutableStateOf(if (defaultClosingAmount > 0) (defaultClosingAmount.toIntOrNull()?.toString() ?: defaultClosingAmount.toString()) else "0") 
+    }
     var note by remember { mutableStateOf("আজকের দিনের নগদ বিক্রি ও আদায় ক্যাশ ক্লোজিং") }
 
     val settledAmount = customAmountStr.toDoubleOrNull() ?: 0.0
@@ -2354,6 +2365,37 @@ fun DayEndSettlementDialog(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
+                    if (summary.todayUnclosedCash <= 0.0) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFFDCFCE7),
+                            border = BorderStroke(1.dp, Color(0xFF86EFAC)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = ProfitGreen,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (language == "bn")
+                                        "আজকের সকল নগদ বিক্রি ইতিমধ্যে মূল ক্যাশে যুক্ত ও ক্লোজ করা হয়েছে (অবশিষ্ট ৳০)। পুনরায় নতুন বিক্রি করলে সেটি আবার এখানে দেখাবে।"
+                                    else
+                                        "All today's cash sales have already been settled to main balance (Remaining 0). New sales will appear here automatically.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF14532D),
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+
                     // Breakdown Card with clean, non-breaking aligned rows
                     Surface(
                         shape = RoundedCornerShape(12.dp),
@@ -2380,14 +2422,14 @@ fun DayEndSettlementDialog(
                                 )
                             }
 
-                            // Row 2: আজকের নগদ বিক্রি
+                            // Row 2: আজকের মোট নগদ বিক্রি
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = if (language == "bn") "আজকের নগদ বিক্রি (+):" else "Today Cash Sales (+):",
+                                    text = if (language == "bn") "আজকের মোট নগদ বিক্রি (+):" else "Today Cash Sales (+):",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = ProfitGreen,
                                     fontWeight = FontWeight.Medium
@@ -2420,6 +2462,48 @@ fun DayEndSettlementDialog(
                                         color = EmeraldPrimary
                                     )
                                 }
+                            }
+
+                            // Row 3.5: ইতিমধ্যে ক্লোজ করা হয়েছে (যদি থাকে)
+                            if (summary.todayClosedCash > 0) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = if (language == "bn") "ইতিমধ্যে ক্লোজ করা হয়েছে (-):" else "Already Settled (-):",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.outline,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = "-$currency${summary.todayClosedCash.toIntOrNull() ?: summary.todayClosedCash}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                            }
+
+                            // Row 3.6: অবশিষ্ট ক্যাশ ক্লোজিংয়ের জন্য
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = if (language == "bn") "অবশিষ্ট ক্লোজিং ক্যাশ:" else "Remaining to Settle:",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = EmeraldPrimary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "$currency${summary.todayUnclosedCash.toIntOrNull() ?: summary.todayUnclosedCash}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = EmeraldPrimary
+                                )
                             }
 
                             // Row 4: বাকিতে বিক্রি (বকেয়া সম্পর্কিত ব্যাখ্যা)

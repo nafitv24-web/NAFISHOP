@@ -130,7 +130,9 @@ data class DashboardSummary(
     val totalOutstandingDue: Double = 0.0,
     val totalStockValue: Double = 0.0,
     val totalProductsCount: Int = 0,
-    val lowStockCount: Int = 0
+    val lowStockCount: Int = 0,
+    val todayClosedCash: Double = 0.0,
+    val todayUnclosedCash: Double = 0.0
 ) {
     val todayTotalSales: Double
         get() = todaySales
