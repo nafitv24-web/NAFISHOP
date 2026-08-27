@@ -710,9 +710,15 @@ fun CustomerLedgerScreen(
             shopName = shopInfo.shopName,
             shopPhone = shopInfo.phone,
             onDismiss = { showAddTransactionDialog = false },
-            onSave = { type, amount, note, timestamp ->
+            onSave = { type, amount, note, timestamp, selectedProducts ->
                 if (type == "GIVEN") {
-                    viewModel.giveCustomerDue(currentCustomer, amount, note)
+                    viewModel.giveCustomerDue(
+                        customer = currentCustomer,
+                        amountDue = amount,
+                        note = note,
+                        selectedProducts = selectedProducts,
+                        customTimestamp = timestamp
+                    )
                 } else {
                     viewModel.collectCustomerDue(currentCustomer, amount, note)
                 }
@@ -869,12 +875,13 @@ fun AddLedgerTransactionDialog(
     shopName: String = "",
     shopPhone: String = "",
     onDismiss: () -> Unit,
-    onSave: (type: String, amount: Double, note: String, timestamp: Long) -> Unit
+    onSave: (type: String, amount: Double, note: String, timestamp: Long, selectedProducts: List<Pair<Product, Double>>) -> Unit
 ) {
     val context = LocalContext.current
     var selectedType by remember { mutableStateOf(initialType) } // "GIVEN" (প্রদত্ত) or "COLLECTED" (জমা)
     var amountStr by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
+    var selectedProductsList by remember { mutableStateOf<List<Pair<Product, Double>>>(emptyList()) }
 
     var selectedTimestamp by remember { mutableStateOf(System.currentTimeMillis()) }
     var showProductPicker by remember { mutableStateOf(false) }
@@ -1186,7 +1193,7 @@ fun AddLedgerTransactionDialog(
                         onClick = {
                             val amount = amountStr.toDoubleOrNull() ?: 0.0
                             if (amount > 0) {
-                                onSave(selectedType, amount, note, selectedTimestamp)
+                                onSave(selectedType, amount, note, selectedTimestamp, if (selectedType == "GIVEN") selectedProductsList else emptyList())
                             } else {
                                 Toast.makeText(context, if (language == "bn") "সঠিক টাকার পরিমাণ লিখুন" else "Enter valid amount", Toast.LENGTH_SHORT).show()
                             }
@@ -1221,6 +1228,7 @@ fun AddLedgerTransactionDialog(
             language = language,
             onDismiss = { showProductPicker = false },
             onItemsSelected = { selectedList ->
+                selectedProductsList = selectedList
                 val totalCost = selectedList.sumOf { it.first.sellPrice * it.second }
                 val itemsSummary = selectedList.joinToString(", ") { "${it.first.name} (${it.second.toIntOrNull() ?: it.second} ${it.first.unit})" }
 

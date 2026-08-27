@@ -119,11 +119,15 @@ object CustomerSmsHelper {
                 Intent(Intent.ACTION_SENDTO).apply {
                     data = Uri.parse("smsto:$cleanPhone")
                     putExtra("sms_body", message)
+                    putExtra(Intent.EXTRA_TEXT, message)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
             } else {
                 Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
                     putExtra(Intent.EXTRA_TEXT, message)
+                    putExtra("sms_body", message)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
             }
             context.startActivity(intent)
@@ -141,6 +145,7 @@ object CustomerSmsHelper {
             val formattedPhone = when {
                 cleanPhone.startsWith("880") -> cleanPhone
                 cleanPhone.startsWith("0") -> "88$cleanPhone"
+                cleanPhone.length == 10 && cleanPhone.startsWith("1") -> "880$cleanPhone"
                 cleanPhone.isNotBlank() -> "880$cleanPhone"
                 else -> ""
             }
@@ -149,7 +154,9 @@ object CustomerSmsHelper {
             } else {
                 Uri.parse("https://api.whatsapp.com/send?text=${Uri.encode(message)}")
             }
-            val intent = Intent(Intent.ACTION_VIEW, uri)
+            val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
             context.startActivity(intent)
         } catch (e: Exception) {
             shareFallback(context, message)

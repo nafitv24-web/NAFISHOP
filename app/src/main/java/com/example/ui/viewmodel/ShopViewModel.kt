@@ -1011,10 +1011,16 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun giveCustomerDue(customer: Customer, amountDue: Double, note: String) {
+    fun giveCustomerDue(
+        customer: Customer,
+        amountDue: Double,
+        note: String,
+        selectedProducts: List<Pair<Product, Double>> = emptyList(),
+        customTimestamp: Long = System.currentTimeMillis()
+    ) {
         viewModelScope.launch {
             val cleanDue = round2(amountDue)
-            repository.giveCustomerAdditionalDue(customer, cleanDue, note)
+            repository.giveCustomerAdditionalDue(customer, cleanDue, note, selectedProducts, customTimestamp)
             triggerInstantDriveBackup("বাকি প্রদান (${customer.name})")
         }
     }

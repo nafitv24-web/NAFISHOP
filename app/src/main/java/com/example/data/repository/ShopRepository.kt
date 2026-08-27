@@ -4,6 +4,7 @@ import com.example.data.local.*
 import com.example.data.model.*
 import com.example.util.CalculationHelper
 import com.example.util.CalculationHelper.round2
+import com.example.ui.components.toIntOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -431,24 +432,103 @@ class ShopRepository(private val database: AppDatabase) {
         )
     }
 
-    suspend fun giveCustomerAdditionalDue(customer: Customer, amountDue: Double, note: String) = withContext(Dispatchers.IO) {
-        val now = System.currentTimeMillis()
+    suspend fun giveCustomerAdditionalDue(
+        customer: Customer,
+        amountDue: Double,
+        note: String,
+        selectedProducts: List<Pair<Product, Double>> = emptyList(),
+        customTimestamp: Long = System.currentTimeMillis()
+    ) = withContext(Dispatchers.IO) {
+        val now = if (customTimestamp > 0) customTimestamp else System.currentTimeMillis()
         val cleanDue = round2(amountDue)
-        val updatedDue = round2(customer.totalDue + cleanDue)
-        val updatedPurchased = round2(customer.totalPurchased + cleanDue)
-        customerDao.updateCustomerBalance(customer.id, cleanDue, cleanDue, now)
+        val invoiceNo = "INV-${SimpleDateFormat("yyMMddHHmm", Locale.getDefault()).format(Date(now))}"
 
-        dueLogDao.insertDueLog(
-            DueLog(
-                customerId = customer.id,
-                customerName = customer.name,
-                customerPhone = customer.phone,
-                type = "DUE_GIVEN",
-                amount = cleanDue,
-                note = note.ifBlank { "বাকি প্রদান" },
-                timestamp = now
+        if (selectedProducts.isNotEmpty()) {
+            val itemsSummary = selectedProducts.joinToString(", ") { "${it.first.name} (${it.second.toIntOrNull() ?: it.second} ${it.first.unit})" }
+            val fullNote = if (note.isNotBlank() && note != itemsSummary) "$itemsSummary • $note • মেমো #$invoiceNo" else "$itemsSummary • মেমো #$invoiceNo"
+
+            for (pair in selectedProducts) {
+                val prod = pair.first
+                val qty = pair.second
+                productDao.decreaseStock(prod.id, qty)
+                val itemTotal = round2(prod.sellPrice * qty)
+                val itemCost = round2(prod.buyPrice * qty)
+                val itemProfit = round2(itemTotal - itemCost)
+
+                transactionDao.insertTransaction(
+                    TransactionRecord(
+                        type = "SALE",
+                        invoiceNumber = invoiceNo,
+                        productId = prod.id,
+                        productName = prod.name,
+                        quantity = qty,
+                        unit = prod.unit,
+                        unitPrice = prod.sellPrice,
+                        costPrice = prod.buyPrice,
+                        totalAmount = itemTotal,
+                        profitAmount = itemProfit,
+                        customerName = customer.name,
+                        customerPhone = customer.phone,
+                        paidAmount = 0.0,
+                        dueAmount = itemTotal,
+                        paymentMethod = "বাকি (Due)",
+                        note = fullNote,
+                        timestamp = now
+                    )
+                )
+            }
+
+            customerDao.updateCustomerBalance(customer.id, cleanDue, cleanDue, now)
+            dueLogDao.insertDueLog(
+                DueLog(
+                    customerId = customer.id,
+                    customerName = customer.name,
+                    customerPhone = customer.phone,
+                    type = "DUE_GIVEN",
+                    amount = cleanDue,
+                    note = fullNote,
+                    timestamp = now
+                )
             )
-        )
+        } else {
+            val fullNote = if (note.isNotBlank()) "$note • মেমো #$invoiceNo" else "বাকি বিক্রি • মেমো #$invoiceNo"
+            val prodName = if (note.isNotBlank()) note else "বাকি পণ্য বিক্রয়"
+
+            transactionDao.insertTransaction(
+                TransactionRecord(
+                    type = "SALE",
+                    invoiceNumber = invoiceNo,
+                    productId = 0L,
+                    productName = prodName,
+                    quantity = 1.0,
+                    unit = "টি",
+                    unitPrice = cleanDue,
+                    costPrice = 0.0,
+                    totalAmount = cleanDue,
+                    profitAmount = 0.0,
+                    customerName = customer.name,
+                    customerPhone = customer.phone,
+                    paidAmount = 0.0,
+                    dueAmount = cleanDue,
+                    paymentMethod = "বাকি (Due)",
+                    note = fullNote,
+                    timestamp = now
+                )
+            )
+
+            customerDao.updateCustomerBalance(customer.id, cleanDue, cleanDue, now)
+            dueLogDao.insertDueLog(
+                DueLog(
+                    customerId = customer.id,
+                    customerName = customer.name,
+                    customerPhone = customer.phone,
+                    type = "DUE_GIVEN",
+                    amount = cleanDue,
+                    note = fullNote,
+                    timestamp = now
+                )
+            )
+        }
     }
 
     suspend fun updateDueLog(dueLog: DueLog) = withContext(Dispatchers.IO) {
