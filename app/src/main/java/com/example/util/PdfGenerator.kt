@@ -12,6 +12,7 @@ import com.example.data.model.CashLog
 import com.example.data.model.Customer
 import com.example.data.model.DueLog
 import com.example.data.model.Expense
+import com.example.data.model.MasterCashEntry
 import com.example.data.model.Product
 import com.example.data.model.TransactionRecord
 import com.example.ui.components.toIntOrNull
@@ -1170,6 +1171,180 @@ object PdfGenerator {
 
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
         return savePdfToFile(context, pdfDocument, "Expenses_Report_$timestamp.pdf")
+    }
+
+    /**
+     * Generates Official Master Cash Book (দোকানের মূল ক্যাশ খাতা) PDF Statement
+     */
+    fun generateMasterCashBookPdf(
+        context: Context,
+        shopName: String,
+        periodTitle: String,
+        entries: List<MasterCashEntry>,
+        currency: String = "৳"
+    ): File? {
+        val pdfDocument = PdfDocument()
+        var pageNumber = 1
+        var pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+        var page = pdfDocument.startPage(pageInfo)
+        var canvas = page.canvas
+
+        val titlePaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 18f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(15, 23, 42)
+            textAlign = Paint.Align.CENTER
+        }
+        val subPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 10f
+            color = Color.rgb(100, 116, 139)
+            textAlign = Paint.Align.CENTER
+        }
+        val boldPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 9.5f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(15, 23, 42)
+        }
+        val greenTextPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 9.5f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(22, 163, 74)
+            textAlign = Paint.Align.RIGHT
+        }
+        val redTextPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 9.5f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(220, 38, 38)
+            textAlign = Paint.Align.RIGHT
+        }
+        val balanceTextPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 9.5f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(30, 41, 59)
+            textAlign = Paint.Align.RIGHT
+        }
+        val textPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 9.5f
+            color = Color.rgb(30, 41, 59)
+        }
+        val linePaint = Paint().apply {
+            color = Color.rgb(226, 232, 240)
+            strokeWidth = 1f
+        }
+        val headerPaint = Paint().apply {
+            color = Color.rgb(51, 65, 85) // Slate header
+            style = Paint.Style.FILL
+        }
+        val headerTextPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 10f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.WHITE
+        }
+
+        val totalIncome = entries.filter { it.isAddition }.sumOf { it.amount }
+        val totalExpense = entries.filter { !it.isAddition }.sumOf { it.amount }
+        val netBalance = totalIncome - totalExpense
+
+        fun drawHeaderAndSummary(drawSummaryBox: Boolean) {
+            val topBarPaint = Paint().apply { color = Color.rgb(15, 118, 110); style = Paint.Style.FILL } // Teal top bar
+            canvas.drawRect(0f, 0f, 595f, 12f, topBarPaint)
+
+            var y = 42f
+            canvas.drawText(shopName, 297.5f, y, titlePaint)
+            y += 16f
+            canvas.drawText("দোকানের মূল ক্যাশ খাতা স্টেটমেন্ট ($periodTitle)", 297.5f, y, subPaint)
+            y += 14f
+            val genDate = SimpleDateFormat("dd MMMM yyyy, hh:mm a", Locale.getDefault()).format(Date())
+            canvas.drawText("তারিখ: $genDate | পৃষ্ঠা: $pageNumber", 297.5f, y, subPaint)
+
+            if (drawSummaryBox) {
+                y += 20f
+                val boxPaint = Paint().apply { color = Color.rgb(240, 253, 250); style = Paint.Style.FILL }
+                canvas.drawRoundRect(RectF(35f, y, 560f, y + 42f), 6f, 6f, boxPaint)
+                canvas.drawRoundRect(RectF(35f, y, 560f, y + 42f), 6f, 6f, linePaint)
+
+                y += 17f
+                canvas.drawText("মোট লেনদেন: ${entries.size} টি", 50f, y, boldPaint)
+                val sumGreen = Paint().apply { isAntiAlias = true; textSize = 10f; color = Color.rgb(22, 163, 74); typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD) }
+                val sumRed = Paint().apply { isAntiAlias = true; textSize = 10f; color = Color.rgb(220, 38, 38); typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD) }
+                val sumBal = Paint().apply { isAntiAlias = true; textSize = 10f; color = Color.rgb(15, 23, 42); typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD) }
+
+                canvas.drawText("মোট জমা: $currency${totalIncome.toIntOrNull() ?: totalIncome}", 180f, y, sumGreen)
+                canvas.drawText("মোট প্রদত্ত: $currency${totalExpense.toIntOrNull() ?: totalExpense}", 315f, y, sumRed)
+                canvas.drawText("নিট ব্যালেন্স: $currency${netBalance.toIntOrNull() ?: netBalance}", 440f, y, sumBal)
+            }
+        }
+
+        fun drawTableHeader(startY: Float): Float {
+            canvas.drawRoundRect(RectF(35f, startY - 12f, 560f, startY + 10f), 4f, 4f, headerPaint)
+            canvas.drawText("তারিখ ও সময়", 42f, startY, headerTextPaint)
+            canvas.drawText("বিবরণ ও খাত / কাস্টমার", 160f, startY, headerTextPaint)
+            val alignRightHeader = Paint().apply {
+                isAntiAlias = true
+                textSize = 10f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                color = Color.WHITE
+                textAlign = Paint.Align.RIGHT
+            }
+            canvas.drawText("জমা ($currency)", 375f, startY, alignRightHeader)
+            canvas.drawText("প্রদত্ত ($currency)", 465f, startY, alignRightHeader)
+            canvas.drawText("ব্যালেন্স ($currency)", 550f, startY, alignRightHeader)
+            return startY + 18f
+        }
+
+        drawHeaderAndSummary(drawSummaryBox = true)
+        var y = 138f
+        y = drawTableHeader(y)
+
+        val rowBgAlt = Paint().apply { color = Color.rgb(248, 250, 252); style = Paint.Style.FILL }
+
+        entries.forEachIndexed { index, item ->
+            if (y > 780f) {
+                pdfDocument.finishPage(page)
+                pageNumber++
+                pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+                page = pdfDocument.startPage(pageInfo)
+                canvas = page.canvas
+                drawHeaderAndSummary(drawSummaryBox = false)
+                y = 90f
+                y = drawTableHeader(y)
+            }
+
+            if (index % 2 == 1) {
+                canvas.drawRect(RectF(35f, y - 10f, 560f, y + 6f), rowBgAlt)
+            }
+
+            val dateStr = SimpleDateFormat("dd/MM/yy hh:mm a", Locale.getDefault()).format(Date(item.timestamp))
+            canvas.drawText(dateStr, 42f, y, textPaint)
+
+            val displayTitle = if (item.title.length > 26) item.title.take(24) + ".." else item.title
+            canvas.drawText(displayTitle, 160f, y, boldPaint)
+
+            if (item.isAddition) {
+                canvas.drawText("${item.amount.toIntOrNull() ?: item.amount}", 375f, y, greenTextPaint)
+            } else {
+                canvas.drawText("${item.amount.toIntOrNull() ?: item.amount}", 465f, y, redTextPaint)
+            }
+
+            val balStr = "${if (item.runningBalance < 0) "-" else ""}${Math.abs(item.runningBalance).toIntOrNull() ?: Math.abs(item.runningBalance)}"
+            canvas.drawText(balStr, 550f, y, balanceTextPaint)
+
+            y += 16f
+        }
+
+        drawSponsorFooter(canvas, 802f, "Master Cash Book Statement - নির্ভুল হিসাব গ্যারান্টিযুক্ত")
+        pdfDocument.finishPage(page)
+
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
+        return savePdfToFile(context, pdfDocument, "CashBook_Statement_$timestamp.pdf")
     }
 
     private fun savePdfToFile(context: Context, pdfDocument: PdfDocument, filename: String): File? {

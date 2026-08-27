@@ -85,6 +85,21 @@ data class CashLog(
     val timestamp: Long = System.currentTimeMillis()
 )
 
+data class MasterCashEntry(
+    val id: String,
+    val source: String, // "SALE", "DUE_COLLECTED", "EXPENSE", "PURCHASE", "CASH_IN", "CASH_OUT", "CLOSING", "ADJUST"
+    val timestamp: Long,
+    val title: String,
+    val note: String = "",
+    val categoryOrCustomer: String = "",
+    val amount: Double,
+    val isAddition: Boolean, // true for জমা (Green), false for প্রদত্ত (Red)
+    val runningBalance: Double = 0.0,
+    val paymentMethod: String = "CASH",
+    val invoiceNumber: String = "",
+    val originalCashLog: CashLog? = null
+)
+
 data class CartItem(
     val product: Product,
     var quantity: Double = 1.0,
