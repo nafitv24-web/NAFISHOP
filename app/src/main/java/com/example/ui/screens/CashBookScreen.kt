@@ -129,7 +129,7 @@ fun CashBookScreen(
     }
 
     // 1. Build Comprehensive Unified Master Cash Ledger
-    val masterEntries = remember(cashLogs, allTransactions, dueLogs, expenses, language) {
+    val masterEntries = remember(cashLogs, allTransactions, dueLogs, expenses, shopInfo.mainBalance, language) {
         val list = mutableListOf<MasterCashEntry>()
 
         // A. Sales Cash Inflow (Grouped by Invoice or Transaction)
@@ -255,6 +255,27 @@ fun CashBookScreen(
                     )
                 )
             }
+        }
+
+        // F. Opening / Initial Cash in Hand (প্রারম্ভিক ক্যাশ তহবিল)
+        // Check if there is an unallocated opening balance or initial cash
+        val totalActivityNet = list.sumOf { if (it.isAddition) it.amount else -it.amount }
+        val openingBalance = CalculationHelper.round2(shopInfo.mainBalance - totalActivityNet)
+        if (Math.abs(openingBalance) > 0.01) {
+            val earliestTime = list.minOfOrNull { it.timestamp } ?: (System.currentTimeMillis() - 86400000L)
+            list.add(
+                MasterCashEntry(
+                    id = "OPENING_BALANCE",
+                    source = "INITIAL_BALANCE",
+                    timestamp = earliestTime - 60000L,
+                    title = if (language == "bn") "প্রারম্ভিক ক্যাশ তহবিল (হাতে নগদ)" else "Opening Cash Balance",
+                    note = if (language == "bn") "দোকান শুরুর নগদ ক্যাশ ব্যালেন্স" else "Initial Starting Cash",
+                    categoryOrCustomer = if (language == "bn") "প্রারম্ভিক তহবিল" else "Opening Funds",
+                    amount = Math.abs(openingBalance),
+                    isAddition = openingBalance > 0,
+                    paymentMethod = "CASH"
+                )
+            )
         }
 
         // Sort strictly oldest to newest for flawless chronological running balance calculation
