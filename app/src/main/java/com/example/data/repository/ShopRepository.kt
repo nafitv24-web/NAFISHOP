@@ -164,25 +164,66 @@ class ShopRepository(private val database: AppDatabase) {
     /**
      * Complete Ledger Reconciliation:
      * Audits and re-calculates every customer's total due by matching with their DueLogs.
+     * Automatically links any orphaned logs and creates missing opening balance records.
      * Prevents any mathematical discrepancies or calculation errors.
      */
     suspend fun reconcileCustomerLedgers() = withContext(Dispatchers.IO) {
         val customers = customerDao.getAllCustomersList()
+        val allDueLogs = dueLogDao.getAllDueLogsList()
+
         for (cust in customers) {
+            val cleanPhone = cust.phone.trim()
+            val cleanName = cust.name.trim().lowercase()
+
+            // 1. Link any unlinked/orphaned due logs matching customer name or phone
+            val matchingLogs = allDueLogs.filter { log ->
+                log.customerId == cust.id ||
+                (cleanPhone.isNotBlank() && log.customerPhone.isNotBlank() && log.customerPhone.trim() == cleanPhone) ||
+                (cleanName.isNotBlank() && log.customerName.isNotBlank() && log.customerName.trim().lowercase() == cleanName)
+            }
+
+            for (log in matchingLogs) {
+                if (log.customerId != cust.id) {
+                    dueLogDao.updateDueLog(log.copy(customerId = cust.id))
+                }
+            }
+
+            // 2. Fetch all logs for this customer
             val logs: List<DueLog> = dueLogDao.getDueLogsListForCustomer(cust.id)
-            if (logs.isNotEmpty()) {
-                var calculatedDue = 0.0
-                for (log in logs) {
-                    if (log.type == "DUE_GIVEN") {
-                        calculatedDue += log.amount
-                    } else if (log.type == "DUE_COLLECTED") {
-                        calculatedDue -= log.amount
-                    }
+            var sumGiven = 0.0
+            var sumCollected = 0.0
+
+            for (log in logs) {
+                if (log.type == "DUE_GIVEN") {
+                    sumGiven += log.amount
+                } else if (log.type == "DUE_COLLECTED") {
+                    sumCollected += log.amount
                 }
-                calculatedDue = round2(calculatedDue.coerceAtLeast(0.0))
-                if (round2(cust.totalDue) != calculatedDue) {
-                    customerDao.setCustomerDue(cust.id, calculatedDue, System.currentTimeMillis())
-                }
+            }
+            sumGiven = round2(sumGiven)
+            sumCollected = round2(sumCollected)
+            val netFromLogs = round2((sumGiven - sumCollected).coerceAtLeast(0.0))
+            val cleanCustDue = round2(cust.totalDue)
+
+            // 3. If customer's total due is higher than the sum of history (due to opening balance)
+            val missingOpeningDue = round2(cleanCustDue - netFromLogs)
+            if (missingOpeningDue > 0.01) {
+                val earliestTime = logs.minOfOrNull { it.timestamp }?.let { it - 60000L }
+                    ?: (cust.lastTransactionDate.takeIf { it > 0 } ?: (System.currentTimeMillis() - 86400000L))
+                dueLogDao.insertDueLog(
+                    DueLog(
+                        customerId = cust.id,
+                        customerName = cust.name,
+                        customerPhone = cust.phone,
+                        type = "DUE_GIVEN",
+                        amount = missingOpeningDue,
+                        note = "প্রারম্ভিক বাকি / পূর্বের হিসাব",
+                        timestamp = earliestTime
+                    )
+                )
+            } else if (netFromLogs > cleanCustDue + 0.01) {
+                // If sum of history is higher, update customer totalDue to match history exactly
+                customerDao.setCustomerDue(cust.id, netFromLogs, System.currentTimeMillis())
             }
         }
     }

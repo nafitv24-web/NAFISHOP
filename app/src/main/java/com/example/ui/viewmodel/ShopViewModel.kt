@@ -1026,6 +1026,12 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun reconcileCustomerLedgers() {
+        viewModelScope.launch {
+            repository.reconcileCustomerLedgers()
+        }
+    }
+
     // Transaction & DueLog Editing (Mistake correction / Return handling)
     fun returnProductSale(tx: TransactionRecord, returnQuantity: Double, note: String) {
         viewModelScope.launch {

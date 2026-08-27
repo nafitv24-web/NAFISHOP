@@ -42,6 +42,7 @@ import com.example.data.model.TransactionRecord
 import com.example.ui.components.toIntOrNull
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.ShopViewModel
+import com.example.util.CalculationHelper.round2
 import com.example.util.PdfGenerator
 import java.text.SimpleDateFormat
 import java.util.*
@@ -98,9 +99,19 @@ fun CustomerLedgerScreen(
     var showEditCustomerDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
 
+    LaunchedEffect(currentCustomer.id) {
+        viewModel.reconcileCustomerLedgers()
+    }
+
     // Filter due logs and transactions for this customer
-    val customerDueLogs = remember(dueLogs, currentCustomer.id) {
-        dueLogs.filter { it.customerId == currentCustomer.id }
+    val customerDueLogs = remember(dueLogs, currentCustomer.id, currentCustomer.name, currentCustomer.phone) {
+        val cleanPhone = currentCustomer.phone.trim()
+        val cleanName = currentCustomer.name.trim().lowercase()
+        dueLogs.filter { log ->
+            log.customerId == currentCustomer.id ||
+            (cleanPhone.isNotBlank() && log.customerPhone.isNotBlank() && log.customerPhone.trim() == cleanPhone) ||
+            (cleanName.isNotBlank() && log.customerName.isNotBlank() && log.customerName.trim().lowercase() == cleanName)
+        }.distinctBy { it.id }
     }
 
     val customerTransactions = remember(allTransactions, currentCustomer.name, currentCustomer.phone) {
@@ -111,19 +122,22 @@ fun CustomerLedgerScreen(
     }
 
     // Build unified chronological ledger entries with running balance
-    val allLedgerEntries = remember(customerDueLogs, customerTransactions) {
+    val allLedgerEntries = remember(customerDueLogs, customerTransactions, currentCustomer.totalDue, language) {
         val rawList = mutableListOf<LedgerEntry>()
 
         // 1. Add all Due Logs
         customerDueLogs.forEach { log ->
             val isGiven = log.type == "DUE_GIVEN"
+            val isOpening = log.note.contains("প্রারম্ভিক") || log.note.contains("পূর্বের")
             rawList.add(
                 LedgerEntry(
                     id = log.id * 10 + 1,
                     sourceId = log.id,
                     isDueLog = true,
                     type = if (isGiven) "GIVEN" else "COLLECTED",
-                    title = if (isGiven) "বাকি প্রদান" else "জমা গ্রহণ",
+                    title = if (isGiven) {
+                        if (isOpening) (if (language == "bn") "প্রারম্ভিক বাকি" else "Opening Balance") else (if (language == "bn") "বাকি প্রদান" else "Credit Given")
+                    } else (if (language == "bn") "জমা গ্রহণ" else "Payment Received"),
                     note = log.note.ifBlank { if (isGiven) "বাকি হিসাব" else "নগদ জমা" },
                     amount = log.amount,
                     timestamp = log.timestamp,
@@ -156,6 +170,30 @@ fun CustomerLedgerScreen(
             }
         }
 
+        // 3. Ensure opening balance is present if totalDue has an unlogged difference
+        val sumGiven = round2(rawList.filter { it.type == "GIVEN" }.sumOf { it.amount })
+        val sumCollected = round2(rawList.filter { it.type == "COLLECTED" }.sumOf { it.amount })
+        val netFromHistory = round2((sumGiven - sumCollected).coerceAtLeast(0.0))
+        val cleanCustDue = round2(currentCustomer.totalDue)
+        val missingOpeningDue = round2(cleanCustDue - netFromHistory)
+
+        if (missingOpeningDue > 0.01) {
+            val earliestTime = rawList.minOfOrNull { it.timestamp }?.let { it - 60000L }
+                ?: (currentCustomer.lastTransactionDate.takeIf { it > 0 } ?: (System.currentTimeMillis() - 86400000L))
+            rawList.add(
+                LedgerEntry(
+                    id = -currentCustomer.id * 100 - 99,
+                    sourceId = 0L,
+                    isDueLog = false,
+                    type = "GIVEN",
+                    title = if (language == "bn") "প্রারম্ভিক বাকি / পূর্বের হিসাব" else "Opening Balance / Initial Due",
+                    note = if (language == "bn") "পূর্বের হিসাবের প্রারম্ভিক বকেয়া" else "Initial account opening balance",
+                    amount = missingOpeningDue,
+                    timestamp = earliestTime
+                )
+            )
+        }
+
         // Sort ascending by time to calculate chronological running balance
         val sortedAsc = rawList.sortedBy { it.timestamp }
         var currentBal = 0.0
@@ -165,7 +203,7 @@ fun CustomerLedgerScreen(
             } else {
                 currentBal += entry.amount // Customer balance increases towards 0 or positive
             }
-            entry.copy(runningBalance = currentBal)
+            entry.copy(runningBalance = round2(currentBal))
         }
 
         // Sort descending (newest first) for viewing
@@ -295,11 +333,23 @@ fun CustomerLedgerScreen(
                     // PDF Statement
                     IconButton(
                         onClick = {
+                            val pdfHistory = allLedgerEntries.map { entry ->
+                                entry.originalDueLog ?: DueLog(
+                                    id = entry.id,
+                                    customerId = currentCustomer.id,
+                                    customerName = currentCustomer.name,
+                                    customerPhone = currentCustomer.phone,
+                                    type = if (entry.type == "GIVEN") "DUE_GIVEN" else "DUE_COLLECTED",
+                                    amount = entry.amount,
+                                    note = if (entry.title.isNotBlank()) "${entry.title} - ${entry.note}" else entry.note,
+                                    timestamp = entry.timestamp
+                                )
+                            }
                             val pdf = PdfGenerator.generateCustomerDuePdf(
                                 context = context,
                                 shopName = shopInfo.shopName,
                                 customer = currentCustomer,
-                                history = customerDueLogs,
+                                history = pdfHistory,
                                 currency = currency
                             )
                             if (pdf != null) {
@@ -464,9 +514,10 @@ fun CustomerLedgerScreen(
                                 color = Color(0xFF94A3B8)
                             )
                             Spacer(modifier = Modifier.height(2.dp))
-                            val isDue = currentCustomer.totalDue > 0
+                            val currentDueBalance = (totalGiven - totalCollected).coerceAtLeast(0.0)
+                            val isDue = currentDueBalance > 0.01
                             Text(
-                                text = if (isDue) "-$currency${currentCustomer.totalDue.toIntOrNull() ?: currentCustomer.totalDue} বাকি"
+                                text = if (isDue) "-$currency${currentDueBalance.toIntOrNull() ?: currentDueBalance} বাকি"
                                 else (if (language == "bn") "পরিশোধিত" else "Settled"),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.ExtraBold,

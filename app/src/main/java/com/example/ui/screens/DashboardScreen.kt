@@ -40,6 +40,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.data.model.CashLog
 import com.example.data.model.Product
 import com.example.data.model.TransactionRecord
+import com.example.ui.components.DueTagadaReminderDialog
 import com.example.ui.components.EditOrReturnSaleDialog
 import com.example.ui.components.NafiShopSmallLogo
 import com.example.ui.components.toIntOrNull
@@ -1790,12 +1791,17 @@ fun DashboardScreen(
     }
 
     if (showDueSmsReminderDialog) {
-        DueSmsReminderDialog(
+        DueTagadaReminderDialog(
+            customers = customers,
             dueSales = allTransactions.filter { it.type == "SALE" && it.dueAmount > 0 },
             currency = currency,
             language = language,
             shopName = shopInfo.shopName,
-            onDismiss = { showDueSmsReminderDialog = false }
+            onDismiss = { showDueSmsReminderDialog = false },
+            onCollectPayment = { customer, amount, note ->
+                viewModel.collectCustomerDue(customer, amount, note)
+            },
+            onNavigateToDueKhata = onNavigateToDue
         )
     }
 
@@ -3232,138 +3238,6 @@ fun AllMemosDialog(
                                                 color = DueOrange
                                             )
                                         }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun DueSmsReminderDialog(
-    dueSales: List<TransactionRecord>,
-    currency: String,
-    language: String,
-    shopName: String,
-    onDismiss: () -> Unit
-) {
-    val context = LocalContext.current
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Card(
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            modifier = Modifier
-                .fillMaxWidth(0.95f)
-                .fillMaxHeight(0.85f)
-                .padding(8.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .background(Color(0xFFFFF7ED), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.Sms, contentDescription = null, tint = DueOrange, modifier = Modifier.size(20.dp))
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = if (language == "bn") "বাকি তাগাদা ও এসএমএস" else "Due Payment Reminders",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Close")
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                if (dueSales.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = ProfitGreen, modifier = Modifier.size(48.dp))
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                if (language == "bn") "আলহামদুলিল্লাহ, কোনো বকেয়া বাকি নেই!" else "No pending dues!",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = ProfitGreen
-                            )
-                        }
-                    }
-                } else {
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        items(dueSales) { tx ->
-                            Card(
-                                shape = RoundedCornerShape(12.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBEB)),
-                                border = BorderStroke(1.dp, Color(0xFFFED7AA))
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(12.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = tx.customerName.ifBlank { if (language == "bn") "নামহীন কাস্টমার" else "Unnamed Customer" },
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        if (tx.customerPhone.isNotBlank()) {
-                                            Text(
-                                                text = tx.customerPhone,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.outline
-                                            )
-                                        }
-                                        Text(
-                                            text = "বকেয়া: $currency${tx.dueAmount} • মেমো #${tx.invoiceNumber}",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = DueOrange
-                                        )
-                                    }
-
-                                    Button(
-                                        onClick = {
-                                            val message = "শ্রদ্ধেয় ${tx.customerName}, $shopName এ আপনার মেমো #${tx.invoiceNumber} বাবদ বকেয়া $currency${tx.dueAmount} টাকা বাকি আছে। দ্রুত পরিশোধের অনুরোধ রইল। ধন্যবাদ।"
-                                            val sendIntent = Intent().apply {
-                                                action = Intent.ACTION_SEND
-                                                putExtra(Intent.EXTRA_TEXT, message)
-                                                type = "text/plain"
-                                            }
-                                            context.startActivity(Intent.createChooser(sendIntent, "তাগাদা পাঠান"))
-                                        },
-                                        shape = RoundedCornerShape(8.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = DueOrange),
-                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                        modifier = Modifier.height(34.dp)
-                                    ) {
-                                        Icon(Icons.Default.Send, contentDescription = "Send", modifier = Modifier.size(14.dp))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(if (language == "bn") "তাগাদা দিন" else "Remind", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }

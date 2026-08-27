@@ -144,6 +144,9 @@ interface DueLogDao {
     @Query("SELECT * FROM due_logs WHERE id = :id LIMIT 1")
     suspend fun getDueLogById(id: Long): DueLog?
 
+    @Query("SELECT * FROM due_logs")
+    suspend fun getAllDueLogsList(): List<DueLog>
+
     @Query("SELECT * FROM due_logs WHERE customerId = :customerId")
     suspend fun getDueLogsListForCustomer(customerId: Long): List<DueLog>
 
