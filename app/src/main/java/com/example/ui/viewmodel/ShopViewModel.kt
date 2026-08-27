@@ -154,9 +154,13 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                     .putLong("cloud_backup_timestamp_${accountId}", System.currentTimeMillis())
                     .apply()
 
-                // 2. Sync to Firebase Realtime DB cloud under isolated account ID
+                // 2. Sync to Cloud under isolated account ID and email
                 try {
                     firebaseRealtime.backupShopData(accountId, jsonStr)
+                    val userEmail = _shopInfo.value.userEmail.trim().lowercase()
+                    if (userEmail.isNotBlank() && userEmail != accountId) {
+                        firebaseRealtime.backupShopData(userEmail, jsonStr)
+                    }
                 } catch (e: Exception) {
                     // silent fallback
                 }
