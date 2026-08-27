@@ -10,6 +10,11 @@ val EmeraldPrimary = Color(0xFF059669)
 val EmeraldSecondary = Color(0xFF0D9488)
 val AmberTertiary = Color(0xFFD97706)
 
+val TealDarkHeader = Color(0xFF0B4F48)
+val TealGradientStart = Color(0xFF0D5C52)
+val TealGradientEnd = Color(0xFF063A33)
+val MintSoftBackground = Color(0xFFE6F4F1)
+
 val LightBackground = Color(0xFFF8FAFC)
 val LightSurface = Color(0xFFFFFFFF)
 val DarkBackground = Color(0xFF0F172A)
@@ -20,4 +25,5 @@ val LossRed = Color(0xFFDC2626)
 val DueOrange = Color(0xFFEA580C)
 val StockBlue = Color(0xFF2563EB)
 val CardBorder = Color(0xFFE2E8F0)
+
 

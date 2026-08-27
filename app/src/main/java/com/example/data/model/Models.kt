@@ -131,7 +131,10 @@ data class DashboardSummary(
     val totalStockValue: Double = 0.0,
     val totalProductsCount: Int = 0,
     val lowStockCount: Int = 0
-)
+) {
+    val todayTotalSales: Double
+        get() = todaySales
+}
 
 data class ShopInfo(
     val shopName: String = "ভাই ভাই স্টোর",

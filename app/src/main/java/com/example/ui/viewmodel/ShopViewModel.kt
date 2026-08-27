@@ -1361,6 +1361,31 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun backupToLocalFile(context: Context, onComplete: ((Boolean, String) -> Unit)? = null) {
+        viewModelScope.launch {
+            isSyncing.value = true
+            syncMessage.value = if (_language.value == "bn") "ব্যাকআপ ফাইল তৈরি হচ্ছে..." else "Creating backup file..."
+            try {
+                val jsonStr = getExportJsonString()
+                val fileName = "nafishop_backup_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.json"
+                val file = java.io.File(context.getExternalFilesDir(null) ?: context.filesDir, fileName)
+                file.writeText(jsonStr)
+
+                val timeFormat = SimpleDateFormat("d MMMM yyyy, h:mm a", Locale.getDefault())
+                val timeStr = timeFormat.format(Date())
+                _shopInfo.value = _shopInfo.value.copy(lastBackupDate = timeStr)
+                prefs.edit().putString("last_backup_date", timeStr).apply()
+                isSyncing.value = false
+                syncMessage.value = if (_language.value == "bn") "ফাইলে ব্যাকআপ সফলভাবে সংরক্ষিত হয়েছে!" else "Backup saved to file successfully!"
+                onComplete?.invoke(true, file.absolutePath)
+            } catch (e: Exception) {
+                isSyncing.value = false
+                syncMessage.value = "Backup failed: ${e.localizedMessage}"
+                onComplete?.invoke(false, e.localizedMessage ?: "Error")
+            }
+        }
+    }
+
     fun importFromGoogleDriveCloud(context: Context, onResult: (RestoreResult) -> Unit) {
         viewModelScope.launch {
             isSyncing.value = true

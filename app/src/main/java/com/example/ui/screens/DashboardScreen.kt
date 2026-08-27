@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -89,6 +90,13 @@ fun DashboardScreen(
     var showSetBalanceDialog by remember { mutableStateOf(false) }
     var showDayEndSettleDialog by remember { mutableStateOf(false) }
     var showCashHistoryDialog by remember { mutableStateOf(false) }
+    var showAllMemosDialog by remember { mutableStateOf(false) }
+    var showDueSmsReminderDialog by remember { mutableStateOf(false) }
+    var showCloudBackupInfoDialog by remember { mutableStateOf(false) }
+    var showBusinessSummaryDetailDialog by remember { mutableStateOf(false) }
+    var showAllServicesDialog by remember { mutableStateOf(false) }
+    var isHeaderSearchVisible by remember { mutableStateOf(false) }
+    var bannerPageIndex by remember { mutableIntStateOf(0) }
     var editingTransaction by remember { mutableStateOf<TransactionRecord?>(null) }
 
     // Date Filter State for All Transactions: "TODAY", "YESTERDAY", "WEEK", "MONTH", "CUSTOM", "ALL"
@@ -217,435 +225,690 @@ fun DashboardScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 1. Top Shop Greeting Card
+        // 1. Curved Deep Teal Hero Header
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(EmeraldPrimary, Color(0xFF047857))
-                            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(bottomStart = 26.dp, bottomEnd = 26.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(TealDarkHeader, TealGradientEnd)
                         )
-                        .padding(18.dp)
+                    )
+                    .padding(start = 18.dp, end = 18.dp, top = 14.dp, bottom = 20.dp)
+            ) {
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = if (language == "bn") "ড্যাশবোর্ড" else "Dashboard",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "${shopInfo.shopName} • $todayDateFormatted",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFD1FAE5)
+                            )
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Search Toggle Button
+                            IconButton(
+                                onClick = { isHeaderSearchVisible = !isHeaderSearchVisible },
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0x33FFFFFF))
+                            ) {
+                                Icon(
+                                    Icons.Default.Search,
+                                    contentDescription = "Search",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            // Notification Bell with Badge
+                            Box {
+                                IconButton(
+                                    onClick = { showAllMemosDialog = true },
+                                    modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0x33FFFFFF))
+                                ) {
+                                    Icon(
+                                        Icons.Default.Notifications,
+                                        contentDescription = "Notifications",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Surface(
+                                    shape = CircleShape,
+                                    color = Color(0xFFEF4444),
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .size(10.dp)
+                                ) {}
+                            }
+                        }
+                    }
+
+                    // In-Header Animated Search Box
+                    AnimatedVisibility(visible = isHeaderSearchVisible) {
+                        Column {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            OutlinedTextField(
+                                value = txSearchQuery,
+                                onValueChange = { txSearchQuery = it },
+                                placeholder = {
+                                    Text(
+                                        if (language == "bn") "মেমো, কাস্টমার, বা পণ্য খুঁজুন..." else "Search invoices, customers, products...",
+                                        fontSize = 13.sp,
+                                        color = Color.White.copy(alpha = 0.8f)
+                                    )
+                                },
+                                singleLine = true,
+                                trailingIcon = {
+                                    if (txSearchQuery.isNotBlank()) {
+                                        IconButton(onClick = { txSearchQuery = "" }) {
+                                            Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color.White, modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Color.White,
+                                    unfocusedBorderColor = Color(0x66FFFFFF),
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    focusedContainerColor = Color(0x26000000),
+                                    unfocusedContainerColor = Color(0x26000000)
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(50.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Hero Promotional & Stats Carousel Banner
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+            ) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    border = BorderStroke(1.dp, CardBorder)
                 ) {
-                    Column {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(
+                                        Color(0xFFF0FDF4),
+                                        Color(0xFFE6F4F1),
+                                        Color(0xFFECFDF5)
+                                    )
+                                )
+                            )
+                            .padding(16.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Left Brand & Details
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Rounded Brand Logo
+                                Surface(
+                                    shape = CircleShape,
+                                    color = Color.White,
+                                    shadowElevation = 3.dp,
+                                    modifier = Modifier.size(46.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        NafiShopSmallLogo(size = 42.dp)
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.width(12.dp))
+
+                                Column {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = if (language == "bn") "আজকের মোট বিক্রি" else "Today's Total Sales",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = Color(0xFF0F5147),
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Surface(
+                                            shape = RoundedCornerShape(4.dp),
+                                            color = Color(0xFFDCFCE7),
+                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                        ) {
+                                            Text(
+                                                text = if (summary.todayProfit >= 0) "+$currency${summary.todayProfit.toIntOrNull() ?: summary.todayProfit}" else "$currency${summary.todayProfit.toIntOrNull() ?: summary.todayProfit}",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (summary.todayProfit >= 0) ProfitGreen else LossRed,
+                                                modifier = Modifier.padding(horizontal = 4.dp)
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        text = "$currency${summary.todayTotalSales.toIntOrNull() ?: summary.todayTotalSales}",
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = TealDarkHeader
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Surface(
+                                            onClick = { showCashHistoryDialog = true },
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = Color(0xFF0F5147).copy(alpha = 0.12f)
+                                        ) {
+                                            Text(
+                                                text = "${if (language == "bn") "হাতে নগদ:" else "Cash:"} $currency${mainBalance.toIntOrNull() ?: mainBalance}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF0F5147),
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Right Visual Action Pill
+                            Surface(
+                                onClick = onNavigateToPos,
+                                shape = RoundedCornerShape(14.dp),
+                                color = TealDarkHeader,
+                                shadowElevation = 2.dp,
+                                modifier = Modifier.padding(start = 6.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.AddShoppingCart,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (language == "bn") "মেমো তৈরি" else "New Sale",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Carousel Dots Indicator
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    repeat(3) { index ->
+                        val isSelected = index == bannerPageIndex
+                        Box(
+                            modifier = Modifier
+                                .padding(horizontal = 3.dp)
+                                .clip(CircleShape)
+                                .background(if (isSelected) TealDarkHeader else Color(0xFFCBD5E1))
+                                .size(width = if (isSelected) 18.dp else 6.dp, height = 6.dp)
+                                .clickable { bannerPageIndex = index }
+                        )
+                    }
+                }
+            }
+        }
+
+        // 3. The Iconic 3x2 Core Action Grid (6 Rounded Elevated Cards)
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+            ) {
+                // Row 1: নগদ বিক্রি, বাকি খাতা, ক্যাশ খাতা
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // 1. নগদ বিক্রি
+                    CoreGridActionCard(
+                        title = if (language == "bn") "নগদ বিক্রি" else "Cash Sale",
+                        icon = Icons.Default.GridView,
+                        iconBg = Color(0xFFECFDF5),
+                        iconTint = EmeraldPrimary,
+                        modifier = Modifier.weight(1f),
+                        onClick = onNavigateToPos
+                    )
+
+                    // 2. বাকি খাতা
+                    CoreGridActionCard(
+                        title = if (language == "bn") "বাকি খাতা" else "Due Khata",
+                        icon = Icons.Default.AccountBalanceWallet,
+                        iconBg = Color(0xFFFFF7ED),
+                        iconTint = DueOrange,
+                        modifier = Modifier.weight(1f),
+                        onClick = onNavigateToDue
+                    )
+
+                    // 3. ক্যাশ খাতা
+                    CoreGridActionCard(
+                        title = if (language == "bn") "ক্যাশ খাতা" else "Cash Book",
+                        icon = Icons.Default.ReceiptLong,
+                        iconBg = Color(0xFFF0FDF4),
+                        iconTint = ProfitGreen,
+                        modifier = Modifier.weight(1f),
+                        onClick = { showCashHistoryDialog = true }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Row 2: স্টক ও পণ্য, দোকান খরচ, লাভ ও রিপোর্ট
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // 4. স্টক ও পণ্য
+                    CoreGridActionCard(
+                        title = if (language == "bn") "স্টক ও পণ্য" else "Stock",
+                        icon = Icons.Default.Inventory2,
+                        iconBg = Color(0xFFEFF6FF),
+                        iconTint = StockBlue,
+                        modifier = Modifier.weight(1f),
+                        onClick = onNavigateToStock
+                    )
+
+                    // 5. দোকান খরচ
+                    CoreGridActionCard(
+                        title = if (language == "bn") "দোকান খরচ" else "Expenses",
+                        icon = Icons.Default.TrendingDown,
+                        iconBg = Color(0xFFFEF2F2),
+                        iconTint = LossRed,
+                        modifier = Modifier.weight(1f),
+                        onClick = onNavigateToExpenses
+                    )
+
+                    // 6. লাভ ও রিপোর্ট
+                    CoreGridActionCard(
+                        title = if (language == "bn") "লাভ ও রিপোর্ট" else "Reports",
+                        icon = Icons.Default.Assessment,
+                        iconBg = Color(0xFFFAF5FF),
+                        iconTint = Color(0xFF7C3AED),
+                        modifier = Modifier.weight(1f),
+                        onClick = { showBusinessSummaryDetailDialog = true }
+                    )
+                }
+            }
+        }
+
+        // 4. "সার্ভিসেস ও অপশন" (Quick Services Row with 'See All')
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (language == "bn") "সার্ভিসেস ও অপশন" else "Services & Options",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    TextButton(onClick = { showAllServicesDialog = true }) {
+                        Text(
+                            text = if (language == "bn") "সব দেখুন" else "See All",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = EmeraldPrimary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Service 1: স্টক ইন
+                    ServiceCircleItem(
+                        title = if (language == "bn") "স্টক ইন" else "Stock In",
+                        icon = Icons.Default.AddBox,
+                        bgColor = Color(0xFFEFF6FF),
+                        iconTint = StockBlue,
+                        onClick = onOpenStockInDialog
+                    )
+
+                    // Service 2: ডিজিটাল মেমো
+                    ServiceCircleItem(
+                        title = if (language == "bn") "ডিজিটাল মেমো" else "Invoices",
+                        icon = Icons.Default.Receipt,
+                        bgColor = Color(0xFFF0FDF4),
+                        iconTint = ProfitGreen,
+                        onClick = { showAllMemosDialog = true }
+                    )
+
+                    // Service 3: বাকি তাগাদা
+                    ServiceCircleItem(
+                        title = if (language == "bn") "বাকি তাগাদা" else "Due SMS",
+                        icon = Icons.Default.Sms,
+                        bgColor = Color(0xFFFFFBEB),
+                        iconTint = DueOrange,
+                        onClick = { showDueSmsReminderDialog = true }
+                    )
+
+                    // Service 4: ব্যাকআপ
+                    ServiceCircleItem(
+                        title = if (language == "bn") "ডাটা ব্যাকআপ" else "Backup",
+                        icon = Icons.Default.CloudSync,
+                        bgColor = Color(0xFFF5F3FF),
+                        iconTint = Color(0xFF7C3AED),
+                        onClick = { showCloudBackupInfoDialog = true }
+                    )
+
+                    // Service 5: ক্যাশ জমা
+                    ServiceCircleItem(
+                        title = if (language == "bn") "ক্যাশ জমা" else "Cash In",
+                        icon = Icons.Default.AccountBalanceWallet,
+                        bgColor = Color(0xFFECFDF5),
+                        iconTint = EmeraldPrimary,
+                        onClick = { showAddCashDialog = true }
+                    )
+                }
+            }
+        }
+
+        // 5. "ব্যবসায়িক সারসংক্ষেপ" (Business Summary & Financial Metrics with 'See All')
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (language == "bn") "ব্যবসায়িক সারসংক্ষেপ" else "Business Summary",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    TextButton(onClick = { showBusinessSummaryDetailDialog = true }) {
+                        Text(
+                            text = if (language == "bn") "সব দেখুন" else "See All",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = EmeraldPrimary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Main Cash in Hand Card (High Priority Core Balance)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(1.5.dp),
+                    border = BorderStroke(1.dp, CardBorder)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                NafiShopSmallLogo(size = 44.dp)
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = Color(0xFFDCFCE7),
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            Icons.Default.AccountBalanceWallet,
+                                            contentDescription = "Main Cash",
+                                            tint = EmeraldPrimary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column {
                                     Text(
-                                        text = shopInfo.shopName,
-                                        style = MaterialTheme.typography.titleLarge,
+                                        text = if (language == "bn") "দোকানের মূল ক্যাশ (হাতে নগদ)" else "Main Cash in Hand",
+                                        style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color.White
+                                        color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
-                                        text = "${shopInfo.ownerName} • $todayDateFormatted",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Color(0xFFD1FAE5)
-                                    )
-                                }
-                            }
-                            // Google Cloud Status Pill
-                            Surface(
-                                shape = RoundedCornerShape(50),
-                                color = Color(0x33FFFFFF),
-                                modifier = Modifier.clip(CircleShape)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        Icons.Default.CloudDone,
-                                        contentDescription = "Cloud",
-                                        tint = Color(0xFFA7F3D0),
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = if (language == "bn") "ব্যাকআপ সক্রিয়" else "Cloud Sync",
+                                        text = if (language == "bn") "চলতি নগদ তহবিল ব্যালেন্স" else "Current Cash Balance",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = Color.White
+                                        color = MaterialTheme.colorScheme.outline,
+                                        fontSize = 11.sp
                                     )
                                 }
                             }
-                        }
 
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Big Net Profit & Sales Overview banner (Cash on top, Due below, Cash profit on top, Due profit below)
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Color(0x26000000), RoundedCornerShape(14.dp))
-                                .padding(12.dp),
-                            horizontalArrangement = Arrangement.SpaceAround
-                        ) {
-                            // 1. আজকের বিক্রি (নগদ টাকা উপরে, বাকি টাকা নিচে)
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    text = if (language == "bn") "আজকের বিক্রি" else "Today's Sales",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = Color(0xFFD1FAE5)
-                                )
-                                Text(
-                                    text = "$currency${summary.todayCashSales.toIntOrNull() ?: summary.todayCashSales}",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = Color.White
-                                )
-                                Text(
-                                    text = if (language == "bn") "নগদ বিক্রি (উপরে)" else "Cash Sales",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFFA7F3D0),
-                                    fontSize = 10.sp
-                                )
-                                if (summary.todayDueSales > 0) {
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = "${if (language == "bn") "বাকি:" else "Due:"} $currency${summary.todayDueSales.toIntOrNull() ?: summary.todayDueSales}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color(0xFFFED7AA),
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                            Box(
+                            IconButton(
+                                onClick = { showCashHistoryDialog = true },
                                 modifier = Modifier
-                                    .width(1.dp)
-                                    .height(44.dp)
-                                    .background(Color(0x40FFFFFF))
-                            )
-                            // 2. আজকের লাভ (নগদ লাভ ও বাকির লাভ)
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    text = if (language == "bn") "আজকের লাভ" else "Today's Profit",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = Color(0xFFFDE68A)
-                                )
-                                Text(
-                                    text = "$currency${summary.todayProfit.toIntOrNull() ?: summary.todayProfit}",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = if (summary.todayProfit >= 0) Color(0xFFFDE68A) else Color(0xFFFCA5A5)
-                                )
-                                Text(
-                                    text = "${if (language == "bn") "নগদ লাভ:" else "Cash Profit:"} $currency${summary.todayRealizedProfit.toIntOrNull() ?: summary.todayRealizedProfit}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFFFEF08A),
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 10.sp
-                                )
-                                Text(
-                                    text = "${if (language == "bn") "বাকির লাভ:" else "Due Profit:"} $currency${summary.todayDueProfit.toIntOrNull() ?: summary.todayDueProfit}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFFFED7AA),
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 10.sp
-                                )
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .width(1.dp)
-                                    .height(44.dp)
-                                    .background(Color(0x40FFFFFF))
-                            )
-                            // 3. মোট বকেয়া বাকি
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    text = if (language == "bn") "মোট বকেয়া বাকি" else "Total Due",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = Color(0xFFFED7AA)
-                                )
-                                Text(
-                                    text = "$currency${summary.totalOutstandingDue.toIntOrNull() ?: summary.totalOutstandingDue}",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFFDBA74)
-                                )
-                                Text(
-                                    text = if (summary.todayDueSales > 0) "+$currency${summary.todayDueSales.toIntOrNull() ?: summary.todayDueSales} ${if (language == "bn") "আজকে" else "today"}" else (if (language == "bn") "কাস্টমার বাকি" else "Outstanding"),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFFFED7AA)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // 2. Main Cash Balance & Day-End Cash Settlement Card (দোকানদারের মূল ক্যাশ / হাতে নগদ টাকা - Compact & Sleek)
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(1.5.dp),
-                border = CardDefaults.outlinedCardBorder()
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .background(Color(0xFFDCFCE7), RoundedCornerShape(10.dp)),
-                                contentAlignment = Alignment.Center
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    .size(32.dp)
                             ) {
                                 Icon(
-                                    Icons.Default.AccountBalanceWallet,
-                                    contentDescription = "Main Cash",
-                                    tint = EmeraldPrimary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column {
-                                Text(
-                                    text = if (language == "bn") "দোকানের মূল ক্যাশ (হাতে নগদ)" else "Main Cash in Hand",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = if (language == "bn") "বর্তমান নগদ তহবিল ব্যালেন্স" else "Current Cash Balance",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.outline,
-                                    fontSize = 11.sp
+                                    Icons.Default.History,
+                                    contentDescription = "Cash History",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
 
-                        IconButton(
-                            onClick = { showCashHistoryDialog = true },
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .size(32.dp)
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Current Balance Display Pill
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFFF0FDF4),
+                            border = BorderStroke(1.dp, Color(0xFFA7F3D0)),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Icon(
-                                Icons.Default.History,
-                                contentDescription = "Cash History",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = if (language == "bn") "হাতে মোট নগদ ক্যাশ:" else "Total Cash In Hand:",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFF166534),
+                                        fontSize = 11.sp
+                                    )
+                                    Text(
+                                        text = "$currency${mainBalance.toIntOrNull() ?: String.format(Locale.US, "%.2f", mainBalance)}",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color(0xFF047857)
+                                    )
+                                }
+
+                                OutlinedButton(
+                                    onClick = { showSetBalanceDialog = true },
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(30.dp)
+                                ) {
+                                    Icon(Icons.Default.Edit, contentDescription = "Edit Balance", modifier = Modifier.size(12.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(if (language == "bn") "সংশোধন" else "Set", style = MaterialTheme.typography.labelSmall, fontSize = 11.sp)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Quick Cash In / Out Buttons
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { showAddCashDialog = true },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(36.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = ProfitGreen),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                            ) {
+                                Icon(Icons.Default.AddCircleOutline, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(if (language == "bn") "ক্যাশ জমা" else "Add Cash", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                            }
+
+                            OutlinedButton(
+                                onClick = { showWithdrawCashDialog = true },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(36.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LossRed),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                            ) {
+                                Icon(Icons.Default.RemoveCircleOutline, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(if (language == "bn") "ক্যাশ উত্তোলন" else "Withdraw", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Day-End Settle Action Button
+                        Button(
+                            onClick = { showDayEndSettleDialog = true },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(38.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                        ) {
+                            Icon(Icons.Default.Payments, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (language == "bn") "দিনশেষের বিক্রি ক্যাশ মেন ব্যালেন্সে যুক্ত করুন" else "Add Day-End Sales to Main Cash",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Current Balance Amount Display (Compact & High Contrast)
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = Color(0xFFF0FDF4),
-                        border = CardDefaults.outlinedCardBorder().copy(brush = Brush.horizontalGradient(listOf(EmeraldPrimary.copy(alpha = 0.3f), Color(0xFF10B981)))),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(
-                                    text = if (language == "bn") "হাতে মোট নগদ ক্যাশ:" else "Total Cash In Hand:",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFF166534),
-                                    fontSize = 11.sp
-                                )
-                                Text(
-                                    text = "$currency${mainBalance.toIntOrNull() ?: String.format(Locale.US, "%.2f", mainBalance)}",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = Color(0xFF047857)
-                                )
-                            }
-
-                            // Quick Balance Edit Button
-                            OutlinedButton(
-                                onClick = { showSetBalanceDialog = true },
-                                shape = RoundedCornerShape(6.dp),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                modifier = Modifier.height(30.dp)
-                            ) {
-                                Icon(Icons.Default.Edit, contentDescription = "Edit Balance", modifier = Modifier.size(12.dp))
-                                Spacer(modifier = Modifier.width(3.dp))
-                                Text(if (language == "bn") "সংশোধন" else "Set", style = MaterialTheme.typography.labelSmall, fontSize = 11.sp)
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Quick Cash In / Out Buttons (Compact)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = { showAddCashDialog = true },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(36.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = ProfitGreen),
-                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
-                        ) {
-                            Icon(Icons.Default.AddCircleOutline, contentDescription = null, modifier = Modifier.size(15.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(if (language == "bn") "ক্যাশ জমা" else "Add Cash", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                        }
-
-                        OutlinedButton(
-                            onClick = { showWithdrawCashDialog = true },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(36.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = LossRed),
-                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
-                        ) {
-                            Icon(Icons.Default.RemoveCircleOutline, contentDescription = null, modifier = Modifier.size(15.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(if (language == "bn") "ক্যাশ উত্তোলন" else "Withdraw", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    // Day-End Settle Action Button (Compact)
-                    Button(
-                        onClick = { showDayEndSettleDialog = true },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(38.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                    ) {
-                        Icon(Icons.Default.Payments, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = if (language == "bn") "দিনশেষের বিক্রি ক্যাশ মেন ব্যালেন্সে যুক্ত করুন" else "Add Day-End Sales to Main Cash",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
                 }
-            }
-        }
 
-        // 3. Quick Action Buttons (পণ্য বিক্রি, স্টক ইন, খরচ যোগ, বাকি খাতা)
-        item {
-            Text(
-                text = if (language == "bn") "দ্রুত শর্টকাট" else "Quick Actions",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                QuickActionButton(
-                    title = if (language == "bn") "পণ্য বিক্রি" else "New Sale",
-                    icon = Icons.Default.PointOfSale,
-                    containerColor = Color(0xFFECFDF5),
-                    contentColor = EmeraldPrimary,
-                    modifier = Modifier.weight(1f),
-                    onClick = onNavigateToPos
-                )
-                QuickActionButton(
-                    title = if (language == "bn") "স্টক ইন" else "Stock In",
-                    icon = Icons.Default.AddBox,
-                    containerColor = Color(0xFFEFF6FF),
-                    contentColor = StockBlue,
-                    modifier = Modifier.weight(1f),
-                    onClick = onOpenStockInDialog
-                )
-                QuickActionButton(
-                    title = if (language == "bn") "খরচ যোগ" else "Add Expense",
-                    icon = Icons.Default.ReceiptLong,
-                    containerColor = Color(0xFFFEF2F2),
-                    contentColor = LossRed,
-                    modifier = Modifier.weight(1f),
-                    onClick = onOpenAddExpenseDialog
-                )
-                QuickActionButton(
-                    title = if (language == "bn") "বাকি খাতা" else "Due Khata",
-                    icon = Icons.Default.AccountBalanceWallet,
-                    containerColor = Color(0xFFFFFBEB),
-                    contentColor = DueOrange,
-                    modifier = Modifier.weight(1f),
-                    onClick = onNavigateToDue
-                )
-            }
-        }
+                Spacer(modifier = Modifier.height(10.dp))
 
-        // 4. Financial Metrics Cards Grid (আজকের ক্রয়, আজকের খরচ, মোট স্টক মূল্য, মোট পণ্য)
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                MetricCard(
-                    title = if (language == "bn") "আজকের কেনা/ক্রয়" else "Today's Purchase",
-                    value = "$currency${summary.todayPurchases.toIntOrNull() ?: summary.todayPurchases}",
-                    icon = Icons.AutoMirrored.Filled.TrendingUp,
-                    iconColor = StockBlue,
-                    modifier = Modifier.weight(1f)
-                )
-                MetricCard(
-                    title = if (language == "bn") "আজকের খরচ" else "Today's Expense",
-                    value = "$currency${summary.todayExpenses.toIntOrNull() ?: summary.todayExpenses}",
-                    icon = Icons.AutoMirrored.Filled.TrendingDown,
-                    iconColor = LossRed,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                MetricCard(
-                    title = if (language == "bn") "দোকানের মোট স্টক মূল্য" else "Stock Inventory Value",
-                    value = "$currency${summary.totalStockValue.toIntOrNull() ?: summary.totalStockValue}",
-                    icon = Icons.Default.Inventory2,
-                    iconColor = EmeraldPrimary,
-                    modifier = Modifier.weight(1f)
-                )
-                MetricCard(
-                    title = if (language == "bn") "মোট পণ্য আইটেম" else "Total Products",
-                    value = "${summary.totalProductsCount} ${if (language == "bn") "টি" else "Items"}",
-                    icon = Icons.Default.Category,
-                    iconColor = AmberTertiary,
-                    modifier = Modifier.weight(1f)
-                )
+                // Financial Overview 2x2 Grid (আজকের বিক্রি, আজকের লাভ, মোট বকেয়া বাকি, মোট স্টক মূল্য)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    MetricCard(
+                        title = if (language == "bn") "আজকের মোট বিক্রি" else "Today's Sales",
+                        value = "$currency${summary.todayTotalSales.toIntOrNull() ?: summary.todayTotalSales}",
+                        icon = Icons.Default.PointOfSale,
+                        iconColor = EmeraldPrimary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    MetricCard(
+                        title = if (language == "bn") "আজকের নিট লাভ" else "Today's Profit",
+                        value = "$currency${summary.todayProfit.toIntOrNull() ?: summary.todayProfit}",
+                        icon = Icons.AutoMirrored.Filled.TrendingUp,
+                        iconColor = if (summary.todayProfit >= 0) ProfitGreen else LossRed,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    MetricCard(
+                        title = if (language == "bn") "মোট বকেয়া বাকি" else "Total Due",
+                        value = "$currency${summary.totalOutstandingDue.toIntOrNull() ?: summary.totalOutstandingDue}",
+                        icon = Icons.Default.AccountBalanceWallet,
+                        iconColor = DueOrange,
+                        modifier = Modifier.weight(1f)
+                    )
+                    MetricCard(
+                        title = if (language == "bn") "দোকানের মোট স্টক" else "Total Stock Value",
+                        value = "$currency${summary.totalStockValue.toIntOrNull() ?: summary.totalStockValue}",
+                        icon = Icons.Default.Inventory2,
+                        iconColor = StockBlue,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
         }
 
@@ -1511,6 +1774,103 @@ fun DashboardScreen(
                 onBack = { showCashHistoryDialog = false }
             )
         }
+    }
+
+    if (showAllMemosDialog) {
+        AllMemosDialog(
+            transactions = allTransactions.filter { it.type == "SALE" },
+            currency = currency,
+            language = language,
+            shopName = shopInfo.shopName,
+            onDismiss = { showAllMemosDialog = false },
+            onSelectTx = { tx ->
+                editingTransaction = tx
+                showAllMemosDialog = false
+            }
+        )
+    }
+
+    if (showDueSmsReminderDialog) {
+        DueSmsReminderDialog(
+            dueSales = allTransactions.filter { it.type == "SALE" && it.dueAmount > 0 },
+            currency = currency,
+            language = language,
+            shopName = shopInfo.shopName,
+            onDismiss = { showDueSmsReminderDialog = false }
+        )
+    }
+
+    if (showCloudBackupInfoDialog) {
+        CloudBackupInfoDialog(
+            language = language,
+            shopName = shopInfo.shopName,
+            onDismiss = { showCloudBackupInfoDialog = false },
+            onBackupNow = {
+                viewModel.backupToLocalFile(context)
+                showCloudBackupInfoDialog = false
+            }
+        )
+    }
+
+    if (showBusinessSummaryDetailDialog) {
+        BusinessSummaryDetailDialog(
+            summary = summary,
+            mainBalance = mainBalance,
+            currency = currency,
+            language = language,
+            onDismiss = { showBusinessSummaryDetailDialog = false },
+            onOpenCashBook = {
+                showBusinessSummaryDetailDialog = false
+                showCashHistoryDialog = true
+            }
+        )
+    }
+
+    if (showAllServicesDialog) {
+        AllServicesDialog(
+            language = language,
+            onDismiss = { showAllServicesDialog = false },
+            onNavigatePos = {
+                showAllServicesDialog = false
+                onNavigateToPos()
+            },
+            onNavigateDue = {
+                showAllServicesDialog = false
+                onNavigateToDue()
+            },
+            onNavigateStock = {
+                showAllServicesDialog = false
+                onNavigateToStock()
+            },
+            onNavigateExpenses = {
+                showAllServicesDialog = false
+                onNavigateToExpenses()
+            },
+            onOpenCashBook = {
+                showAllServicesDialog = false
+                showCashHistoryDialog = true
+            },
+            onOpenStockIn = {
+                showAllServicesDialog = false
+                onOpenStockInDialog()
+            },
+            onOpenMemos = {
+                showAllServicesDialog = false
+                showAllMemosDialog = true
+            },
+            onOpenDueSms = {
+                showAllServicesDialog = false
+                showDueSmsReminderDialog = true
+            },
+            onOpenBackup = {
+                showAllServicesDialog = false
+                showCloudBackupInfoDialog = true
+            },
+            onOpenCashIn = {
+                showAllServicesDialog = false
+                showAddCashDialog = true
+            }
+        )
     }
 }
 
@@ -2620,6 +2980,788 @@ fun TransactionFeedItem(
                         Icon(Icons.Default.Edit, contentDescription = "Edit", modifier = Modifier.size(12.dp))
                         Spacer(modifier = Modifier.width(3.dp))
                         Text(if (language == "bn") "এডিট / ফেরত" else "Edit / Return", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// -------------------------------------------------------------
+// HELPER COMPOSABLES FOR REDESIGNED DASHBOARD
+// -------------------------------------------------------------
+
+@Composable
+fun CoreGridActionCard(
+    title: String,
+    icon: ImageVector,
+    iconBg: Color,
+    iconTint: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Card(
+        onClick = onClick,
+        modifier = modifier.height(88.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = BorderStroke(1.dp, CardBorder)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 4.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = iconBg,
+                modifier = Modifier.size(38.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = title,
+                        tint = iconTint,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
+fun ServiceCircleItem(
+    title: String,
+    icon: ImageVector,
+    bgColor: Color,
+    iconTint: Color,
+    onClick: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(4.dp)
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = bgColor,
+            shadowElevation = 1.dp,
+            border = BorderStroke(1.dp, iconTint.copy(alpha = 0.2f)),
+            modifier = Modifier.size(46.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = title,
+                    tint = iconTint,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+// -------------------------------------------------------------
+// QUICK SERVICE DIALOGS
+// -------------------------------------------------------------
+
+@Composable
+fun AllMemosDialog(
+    transactions: List<TransactionRecord>,
+    currency: String,
+    language: String,
+    shopName: String,
+    onDismiss: () -> Unit,
+    onSelectTx: (TransactionRecord) -> Unit
+) {
+    val context = LocalContext.current
+    var searchQuery by remember { mutableStateOf("") }
+    val filtered = remember(transactions, searchQuery) {
+        if (searchQuery.isBlank()) transactions else {
+            val q = searchQuery.trim().lowercase()
+            transactions.filter {
+                it.invoiceNumber.lowercase().contains(q) ||
+                it.customerName.lowercase().contains(q) ||
+                it.productName.lowercase().contains(q)
+            }
+        }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            modifier = Modifier
+                .fillMaxWidth(0.95f)
+                .fillMaxHeight(0.85f)
+                .padding(8.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(Color(0xFFDCFCE7), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Receipt, contentDescription = null, tint = ProfitGreen, modifier = Modifier.size(20.dp))
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (language == "bn") "সকল ডিজিটাল ক্যাশ মেমো" else "All Digital Invoices",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text(if (language == "bn") "মেমো নং বা ক্রেতার নাম..." else "Search invoice #, customer...", fontSize = 12.sp) },
+                    singleLine = true,
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp)
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                if (filtered.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(if (language == "bn") "কোনো মেমো পাওয়া যায়নি" else "No invoices found", color = MaterialTheme.colorScheme.outline)
+                    }
+                } else {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        items(filtered) { tx ->
+                            Card(
+                                onClick = { onSelectTx(tx) },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "মেমো #${tx.invoiceNumber}",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        Text(
+                                            text = "${tx.customerName.ifBlank { if (language == "bn") "সাধারণ কাস্টমার" else "General Customer" }} • ${tx.productName} (${tx.quantity} ${tx.unit})",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = SimpleDateFormat("dd/MM/yyyy hh:mm a", Locale.US).format(Date(tx.timestamp)),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.outline
+                                        )
+                                    }
+
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text(
+                                            text = "$currency${tx.totalAmount}",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = ProfitGreen
+                                        )
+                                        if (tx.dueAmount > 0) {
+                                            Text(
+                                                text = "${if (language == "bn") "বাকি:" else "Due:"} $currency${tx.dueAmount}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = DueOrange
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DueSmsReminderDialog(
+    dueSales: List<TransactionRecord>,
+    currency: String,
+    language: String,
+    shopName: String,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            modifier = Modifier
+                .fillMaxWidth(0.95f)
+                .fillMaxHeight(0.85f)
+                .padding(8.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(Color(0xFFFFF7ED), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Sms, contentDescription = null, tint = DueOrange, modifier = Modifier.size(20.dp))
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (language == "bn") "বাকি তাগাদা ও এসএমএস" else "Due Payment Reminders",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                if (dueSales.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = ProfitGreen, modifier = Modifier.size(48.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                if (language == "bn") "আলহামদুলিল্লাহ, কোনো বকেয়া বাকি নেই!" else "No pending dues!",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = ProfitGreen
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        items(dueSales) { tx ->
+                            Card(
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBEB)),
+                                border = BorderStroke(1.dp, Color(0xFFFED7AA))
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = tx.customerName.ifBlank { if (language == "bn") "নামহীন কাস্টমার" else "Unnamed Customer" },
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        if (tx.customerPhone.isNotBlank()) {
+                                            Text(
+                                                text = tx.customerPhone,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.outline
+                                            )
+                                        }
+                                        Text(
+                                            text = "বকেয়া: $currency${tx.dueAmount} • মেমো #${tx.invoiceNumber}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = DueOrange
+                                        )
+                                    }
+
+                                    Button(
+                                        onClick = {
+                                            val message = "শ্রদ্ধেয় ${tx.customerName}, $shopName এ আপনার মেমো #${tx.invoiceNumber} বাবদ বকেয়া $currency${tx.dueAmount} টাকা বাকি আছে। দ্রুত পরিশোধের অনুরোধ রইল। ধন্যবাদ।"
+                                            val sendIntent = Intent().apply {
+                                                action = Intent.ACTION_SEND
+                                                putExtra(Intent.EXTRA_TEXT, message)
+                                                type = "text/plain"
+                                            }
+                                            context.startActivity(Intent.createChooser(sendIntent, "তাগাদা পাঠান"))
+                                        },
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = DueOrange),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                        modifier = Modifier.height(34.dp)
+                                    ) {
+                                        Icon(Icons.Default.Send, contentDescription = "Send", modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(if (language == "bn") "তাগাদা দিন" else "Remind", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CloudBackupInfoDialog(
+    language: String,
+    shopName: String,
+    onDismiss: () -> Unit,
+    onBackupNow: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(54.dp)
+                        .background(Color(0xFFF5F3FF), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.CloudSync, contentDescription = null, tint = Color(0xFF7C3AED), modifier = Modifier.size(32.dp))
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = if (language == "bn") "ক্লাউড ও ডাটা ব্যাকআপ" else "Cloud & Data Backup",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Text(
+                    text = if (language == "bn") "আপনার সকল পণ্য, বিক্রি, বাকি এবং ক্যাশ খাতার ডাটা সম্পূর্ণ নিরাপদ এবং স্বয়ংক্রিয়ভাবে সংরক্ষিত রয়েছে।" else "All your sales, inventory, due and cash ledger data is safe and synced.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFFF0FDF4),
+                    border = BorderStroke(1.dp, Color(0xFFBBF7D0)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = ProfitGreen, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = if (language == "bn") "লাইভ অটো ব্যাকআপ চালু" else "Live Auto-Sync Active",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF166534)
+                            )
+                            Text(
+                                text = shopName,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF15803D)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Button(
+                    onClick = onBackupNow,
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Save, contentDescription = null)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(if (language == "bn") "ফাইলে ব্যাকআপ সেভ করুন" else "Save Backup to File", fontWeight = FontWeight.Bold)
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (language == "bn") "বন্ধ করুন" else "Close")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun BusinessSummaryDetailDialog(
+    summary: com.example.data.model.DashboardSummary,
+    mainBalance: Double,
+    currency: String,
+    language: String,
+    onDismiss: () -> Unit,
+    onOpenCashBook: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            modifier = Modifier
+                .fillMaxWidth(0.95f)
+                .fillMaxHeight(0.85f)
+                .padding(8.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(Color(0xFFFAF5FF), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Assessment, contentDescription = null, tint = Color(0xFF7C3AED), modifier = Modifier.size(20.dp))
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (language == "bn") "ব্যবসায়িক পূর্ণাঙ্গ সারসংক্ষেপ" else "Comprehensive Business Summary",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // 1. Hands-on Cash Balance
+                    Card(
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4)),
+                        border = BorderStroke(1.dp, Color(0xFFA7F3D0))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(if (language == "bn") "দোকানের মূল ক্যাশ (হাতে নগদ)" else "Cash in Hand", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = Color(0xFF166534))
+                                Text(text = "$currency${mainBalance.toIntOrNull() ?: mainBalance}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold, color = EmeraldPrimary)
+                            }
+                            Button(onClick = onOpenCashBook, shape = RoundedCornerShape(8.dp), colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)) {
+                                Text(if (language == "bn") "ক্যাশ খাতা" else "Cash Book", fontSize = 11.sp)
+                            }
+                        }
+                    }
+
+                    // 2. Today's Sales breakdown
+                    Card(
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(if (language == "bn") "আজকের বিক্রির বিস্তারিত" else "Today's Sales Breakdown", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(if (language == "bn") "মোট বিক্রি:" else "Total Sales:", style = MaterialTheme.typography.bodyMedium)
+                                Text("$currency${summary.todayTotalSales}", fontWeight = FontWeight.Bold)
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(if (language == "bn") "নগদ আদায়কৃত বিক্রি:" else "Cash Sales:", style = MaterialTheme.typography.bodyMedium, color = ProfitGreen)
+                                Text("$currency${summary.todayCashSales}", fontWeight = FontWeight.Bold, color = ProfitGreen)
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(if (language == "bn") "আজকের বাকি বিক্রি:" else "Due Sales:", style = MaterialTheme.typography.bodyMedium, color = DueOrange)
+                                Text("$currency${summary.todayDueSales}", fontWeight = FontWeight.Bold, color = DueOrange)
+                            }
+                        }
+                    }
+
+                    // 3. Profit breakdown
+                    Card(
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(if (language == "bn") "আজকের লাভের বিস্তারিত" else "Today's Profit Breakdown", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(if (language == "bn") "মোট অর্জিত লাভ:" else "Total Profit:", style = MaterialTheme.typography.bodyMedium)
+                                Text("$currency${summary.todayProfit}", fontWeight = FontWeight.Bold, color = ProfitGreen)
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(if (language == "bn") "নগদ বিক্রির লাভ:" else "Cash Realized Profit:", style = MaterialTheme.typography.bodyMedium)
+                                Text("$currency${summary.todayRealizedProfit}", fontWeight = FontWeight.Bold)
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(if (language == "bn") "বাকি বিক্রির লাভ:" else "Due Unrealized Profit:", style = MaterialTheme.typography.bodyMedium)
+                                Text("$currency${summary.todayDueProfit}", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    // 4. Expenses and Inventory
+                    Card(
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(if (language == "bn") "খরচ ও ইনভেন্টরি" else "Expenses & Inventory", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(if (language == "bn") "আজকের দোকান খরচ:" else "Today's Expenses:", style = MaterialTheme.typography.bodyMedium)
+                                Text("$currency${summary.todayExpenses}", fontWeight = FontWeight.Bold, color = LossRed)
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(if (language == "bn") "দোকানের মোট স্টক মূল্য:" else "Total Stock Value:", style = MaterialTheme.typography.bodyMedium)
+                                Text("$currency${summary.totalStockValue}", fontWeight = FontWeight.Bold, color = StockBlue)
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(if (language == "bn") "মোট বকেয়া কাস্টমার বাকি:" else "Total Customer Due:", style = MaterialTheme.typography.bodyMedium)
+                                Text("$currency${summary.totalOutstandingDue}", fontWeight = FontWeight.Bold, color = DueOrange)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AllServicesDialog(
+    language: String,
+    onDismiss: () -> Unit,
+    onNavigatePos: () -> Unit,
+    onNavigateDue: () -> Unit,
+    onNavigateStock: () -> Unit,
+    onNavigateExpenses: () -> Unit,
+    onOpenCashBook: () -> Unit,
+    onOpenStockIn: () -> Unit,
+    onOpenMemos: () -> Unit,
+    onOpenDueSms: () -> Unit,
+    onOpenBackup: () -> Unit,
+    onOpenCashIn: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            modifier = Modifier
+                .fillMaxWidth(0.95f)
+                .fillMaxHeight(0.85f)
+                .padding(8.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (language == "bn") "অ্যাপের সকল সার্ভিস ও অপশন" else "All Services & Options",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Row 1
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        CoreGridActionCard(
+                            title = if (language == "bn") "নগদ বিক্রি (POS)" else "POS Sale",
+                            icon = Icons.Default.GridView,
+                            iconBg = Color(0xFFECFDF5),
+                            iconTint = EmeraldPrimary,
+                            modifier = Modifier.weight(1f),
+                            onClick = onNavigatePos
+                        )
+                        CoreGridActionCard(
+                            title = if (language == "bn") "বাকি খাতা" else "Due Khata",
+                            icon = Icons.Default.AccountBalanceWallet,
+                            iconBg = Color(0xFFFFF7ED),
+                            iconTint = DueOrange,
+                            modifier = Modifier.weight(1f),
+                            onClick = onNavigateDue
+                        )
+                        CoreGridActionCard(
+                            title = if (language == "bn") "ক্যাশ খাতা" else "Cash Book",
+                            icon = Icons.Default.ReceiptLong,
+                            iconBg = Color(0xFFF0FDF4),
+                            iconTint = ProfitGreen,
+                            modifier = Modifier.weight(1f),
+                            onClick = onOpenCashBook
+                        )
+                    }
+
+                    // Row 2
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        CoreGridActionCard(
+                            title = if (language == "bn") "স্টক ও পণ্য" else "Stock Inventory",
+                            icon = Icons.Default.Inventory2,
+                            iconBg = Color(0xFFEFF6FF),
+                            iconTint = StockBlue,
+                            modifier = Modifier.weight(1f),
+                            onClick = onNavigateStock
+                        )
+                        CoreGridActionCard(
+                            title = if (language == "bn") "দোকান খরচ" else "Expenses",
+                            icon = Icons.Default.TrendingDown,
+                            iconBg = Color(0xFFFEF2F2),
+                            iconTint = LossRed,
+                            modifier = Modifier.weight(1f),
+                            onClick = onNavigateExpenses
+                        )
+                        CoreGridActionCard(
+                            title = if (language == "bn") "স্টক ইন" else "Stock In",
+                            icon = Icons.Default.AddBox,
+                            iconBg = Color(0xFFEFF6FF),
+                            iconTint = StockBlue,
+                            modifier = Modifier.weight(1f),
+                            onClick = onOpenStockIn
+                        )
+                    }
+
+                    // Row 3
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        CoreGridActionCard(
+                            title = if (language == "bn") "ডিজিটাল মেমো" else "Invoices",
+                            icon = Icons.Default.Receipt,
+                            iconBg = Color(0xFFF0FDF4),
+                            iconTint = ProfitGreen,
+                            modifier = Modifier.weight(1f),
+                            onClick = onOpenMemos
+                        )
+                        CoreGridActionCard(
+                            title = if (language == "bn") "বাকি তাগাদা" else "Due SMS",
+                            icon = Icons.Default.Sms,
+                            iconBg = Color(0xFFFFFBEB),
+                            iconTint = DueOrange,
+                            modifier = Modifier.weight(1f),
+                            onClick = onOpenDueSms
+                        )
+                        CoreGridActionCard(
+                            title = if (language == "bn") "ক্লাউড ব্যাকআপ" else "Cloud Backup",
+                            icon = Icons.Default.CloudSync,
+                            iconBg = Color(0xFFF5F3FF),
+                            iconTint = Color(0xFF7C3AED),
+                            modifier = Modifier.weight(1f),
+                            onClick = onOpenBackup
+                        )
+                    }
+
+                    // Row 4
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        CoreGridActionCard(
+                            title = if (language == "bn") "ক্যাশ জমা" else "Add Cash",
+                            icon = Icons.Default.AddCircleOutline,
+                            iconBg = Color(0xFFECFDF5),
+                            iconTint = EmeraldPrimary,
+                            modifier = Modifier.weight(1f),
+                            onClick = onOpenCashIn
+                        )
                     }
                 }
             }

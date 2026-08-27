@@ -3,6 +3,7 @@ package com.example.ui.screens
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -174,43 +175,154 @@ fun MainAppScaffold(
             }
         },
         bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 8.dp
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 8.dp,
+                shadowElevation = 10.dp
             ) {
-                listOf(
-                    ShopScreen.DASHBOARD,
-                    ShopScreen.POS,
-                    ShopScreen.INVENTORY,
-                    ShopScreen.DUE_KHATA,
-                    ShopScreen.EXPENSES,
-                    ShopScreen.REPORTS,
-                    ShopScreen.SETTINGS
-                ).forEach { screen ->
-                    val selected = currentScreen == screen
-                    NavigationBarItem(
-                        selected = selected,
-                        onClick = { currentScreen = screen },
-                        icon = {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .height(64.dp)
+                        .padding(horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceAround,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 1. Dashboard / Home
+                    val isHome = currentScreen == ShopScreen.DASHBOARD
+                    IconButton(
+                        onClick = { currentScreen = ShopScreen.DASHBOARD },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
                             Icon(
-                                screen.icon,
-                                contentDescription = if (language == "bn") screen.bnTitle else screen.enTitle
+                                imageVector = if (isHome) Icons.Default.Home else Icons.Default.Home,
+                                contentDescription = "Home",
+                                tint = if (isHome) EmeraldPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                modifier = Modifier.size(24.dp)
                             )
-                        },
-                        label = {
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = if (language == "bn") screen.bnTitle else screen.enTitle,
-                                maxLines = 1,
+                                text = if (language == "bn") "হোম" else "Home",
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                                fontSize = 10.sp,
+                                fontWeight = if (isHome) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isHome) EmeraldPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                             )
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = EmeraldPrimary,
-                            selectedTextColor = EmeraldPrimary,
-                            indicatorColor = EmeraldPrimary.copy(alpha = 0.15f)
-                        )
-                    )
+                        }
+                    }
+
+                    // 2. Reports / লাভ-রিপোর্ট
+                    val isReports = currentScreen == ShopScreen.REPORTS
+                    IconButton(
+                        onClick = { currentScreen = ShopScreen.REPORTS },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Assessment,
+                                contentDescription = "Reports",
+                                tint = if (isReports) EmeraldPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (language == "bn") "রিপোর্ট" else "Reports",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 10.sp,
+                                fontWeight = if (isReports) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isReports) EmeraldPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+
+                    // 3. Center Elevated Quick Sale / Scanner Button (Iconic Circle)
+                    Box(
+                        modifier = Modifier
+                            .weight(1.1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Surface(
+                            onClick = { currentScreen = ShopScreen.POS },
+                            shape = CircleShape,
+                            color = TealDarkHeader,
+                            shadowElevation = 6.dp,
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PointOfSale,
+                                    contentDescription = "POS Sale",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    // 4. Due Khata / বাকি খাতা
+                    val isDue = currentScreen == ShopScreen.DUE_KHATA
+                    IconButton(
+                        onClick = { currentScreen = ShopScreen.DUE_KHATA },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AccountBalanceWallet,
+                                contentDescription = "Due",
+                                tint = if (isDue) EmeraldPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (language == "bn") "বাকি খাতা" else "Due",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 10.sp,
+                                fontWeight = if (isDue) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isDue) EmeraldPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+
+                    // 5. Settings & More / মেনু
+                    val isSettings = currentScreen == ShopScreen.SETTINGS
+                    IconButton(
+                        onClick = { currentScreen = ShopScreen.SETTINGS },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Menu,
+                                contentDescription = "Menu",
+                                tint = if (isSettings) EmeraldPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (language == "bn") "মেনু" else "More",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 10.sp,
+                                fontWeight = if (isSettings) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isSettings) EmeraldPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
                 }
             }
         }
