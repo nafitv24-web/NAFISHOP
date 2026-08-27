@@ -1047,6 +1047,21 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun editSaleTransaction(
+        oldTx: TransactionRecord,
+        newQuantity: Double,
+        newUnitPrice: Double,
+        newPaidAmount: Double,
+        newCustomerName: String,
+        newCustomerPhone: String,
+        newNote: String
+    ) {
+        viewModelScope.launch {
+            repository.editSaleTransaction(oldTx, newQuantity, newUnitPrice, newPaidAmount, newCustomerName, newCustomerPhone, newNote)
+            triggerInstantDriveBackup("লেনদেন সংশোধন (${oldTx.productName})")
+        }
+    }
+
     fun deleteSaleAndRestock(tx: TransactionRecord) {
         viewModelScope.launch {
             repository.deleteTransaction(tx)

@@ -35,11 +35,12 @@ fun EditOrReturnSaleDialog(
     language: String,
     onDismiss: () -> Unit,
     onReturnItem: (returnQty: Double, note: String) -> Unit,
-    onEditSale: (newQuantity: Double, newUnitPrice: Double, newCustomerName: String, newNote: String) -> Unit,
+    onEditSale: (newQuantity: Double, newUnitPrice: Double, newPaidAmount: Double, newCustomerName: String, newCustomerPhone: String, newNote: String) -> Unit,
     onDeleteSale: () -> Unit
 ) {
-    // Mode: "RETURN" (পণ্য ফেরত), "EDIT" (সংশোধন), "DELETE" (বাতিল)
-    var selectedMode by remember { mutableStateOf("RETURN") }
+    val isSale = transaction.type.equals("SALE", ignoreCase = true)
+    // Mode: "EDIT" (সংশোধন), "RETURN" (পণ্য ফেরত), "DELETE" (বাতিল)
+    var selectedMode by remember { mutableStateOf("EDIT") }
 
     // Return State
     var returnQtyStr by remember { mutableStateOf(transaction.quantity.toIntOrNull()?.toString() ?: transaction.quantity.toString()) }
@@ -48,12 +49,21 @@ fun EditOrReturnSaleDialog(
     // Edit State
     var editQtyStr by remember { mutableStateOf(transaction.quantity.toIntOrNull()?.toString() ?: transaction.quantity.toString()) }
     var editPriceStr by remember { mutableStateOf(transaction.unitPrice.toIntOrNull()?.toString() ?: transaction.unitPrice.toString()) }
+    var editPaidStr by remember { mutableStateOf(transaction.paidAmount.toIntOrNull()?.toString() ?: transaction.paidAmount.toString()) }
     var editCustomerName by remember { mutableStateOf(transaction.customerName) }
+    var editCustomerPhone by remember { mutableStateOf(transaction.customerPhone) }
     var editNote by remember { mutableStateOf(transaction.note) }
 
     val dateFormatted = remember(transaction.timestamp) {
         SimpleDateFormat("hh:mm a, dd MMM yyyy", Locale.getDefault()).format(Date(transaction.timestamp))
     }
+
+    // Dynamic Live Math
+    val currentQty = editQtyStr.toDoubleOrNull() ?: 0.0
+    val currentPrice = editPriceStr.toDoubleOrNull() ?: 0.0
+    val liveTotal = (currentQty * currentPrice).coerceAtLeast(0.0)
+    val currentPaid = editPaidStr.toDoubleOrNull() ?: 0.0
+    val liveDue = (liveTotal - currentPaid).coerceAtLeast(0.0)
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -83,20 +93,27 @@ fun EditOrReturnSaleDialog(
                         Box(
                             modifier = Modifier
                                 .size(38.dp)
-                                .background(Color(0xFFFEF3C7), CircleShape),
+                                .background(
+                                    if (isSale) MaterialTheme.colorScheme.primaryContainer else Color(0xFFEFF6FF),
+                                    CircleShape
+                                ),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                Icons.Default.AssignmentReturn,
+                                if (isSale) Icons.Default.EditNote else Icons.Default.Inventory2,
                                 contentDescription = null,
-                                tint = Color(0xFFD97706),
+                                tint = if (isSale) MaterialTheme.colorScheme.primary else StockBlue,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = if (language == "bn") "বিক্রি লেনদেন ও ফেরত" else "Sale & Return",
+                                text = when {
+                                    isSale -> if (language == "bn") "বিক্রি লেনদেন সংশোধন" else "Edit Sale Transaction"
+                                    transaction.type.contains("STOCK", ignoreCase = true) -> if (language == "bn") "স্টক লেনদেন সংশোধন" else "Edit Stock Transaction"
+                                    else -> if (language == "bn") "লেনদেন সংশোধন" else "Edit Transaction"
+                                },
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -144,13 +161,13 @@ fun EditOrReturnSaleDialog(
                             )
                             Surface(
                                 shape = RoundedCornerShape(6.dp),
-                                color = Color(0xFFDCFCE7)
+                                color = if (isSale) Color(0xFFDCFCE7) else Color(0xFFDBEAFE)
                             ) {
                                 Text(
                                     text = "$currency${transaction.totalAmount.toIntOrNull() ?: transaction.totalAmount}",
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = Color(0xFF15803D),
+                                    color = if (isSale) Color(0xFF15803D) else StockBlue,
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                                 )
                             }
@@ -178,7 +195,7 @@ fun EditOrReturnSaleDialog(
 
                         if (transaction.customerName.isNotBlank() && transaction.customerName != "ক্যাশ কাস্টমার") {
                             Text(
-                                text = "${if (language == "bn") "ক্রেতা:" else "Customer:"} ${transaction.customerName}",
+                                text = "${if (language == "bn") "ক্রেতা:" else "Customer:"} ${transaction.customerName}${if (transaction.customerPhone.isNotBlank()) " (${transaction.customerPhone})" else ""}",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Medium,
                                 color = DueOrange
@@ -189,7 +206,7 @@ fun EditOrReturnSaleDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Custom Segmented Mode Selector (Never wraps or breaks text)
+                // Custom Segmented Mode Selector
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
@@ -201,48 +218,14 @@ fun EditOrReturnSaleDialog(
                             .padding(4.dp),
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        // 1. পণ্য ফেরত Tab
-                        val isReturn = selectedMode == "RETURN"
-                        Surface(
-                            shape = RoundedCornerShape(9.dp),
-                            color = if (isReturn) Color(0xFFFEF3C7) else Color.Transparent,
-                            border = if (isReturn) BorderStroke(1.dp, Color(0xFFFDE68A)) else null,
-                            modifier = Modifier
-                                .weight(1.1f)
-                                .clip(RoundedCornerShape(9.dp))
-                                .clickable { selectedMode = "RETURN" }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.Default.KeyboardReturn,
-                                    contentDescription = null,
-                                    tint = if (isReturn) Color(0xFFB45309) else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(15.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = if (language == "bn") "পণ্য ফেরত" else "Return",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = if (isReturn) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isReturn) Color(0xFFB45309) else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 12.sp,
-                                    maxLines = 1
-                                )
-                            }
-                        }
-
-                        // 2. এডিট Tab
+                        // 1. এডিট Tab
                         val isEdit = selectedMode == "EDIT"
                         Surface(
                             shape = RoundedCornerShape(9.dp),
                             color = if (isEdit) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
                             border = if (isEdit) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)) else null,
                             modifier = Modifier
-                                .weight(0.9f)
+                                .weight(1f)
                                 .clip(RoundedCornerShape(9.dp))
                                 .clickable { selectedMode = "EDIT" }
                         ) {
@@ -259,13 +242,49 @@ fun EditOrReturnSaleDialog(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = if (language == "bn") "এডিট" else "Edit",
+                                    text = if (language == "bn") "এডিট / সংশোধন" else "Edit",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = if (isEdit) FontWeight.Bold else FontWeight.Medium,
                                     color = if (isEdit) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontSize = 12.sp,
                                     maxLines = 1
                                 )
+                            }
+                        }
+
+                        // 2. পণ্য ফেরত Tab (For Sales)
+                        if (isSale) {
+                            val isReturn = selectedMode == "RETURN"
+                            Surface(
+                                shape = RoundedCornerShape(9.dp),
+                                color = if (isReturn) Color(0xFFFEF3C7) else Color.Transparent,
+                                border = if (isReturn) BorderStroke(1.dp, Color(0xFFFDE68A)) else null,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(9.dp))
+                                    .clickable { selectedMode = "RETURN" }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.KeyboardReturn,
+                                        contentDescription = null,
+                                        tint = if (isReturn) Color(0xFFB45309) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (language == "bn") "পণ্য ফেরত" else "Return",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = if (isReturn) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isReturn) Color(0xFFB45309) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 12.sp,
+                                        maxLines = 1
+                                    )
+                                }
                             }
                         }
 
@@ -309,6 +328,171 @@ fun EditOrReturnSaleDialog(
 
                 // Mode Contents
                 when (selectedMode) {
+                    "EDIT" -> {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = editQtyStr,
+                                onValueChange = { editQtyStr = it },
+                                label = { Text(if (language == "bn") "পরিমাণ (${transaction.unit}) *" else "Qty (${transaction.unit}) *") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            OutlinedTextField(
+                                value = editPriceStr,
+                                onValueChange = { editPriceStr = it },
+                                label = { Text(if (language == "bn") "একক দর ($currency) *" else "Price ($currency) *") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Live Math Preview Card
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = if (language == "bn") "নতুন মোট বিল" else "New Total",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = "$currency${liveTotal.toIntOrNull() ?: String.format(Locale.US, "%.1f", liveTotal)}",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+
+                                if (isSale) {
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text(
+                                            text = if (language == "bn") "অবশিষ্ট বাকি" else "Remaining Due",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (liveDue > 0) DueOrange else ProfitGreen
+                                        )
+                                        Text(
+                                            text = if (liveDue > 0) "$currency${liveDue.toIntOrNull() ?: String.format(Locale.US, "%.1f", liveDue)}" else (if (language == "bn") "পরিশোধিত" else "Paid"),
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (liveDue > 0) DueOrange else ProfitGreen
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (isSale) {
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            OutlinedTextField(
+                                value = editPaidStr,
+                                onValueChange = { editPaidStr = it },
+                                label = { Text(if (language == "bn") "নগদ জমা ($currency)" else "Cash Paid ($currency)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            // Quick Preset Chips for Paid Amount
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                SuggestionChip(
+                                    onClick = {
+                                        editPaidStr = (liveTotal.toIntOrNull()?.toString() ?: liveTotal.toString())
+                                    },
+                                    label = { Text(if (language == "bn") "সম্পূর্ণ নগদ ($currency${liveTotal.toIntOrNull() ?: liveTotal})" else "Full Paid", fontSize = 11.sp) }
+                                )
+                                SuggestionChip(
+                                    onClick = { editPaidStr = "0" },
+                                    label = { Text(if (language == "bn") "সম্পূর্ণ বাকি" else "Full Due", fontSize = 11.sp) }
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = editCustomerName,
+                                onValueChange = { editCustomerName = it },
+                                label = { Text(if (language == "bn") "ক্রেতা/সাপ্লায়ার নাম" else "Name") },
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1.1f)
+                            )
+
+                            OutlinedTextField(
+                                value = editCustomerPhone,
+                                onValueChange = { editCustomerPhone = it },
+                                label = { Text(if (language == "bn") "ফোন নম্বর" else "Phone") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(0.9f)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        OutlinedTextField(
+                            value = editNote,
+                            onValueChange = { editNote = it },
+                            label = { Text(if (language == "bn") "নোট / মন্তব্য" else "Note / Remarks") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(18.dp))
+
+                        Button(
+                            onClick = {
+                                val qty = editQtyStr.toDoubleOrNull() ?: 0.0
+                                val price = editPriceStr.toDoubleOrNull() ?: 0.0
+                                val paid = if (isSale) (editPaidStr.toDoubleOrNull() ?: 0.0) else (qty * price)
+                                if (qty > 0 && price >= 0) {
+                                    onEditSale(qty, price, paid, editCustomerName, editCustomerPhone, editNote)
+                                    onDismiss()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                        ) {
+                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (language == "bn") "পরিবর্তন সংরক্ষণ করুন" else "Save Changes",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+
                     "RETURN" -> {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
@@ -378,78 +562,6 @@ fun EditOrReturnSaleDialog(
                         }
                     }
 
-                    "EDIT" -> {
-                        OutlinedTextField(
-                            value = editQtyStr,
-                            onValueChange = { editQtyStr = it },
-                            label = { Text(if (language == "bn") "বিক্রি পরিমাণ (${transaction.unit}) *" else "Quantity (${transaction.unit}) *") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true,
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        OutlinedTextField(
-                            value = editPriceStr,
-                            onValueChange = { editPriceStr = it },
-                            label = { Text(if (language == "bn") "একক দর ($currency) *" else "Unit Price ($currency) *") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true,
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        OutlinedTextField(
-                            value = editCustomerName,
-                            onValueChange = { editCustomerName = it },
-                            label = { Text(if (language == "bn") "ক্রেতার নাম" else "Customer Name") },
-                            singleLine = true,
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        OutlinedTextField(
-                            value = editNote,
-                            onValueChange = { editNote = it },
-                            label = { Text(if (language == "bn") "নোট / মন্তব্য" else "Note") },
-                            singleLine = true,
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        Spacer(modifier = Modifier.height(18.dp))
-
-                        Button(
-                            onClick = {
-                                val qty = editQtyStr.toDoubleOrNull() ?: 0.0
-                                val price = editPriceStr.toDoubleOrNull() ?: 0.0
-                                if (qty > 0 && price >= 0) {
-                                    onEditSale(qty, price, editCustomerName, editNote)
-                                    onDismiss()
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(46.dp)
-                        ) {
-                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = if (language == "bn") "পরিবর্তন সংরক্ষণ করুন" else "Save Changes",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
-                            )
-                        }
-                    }
-
                     "DELETE" -> {
                         Surface(
                             shape = RoundedCornerShape(10.dp),
@@ -459,7 +571,7 @@ fun EditOrReturnSaleDialog(
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {
                                 Text(
-                                    text = if (language == "bn") "সতর্কতা: এই লেনদেনটি ডিলিট করলে বিক্রিটি বাতিল হবে এবং পণ্যের স্টক স্বয়ংক্রিয়ভাবে আগের অবস্থানে ফেরত যাবে।" else "Warning: Deleting this transaction will cancel the sale and restore products to inventory.",
+                                    text = if (language == "bn") "সতর্কতা: এই লেনদেনটি ডিলিট করলে বিক্রি বা ক্রয় বাতিল হবে এবং পণ্যের স্টক স্বয়ংক্রিয়ভাবে আগের অবস্থানে সমন্বয় হবে।" else "Warning: Deleting this transaction will cancel the record and adjust inventory stock.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = LossRed,
                                     fontSize = 12.sp
@@ -483,7 +595,7 @@ fun EditOrReturnSaleDialog(
                             Icon(Icons.Default.DeleteForever, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (language == "bn") "বিক্রি বাতিল ও স্টক রিস্টোর" else "Cancel Sale & Restock",
+                                text = if (language == "bn") "লেনদেন বাতিল ও স্টক সমন্বয়" else "Cancel Transaction & Adjust Stock",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp
                             )
@@ -494,4 +606,3 @@ fun EditOrReturnSaleDialog(
         }
     }
 }
-

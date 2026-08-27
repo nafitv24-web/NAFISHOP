@@ -551,25 +551,71 @@ class ShopRepository(private val database: AppDatabase) {
         newUnitPrice: Double,
         newCustomerName: String,
         newNote: String
+    ) = editSaleTransaction(
+        oldTx = oldTx,
+        newQuantity = newQuantity,
+        newUnitPrice = newUnitPrice,
+        newPaidAmount = if (oldTx.dueAmount == 0.0) round2(newQuantity * newUnitPrice) else oldTx.paidAmount,
+        newCustomerName = newCustomerName,
+        newCustomerPhone = oldTx.customerPhone,
+        newNote = newNote
+    )
+
+    suspend fun editSaleTransaction(
+        oldTx: TransactionRecord,
+        newQuantity: Double,
+        newUnitPrice: Double,
+        newPaidAmount: Double,
+        newCustomerName: String,
+        newCustomerPhone: String,
+        newNote: String
     ) = withContext(Dispatchers.IO) {
-        val cleanQty = round2(newQuantity)
-        val cleanPrice = round2(newUnitPrice)
+        val cleanQty = round2(newQuantity.coerceAtLeast(0.01))
+        val cleanPrice = round2(newUnitPrice.coerceAtLeast(0.0))
+        val isSale = oldTx.type.equals("SALE", ignoreCase = true)
+        val isStockIn = oldTx.type.equals("STOCK_IN", ignoreCase = true) || oldTx.type.equals("PURCHASE", ignoreCase = true)
+
+        // 1. Stock adjustment
         val qtyDiff = round2(oldTx.quantity - cleanQty)
         if (oldTx.productId > 0 && qtyDiff != 0.0) {
-            productDao.increaseStock(oldTx.productId, qtyDiff) // if newQuantity is less, qtyDiff > 0 (restock)
+            if (isSale) {
+                productDao.increaseStock(oldTx.productId, qtyDiff) // if cleanQty < oldTx.quantity, qtyDiff > 0 (return to stock)
+            } else if (isStockIn) {
+                productDao.decreaseStock(oldTx.productId, qtyDiff) // if cleanQty < oldTx.quantity, qtyDiff > 0 (decrease stock)
+            }
         }
 
+        // 2. Financial calculation
         val newTotal = round2(cleanQty * cleanPrice)
         val newCost = round2(oldTx.costPrice * cleanQty)
         val newProfit = round2(newTotal - newCost)
+        val cleanPaid = round2(newPaidAmount.coerceIn(0.0, newTotal))
+        val newDue = round2((newTotal - cleanPaid).coerceAtLeast(0.0))
+        val finalCustName = newCustomerName.trim().ifBlank { oldTx.customerName }
+        val finalCustPhone = newCustomerPhone.trim().ifBlank { oldTx.customerPhone }
 
+        // 3. Customer ledger & due adjustment if this was a customer transaction
+        val dueDiff = round2(newDue - oldTx.dueAmount)
+        if (dueDiff != 0.0 && finalCustName.isNotBlank() && finalCustName != "ক্যাশ কাস্টমার") {
+            val customer = customerDao.findExistingCustomer(finalCustName, finalCustPhone)
+                ?: customerDao.findExistingCustomer(oldTx.customerName, oldTx.customerPhone)
+            if (customer != null) {
+                val updatedDue = round2((customer.totalDue + dueDiff).coerceAtLeast(0.0))
+                customerDao.setCustomerDue(customer.id, updatedDue, System.currentTimeMillis())
+            }
+        }
+
+        // 4. Update transaction
         transactionDao.updateTransaction(
             oldTx.copy(
                 quantity = cleanQty,
                 unitPrice = cleanPrice,
                 totalAmount = newTotal,
-                profitAmount = newProfit,
-                customerName = newCustomerName.ifBlank { oldTx.customerName },
+                profitAmount = if (isSale) newProfit else 0.0,
+                paidAmount = if (isSale) cleanPaid else newTotal,
+                dueAmount = if (isSale) newDue else 0.0,
+                customerName = finalCustName,
+                customerPhone = finalCustPhone,
                 note = newNote
             )
         )
@@ -760,17 +806,328 @@ class ShopRepository(private val database: AppDatabase) {
         root.toString(2)
     }
 
+    private fun extractJsonObjects(root: JSONObject, vararg candidateKeys: String): List<JSONObject> {
+        val result = mutableListOf<JSONObject>()
+        for (k in candidateKeys) {
+            if (root.has(k)) {
+                val arrayVal = root.optJSONArray(k)
+                if (arrayVal != null) {
+                    for (i in 0 until arrayVal.length()) {
+                        val obj = arrayVal.optJSONObject(i)
+                        if (obj != null) result.add(obj)
+                    }
+                    if (result.isNotEmpty()) return result
+                }
+
+                val objVal = root.optJSONObject(k)
+                if (objVal != null) {
+                    val keys = objVal.keys()
+                    while (keys.hasNext()) {
+                        val subKey = keys.next()
+                        val subObj = objVal.optJSONObject(subKey)
+                        if (subObj != null) result.add(subObj)
+                    }
+                    if (result.isNotEmpty()) return result
+                }
+            }
+        }
+        return result
+    }
+
     suspend fun importDataFromJson(jsonStr: String, cleanSlate: Boolean = true): RestoreResult = withContext(Dispatchers.IO) {
         try {
-            var root = JSONObject(jsonStr)
-            if (root.has("backup") && root.optJSONObject("backup") != null) {
-                root = root.getJSONObject("backup")
-            } else if (root.has("backup") && root.optString("backup").startsWith("{")) {
-                try { root = JSONObject(root.getString("backup")) } catch (e: Exception) {}
-            } else if (root.has("data") && root.optJSONObject("data") != null) {
-                root = root.getJSONObject("data")
-            } else if (root.has("data") && root.optString("data").startsWith("{")) {
-                try { root = JSONObject(root.getString("data")) } catch (e: Exception) {}
+            if (jsonStr.isBlank() || jsonStr.trim() == "null" || jsonStr.trim() == "{}") {
+                return@withContext RestoreResult(
+                    success = false,
+                    message = "রিস্টোর করার মতো কোনো ডাটা পাওয়া যায়নি।"
+                )
+            }
+
+            var root: JSONObject
+            try {
+                root = JSONObject(jsonStr.trim())
+            } catch (e: Exception) {
+                // If wrapped in quotes or escaped JSON
+                val unescaped = if (jsonStr.startsWith("\"") && jsonStr.endsWith("\"")) {
+                    jsonStr.substring(1, jsonStr.length - 1).replace("\\\"", "\"").replace("\\\\", "\\")
+                } else jsonStr
+                root = JSONObject(unescaped)
+            }
+
+            // Unpack nested root wrappers
+            var unwrapped = true
+            while (unwrapped) {
+                unwrapped = false
+                for (wrapperKey in listOf("backup", "data", "records", "shopData", "dataMap", "payload")) {
+                    if (root.has(wrapperKey)) {
+                        val subObj = root.optJSONObject(wrapperKey)
+                        if (subObj != null) {
+                            root = subObj
+                            unwrapped = true
+                            break
+                        }
+                        val subStr = root.optString(wrapperKey)
+                        if (subStr.isNotBlank() && subStr.startsWith("{")) {
+                            try {
+                                root = JSONObject(subStr)
+                                unwrapped = true
+                                break
+                            } catch (e: Exception) {}
+                        }
+                    }
+                }
+            }
+
+            // Also check if root contains a single top-level user key (like "nafitv24_at_gmail_dot_com")
+            if (!root.has("products") && !root.has("transactions") && !root.has("customers")) {
+                val topKeys = root.keys()
+                while (topKeys.hasNext()) {
+                    val k = topKeys.next()
+                    val childObj = root.optJSONObject(k)
+                    if (childObj != null && (childObj.has("products") || childObj.has("transactions") || childObj.has("customers") || childObj.has("backup") || childObj.has("data"))) {
+                        if (childObj.has("backup") && childObj.optJSONObject("backup") != null) {
+                            root = childObj.getJSONObject("backup")
+                        } else if (childObj.has("data") && childObj.optJSONObject("data") != null) {
+                            root = childObj.getJSONObject("data")
+                        } else {
+                            root = childObj
+                        }
+                        break
+                    }
+                }
+            }
+
+            // Parse shop info
+            var restoredShopInfo: ShopInfo? = null
+            val rootCash = if (root.has("mainBalance")) root.optDouble("mainBalance", 0.0)
+            else if (root.has("cashBalance")) root.optDouble("cashBalance", 0.0)
+            else root.optDouble("cash_balance", 0.0)
+
+            val shopInfoObj = root.optJSONObject("shopInfo") ?: root.optJSONObject("shop_info") ?: root.optJSONObject("shop")
+            if (shopInfoObj != null) {
+                val finalCash = if (shopInfoObj.has("mainBalance")) shopInfoObj.optDouble("mainBalance", rootCash)
+                else if (shopInfoObj.has("cashBalance")) shopInfoObj.optDouble("cashBalance", rootCash)
+                else rootCash
+
+                restoredShopInfo = ShopInfo(
+                    shopName = shopInfoObj.optString("shopName").ifBlank { shopInfoObj.optString("shop_name", "আমার দোকান") },
+                    ownerName = shopInfoObj.optString("ownerName").ifBlank { shopInfoObj.optString("owner_name", "দোকানদার") },
+                    phone = shopInfoObj.optString("phone").ifBlank { shopInfoObj.optString("mobile", "") },
+                    address = shopInfoObj.optString("address", ""),
+                    currency = shopInfoObj.optString("currency", "৳"),
+                    mainBalance = finalCash,
+                    userEmail = shopInfoObj.optString("userEmail").ifBlank { shopInfoObj.optString("user_email", "") },
+                    isGoogleLinked = (shopInfoObj.optString("userEmail").ifBlank { shopInfoObj.optString("user_email", "") }).isNotBlank()
+                )
+            } else if (root.has("mainBalance") || root.has("cashBalance") || root.has("cash_balance")) {
+                restoredShopInfo = ShopInfo(
+                    mainBalance = rootCash
+                )
+            }
+
+            // 1. Extract Products
+            val productObjs = extractJsonObjects(root, "products", "productList", "product_list", "items", "itemList", "item_list", "stock", "inventory")
+            val products = mutableListOf<Product>()
+            for (o in productObjs) {
+                try {
+                    val name = o.optString("name").ifBlank { o.optString("productName").ifBlank { o.optString("product_name").ifBlank { o.optString("title", "পণ্য") } } }
+                    val barcode = o.optString("barcode").ifBlank { o.optString("bar_code", "") }
+                    val category = o.optString("category").ifBlank { o.optString("categoryName").ifBlank { o.optString("category_name", "সাধারণ") } }
+                    val buyPrice = if (o.has("buyPrice")) o.optDouble("buyPrice") else if (o.has("buy_price")) o.optDouble("buy_price") else if (o.has("purchasePrice")) o.optDouble("purchasePrice") else if (o.has("purchase_price")) o.optDouble("purchase_price") else if (o.has("costPrice")) o.optDouble("costPrice") else o.optDouble("cost_price", 0.0)
+                    val sellPrice = if (o.has("sellPrice")) o.optDouble("sellPrice") else if (o.has("sell_price")) o.optDouble("sell_price") else if (o.has("salePrice")) o.optDouble("salePrice") else if (o.has("sale_price")) o.optDouble("sale_price") else if (o.has("price")) o.optDouble("price", 0.0) else o.optDouble("rate", 0.0)
+                    val stockQty = if (o.has("stockQuantity")) o.optDouble("stockQuantity") else if (o.has("stock_quantity")) o.optDouble("stock_quantity") else if (o.has("stock")) o.optDouble("stock") else if (o.has("quantity")) o.optDouble("quantity") else o.optDouble("qty", 0.0)
+                    val unit = o.optString("unit").ifBlank { o.optString("unit_name", "পিস") }
+                    val minAlert = if (o.has("minStockAlert")) o.optDouble("minStockAlert") else if (o.has("min_stock_alert")) o.optDouble("min_stock_alert") else o.optDouble("minStock", 5.0)
+                    val image = o.optString("imageUri").ifBlank { o.optString("image_uri").ifBlank { o.optString("image", "") } }
+                    val expiry = if (o.has("expiryDate")) o.optLong("expiryDate") else if (o.has("expiry_date")) o.optLong("expiry_date") else o.optLong("expireDate", 0L)
+                    val created = if (o.has("createdAt")) o.optLong("createdAt") else if (o.has("created_at")) o.optLong("created_at") else o.optLong("timestamp", System.currentTimeMillis())
+
+                    products.add(
+                        Product(
+                            name = name,
+                            barcode = barcode,
+                            category = category,
+                            buyPrice = round2(buyPrice),
+                            sellPrice = round2(sellPrice),
+                            stockQuantity = round2(stockQty),
+                            unit = unit,
+                            minStockAlert = minAlert,
+                            imageUri = image,
+                            expiryDate = expiry,
+                            createdAt = created
+                        )
+                    )
+                } catch (e: Exception) {}
+            }
+
+            // 2. Extract Customers
+            val customerObjs = extractJsonObjects(root, "customers", "customerList", "customer_list", "clients", "buyers")
+            val customers = mutableListOf<Customer>()
+            for (o in customerObjs) {
+                try {
+                    val name = o.optString("name").ifBlank { o.optString("customerName").ifBlank { o.optString("customer_name", "কাস্টমার") } }
+                    val phone = o.optString("phone").ifBlank { o.optString("customerPhone").ifBlank { o.optString("mobile", "") } }
+                    val address = o.optString("address", "")
+                    val totalDue = if (o.has("totalDue")) o.optDouble("totalDue") else if (o.has("total_due")) o.optDouble("total_due") else if (o.has("due")) o.optDouble("due") else o.optDouble("dueAmount", 0.0)
+                    val totalPurchased = if (o.has("totalPurchased")) o.optDouble("totalPurchased") else if (o.has("total_purchased")) o.optDouble("total_purchased") else if (o.has("total_buy")) o.optDouble("total_buy") else o.optDouble("totalPurchase", 0.0)
+                    val image = o.optString("imageUri").ifBlank { o.optString("image_uri", "") }
+                    val lastTx = if (o.has("lastTransactionDate")) o.optLong("lastTransactionDate") else if (o.has("last_transaction_date")) o.optLong("last_transaction_date") else o.optLong("timestamp", System.currentTimeMillis())
+
+                    customers.add(
+                        Customer(
+                            name = name,
+                            phone = phone,
+                            address = address,
+                            totalDue = round2(totalDue),
+                            totalPurchased = round2(totalPurchased),
+                            imageUri = image,
+                            lastTransactionDate = lastTx
+                        )
+                    )
+                } catch (e: Exception) {}
+            }
+
+            // 3. Extract Due Logs
+            val dueObjs = extractJsonObjects(root, "dueLogs", "due_logs", "dueLogList", "due_list", "dues", "customerDueLogs")
+            val dueLogs = mutableListOf<DueLog>()
+            for (o in dueObjs) {
+                try {
+                    val cId = if (o.has("customerId")) o.optLong("customerId") else o.optLong("customer_id", 0L)
+                    val cName = o.optString("customerName").ifBlank { o.optString("customer_name", "") }
+                    val cPhone = o.optString("customerPhone").ifBlank { o.optString("customer_phone", "") }
+                    val type = o.optString("type").ifBlank { o.optString("due_type", "DUE_GIVEN") }
+                    val amount = if (o.has("amount")) o.optDouble("amount") else if (o.has("due_amount")) o.optDouble("due_amount") else o.optDouble("total", 0.0)
+                    val note = o.optString("note", "")
+                    val time = if (o.has("timestamp")) o.optLong("timestamp") else if (o.has("date")) o.optLong("date") else System.currentTimeMillis()
+
+                    dueLogs.add(
+                        DueLog(
+                            customerId = cId,
+                            customerName = cName,
+                            customerPhone = cPhone,
+                            type = type,
+                            amount = round2(amount),
+                            note = note,
+                            timestamp = time
+                        )
+                    )
+                } catch (e: Exception) {}
+            }
+
+            // 4. Extract Expenses
+            val expenseObjs = extractJsonObjects(root, "expenses", "expense_list", "expenseList", "costs", "costList")
+            val expenses = mutableListOf<Expense>()
+            for (o in expenseObjs) {
+                try {
+                    val title = o.optString("title").ifBlank { o.optString("name", "খরচ") }
+                    val category = o.optString("category", "অন্যান্য")
+                    val amount = if (o.has("amount")) o.optDouble("amount") else o.optDouble("cost", 0.0)
+                    val note = o.optString("note", "")
+                    val time = if (o.has("timestamp")) o.optLong("timestamp") else System.currentTimeMillis()
+
+                    expenses.add(
+                        Expense(
+                            title = title,
+                            category = category,
+                            amount = round2(amount),
+                            timestamp = time,
+                            note = note
+                        )
+                    )
+                } catch (e: Exception) {}
+            }
+
+            // 5. Extract Transactions
+            val txObjs = extractJsonObjects(root, "transactions", "transactionList", "transaction_list", "sales", "saleList", "sale_list", "orders", "orderList")
+            val transactions = mutableListOf<TransactionRecord>()
+            for (o in txObjs) {
+                try {
+                    val rawType = o.optString("type").ifBlank { o.optString("transactionType", "SALE") }
+                    val type = if (rawType.equals("STOCK_IN", ignoreCase = true) || rawType.equals("PURCHASE", ignoreCase = true)) "STOCK_IN"
+                    else if (rawType.equals("STOCK_OUT_DAMAGE", ignoreCase = true) || rawType.equals("DAMAGE", ignoreCase = true)) "STOCK_OUT_DAMAGE"
+                    else "SALE"
+
+                    val invoice = o.optString("invoiceNumber").ifBlank { o.optString("invoice_number").ifBlank { o.optString("invoice").ifBlank { o.optString("memoNo", "") } } }
+                    val pId = if (o.has("productId")) o.optLong("productId") else o.optLong("product_id", 0L)
+                    val pName = o.optString("productName").ifBlank { o.optString("product_name").ifBlank { o.optString("name").ifBlank { o.optString("title", "পণ্য") } } }
+                    val qty = if (o.has("quantity")) o.optDouble("quantity") else if (o.has("qty")) o.optDouble("qty") else o.optDouble("count", 1.0)
+                    val unit = o.optString("unit").ifBlank { o.optString("unit_name", "পিস") }
+                    val unitPrice = if (o.has("unitPrice")) o.optDouble("unitPrice") else if (o.has("unit_price")) o.optDouble("unit_price") else if (o.has("rate")) o.optDouble("rate") else o.optDouble("price", 0.0)
+                    val costPrice = if (o.has("costPrice")) o.optDouble("costPrice") else if (o.has("cost_price")) o.optDouble("cost_price") else if (o.has("buyPrice")) o.optDouble("buyPrice") else o.optDouble("buy_price", 0.0)
+                    val totalAmount = if (o.has("totalAmount")) o.optDouble("totalAmount") else if (o.has("total_amount")) o.optDouble("total_amount") else if (o.has("total")) o.optDouble("total") else round2(qty * unitPrice)
+                    val profitAmount = if (o.has("profitAmount")) o.optDouble("profitAmount") else if (o.has("profit_amount")) o.optDouble("profit_amount") else if (o.has("profit")) o.optDouble("profit") else round2(totalAmount - (costPrice * qty))
+                    val cName = o.optString("customerName").ifBlank { o.optString("customer_name", "") }
+                    val cPhone = o.optString("customerPhone").ifBlank { o.optString("customer_phone").ifBlank { o.optString("phone", "") } }
+                    val paidAmount = if (o.has("paidAmount")) o.optDouble("paidAmount") else if (o.has("paid_amount")) o.optDouble("paid_amount") else if (o.has("paid")) o.optDouble("paid") else totalAmount
+                    val dueAmount = if (o.has("dueAmount")) o.optDouble("dueAmount") else if (o.has("due_amount")) o.optDouble("due_amount") else if (o.has("due")) o.optDouble("due") else (totalAmount - paidAmount).coerceAtLeast(0.0)
+                    val paymentMethod = o.optString("paymentMethod").ifBlank { o.optString("payment_method").ifBlank { o.optString("paymentType", "CASH") } }
+                    val note = o.optString("note").ifBlank { o.optString("remarks", "") }
+                    val time = if (o.has("timestamp")) o.optLong("timestamp") else if (o.has("date")) o.optLong("date") else if (o.has("createdAt")) o.optLong("createdAt") else System.currentTimeMillis()
+
+                    transactions.add(
+                        TransactionRecord(
+                            type = type,
+                            invoiceNumber = invoice,
+                            productId = pId,
+                            productName = pName,
+                            quantity = round2(qty),
+                            unit = unit,
+                            unitPrice = round2(unitPrice),
+                            costPrice = round2(costPrice),
+                            totalAmount = round2(totalAmount),
+                            profitAmount = round2(profitAmount),
+                            customerName = cName,
+                            customerPhone = cPhone,
+                            paidAmount = round2(paidAmount),
+                            dueAmount = round2(dueAmount),
+                            paymentMethod = paymentMethod,
+                            note = note,
+                            timestamp = time
+                        )
+                    )
+                } catch (e: Exception) {}
+            }
+
+            // 6. Extract Cash Logs
+            val clObjs = extractJsonObjects(root, "cashLogs", "cash_logs", "cashLogList", "closings")
+            val cashLogs = mutableListOf<CashLog>()
+            for (o in clObjs) {
+                try {
+                    val type = o.optString("type", "DAY_END_CLOSING")
+                    val amount = if (o.has("amount")) o.optDouble("amount") else 0.0
+                    val bal = if (o.has("balanceAfter")) o.optDouble("balanceAfter") else if (o.has("balance_after")) o.optDouble("balance_after") else 0.0
+                    val note = o.optString("note", "")
+                    val time = if (o.has("timestamp")) o.optLong("timestamp") else System.currentTimeMillis()
+
+                    cashLogs.add(
+                        CashLog(
+                            type = type,
+                            amount = round2(amount),
+                            balanceAfter = round2(bal),
+                            note = note,
+                            timestamp = time
+                        )
+                    )
+                } catch (e: Exception) {}
+            }
+
+            val totalItemsFound = products.size + customers.size + transactions.size + expenses.size + dueLogs.size + cashLogs.size
+
+            if (totalItemsFound == 0 && restoredShopInfo == null) {
+                return@withContext RestoreResult(
+                    success = false,
+                    message = "ফাইলে কোনো পণ্য, কাস্টমার বা লেনদেনের তথ্য পাওয়া যায়নি।"
+                )
+            }
+
+            // Now safely write to database
+            if (cleanSlate) {
+                if (products.isNotEmpty()) productDao.clearAll()
+                if (customers.isNotEmpty()) customerDao.clearAll()
+                if (dueLogs.isNotEmpty()) dueLogDao.clearAll()
+                if (expenses.isNotEmpty()) expenseDao.clearAll()
+                if (transactions.isNotEmpty()) transactionDao.clearAll()
+                if (cashLogs.isNotEmpty()) cashLogDao.clearAll()
             }
 
             var pCount = 0
@@ -780,182 +1137,29 @@ class ShopRepository(private val database: AppDatabase) {
             var dCount = 0
             var clCount = 0
 
-            var restoredShopInfo: ShopInfo? = null
-            val rootCash = if (root.has("mainBalance")) root.optDouble("mainBalance", 0.0) else root.optDouble("cashBalance", 0.0)
-            if (root.has("shopInfo")) {
-                val sObj = root.getJSONObject("shopInfo")
-                val finalCash = if (sObj.has("mainBalance")) sObj.optDouble("mainBalance", rootCash) else rootCash
-                restoredShopInfo = ShopInfo(
-                    shopName = sObj.optString("shopName", "আমার দোকান"),
-                    ownerName = sObj.optString("ownerName", "দোকানদার"),
-                    phone = sObj.optString("phone", ""),
-                    address = sObj.optString("address", ""),
-                    currency = sObj.optString("currency", "৳"),
-                    mainBalance = finalCash,
-                    userEmail = sObj.optString("userEmail", ""),
-                    isGoogleLinked = sObj.optString("userEmail", "").isNotBlank()
-                )
-            } else if (root.has("mainBalance") || root.has("cashBalance")) {
-                restoredShopInfo = ShopInfo(
-                    mainBalance = rootCash
-                )
+            if (products.isNotEmpty()) {
+                productDao.insertAll(products)
+                pCount = products.size
             }
-
-            if (cleanSlate) {
-                productDao.clearAll()
-                customerDao.clearAll()
-                dueLogDao.clearAll()
-                expenseDao.clearAll()
-                transactionDao.clearAll()
-                cashLogDao.clearAll()
+            if (customers.isNotEmpty()) {
+                customerDao.insertAll(customers)
+                cCount = customers.size
             }
-
-            if (root.has("products")) {
-                val pArray = root.getJSONArray("products")
-                val products = mutableListOf<Product>()
-                for (i in 0 until pArray.length()) {
-                    val o = pArray.getJSONObject(i)
-                    products.add(
-                        Product(
-                            name = o.optString("name", "Product"),
-                            barcode = o.optString("barcode", ""),
-                            category = o.optString("category", "সাধারণ"),
-                            buyPrice = o.optDouble("buyPrice", 0.0),
-                            sellPrice = o.optDouble("sellPrice", 0.0),
-                            stockQuantity = o.optDouble("stockQuantity", 0.0),
-                            unit = o.optString("unit", "পিস"),
-                            minStockAlert = o.optDouble("minStockAlert", 5.0),
-                            imageUri = o.optString("imageUri", ""),
-                            expiryDate = o.optLong("expiryDate", 0L),
-                            createdAt = o.optLong("createdAt", System.currentTimeMillis())
-                        )
-                    )
-                }
-                if (products.isNotEmpty()) {
-                    productDao.insertAll(products)
-                    pCount = products.size
-                }
+            if (dueLogs.isNotEmpty()) {
+                dueLogDao.insertAll(dueLogs)
+                dCount = dueLogs.size
             }
-
-            if (root.has("customers")) {
-                val cArray = root.getJSONArray("customers")
-                val customers = mutableListOf<Customer>()
-                for (i in 0 until cArray.length()) {
-                    val o = cArray.getJSONObject(i)
-                    customers.add(
-                        Customer(
-                            name = o.optString("name", "Customer"),
-                            phone = o.optString("phone", ""),
-                            address = o.optString("address", ""),
-                            totalDue = o.optDouble("totalDue", 0.0),
-                            totalPurchased = o.optDouble("totalPurchased", 0.0),
-                            imageUri = o.optString("imageUri", ""),
-                            lastTransactionDate = o.optLong("lastTransactionDate", System.currentTimeMillis())
-                        )
-                    )
-                }
-                if (customers.isNotEmpty()) {
-                    customerDao.insertAll(customers)
-                    cCount = customers.size
-                }
+            if (expenses.isNotEmpty()) {
+                expenseDao.insertAll(expenses)
+                eCount = expenses.size
             }
-
-            if (root.has("dueLogs")) {
-                val dArray = root.getJSONArray("dueLogs")
-                val dueLogs = mutableListOf<DueLog>()
-                for (i in 0 until dArray.length()) {
-                    val o = dArray.getJSONObject(i)
-                    dueLogs.add(
-                        DueLog(
-                            customerId = o.optLong("customerId", 0L),
-                            customerName = o.optString("customerName", ""),
-                            customerPhone = o.optString("customerPhone", ""),
-                            type = o.optString("type", "DUE_GIVEN"),
-                            amount = o.optDouble("amount", 0.0),
-                            note = o.optString("note", ""),
-                            timestamp = o.optLong("timestamp", System.currentTimeMillis())
-                        )
-                    )
-                }
-                if (dueLogs.isNotEmpty()) {
-                    dueLogDao.insertAll(dueLogs)
-                    dCount = dueLogs.size
-                }
+            if (transactions.isNotEmpty()) {
+                transactionDao.insertAllTransactions(transactions)
+                tCount = transactions.size
             }
-
-            if (root.has("expenses")) {
-                val eArray = root.getJSONArray("expenses")
-                val expenses = mutableListOf<Expense>()
-                for (i in 0 until eArray.length()) {
-                    val o = eArray.getJSONObject(i)
-                    expenses.add(
-                        Expense(
-                            title = o.optString("title", "Expense"),
-                            category = o.optString("category", "অন্যান্য"),
-                            amount = o.optDouble("amount", 0.0),
-                            timestamp = o.optLong("timestamp", System.currentTimeMillis()),
-                            note = o.optString("note", "")
-                        )
-                    )
-                }
-                if (expenses.isNotEmpty()) {
-                    expenseDao.insertAll(expenses)
-                    eCount = expenses.size
-                }
-            }
-
-            if (root.has("transactions")) {
-                val tArray = root.getJSONArray("transactions")
-                val transactions = mutableListOf<TransactionRecord>()
-                for (i in 0 until tArray.length()) {
-                    val o = tArray.getJSONObject(i)
-                    transactions.add(
-                        TransactionRecord(
-                            type = o.optString("type", "SALE"),
-                            invoiceNumber = o.optString("invoiceNumber", ""),
-                            productId = o.optLong("productId", 0L),
-                            productName = o.optString("productName", ""),
-                            quantity = o.optDouble("quantity", 1.0),
-                            unit = o.optString("unit", "পিস"),
-                            unitPrice = o.optDouble("unitPrice", 0.0),
-                            costPrice = o.optDouble("costPrice", 0.0),
-                            totalAmount = o.optDouble("totalAmount", 0.0),
-                            profitAmount = o.optDouble("profitAmount", 0.0),
-                            customerName = o.optString("customerName", ""),
-                            customerPhone = o.optString("customerPhone", ""),
-                            paidAmount = o.optDouble("paidAmount", 0.0),
-                            dueAmount = o.optDouble("dueAmount", 0.0),
-                            paymentMethod = o.optString("paymentMethod", "CASH"),
-                            note = o.optString("note", ""),
-                            timestamp = o.optLong("timestamp", System.currentTimeMillis())
-                        )
-                    )
-                }
-                if (transactions.isNotEmpty()) {
-                    transactionDao.insertAllTransactions(transactions)
-                    tCount = transactions.size
-                }
-            }
-
-            if (root.has("cashLogs")) {
-                val clArray = root.getJSONArray("cashLogs")
-                val cashLogs = mutableListOf<CashLog>()
-                for (i in 0 until clArray.length()) {
-                    val o = clArray.getJSONObject(i)
-                    cashLogs.add(
-                        CashLog(
-                            type = o.optString("type", "DAY_END_CLOSING"),
-                            amount = o.optDouble("amount", 0.0),
-                            balanceAfter = o.optDouble("balanceAfter", 0.0),
-                            note = o.optString("note", ""),
-                            timestamp = o.optLong("timestamp", System.currentTimeMillis())
-                        )
-                    )
-                }
-                if (cashLogs.isNotEmpty()) {
-                    cashLogDao.insertAll(cashLogs)
-                    clCount = cashLogs.size
-                }
+            if (cashLogs.isNotEmpty()) {
+                cashLogDao.insertAll(cashLogs)
+                clCount = cashLogs.size
             }
 
             RestoreResult(
@@ -973,7 +1177,7 @@ class ShopRepository(private val database: AppDatabase) {
             e.printStackTrace()
             RestoreResult(
                 success = false,
-                message = "রিস্টোর ব্যর্থ: ${e.localizedMessage ?: "ফাইলের তথ্য সঠিক নয়"}"
+                message = "রিস্টোর ত্রুটি: ${e.localizedMessage ?: "ফাইলের তথ্য প্রক্রিয়াকরণে সমস্যা"}"
             )
         }
     }

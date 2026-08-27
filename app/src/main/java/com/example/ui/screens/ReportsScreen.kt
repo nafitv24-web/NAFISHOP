@@ -534,9 +534,7 @@ fun ReportsScreen(
                     currency = currency,
                     language = language,
                     onClick = {
-                        if (tx.type == "SALE") {
-                            editingTransaction = tx
-                        }
+                        editingTransaction = tx
                     }
                 )
             }
@@ -554,8 +552,8 @@ fun ReportsScreen(
                 viewModel.returnProductSale(txToEdit, returnQty, note)
                 editingTransaction = null
             },
-            onEditSale = { newQty, newPrice, newCustomerName, newNote ->
-                viewModel.editSaleTransaction(txToEdit, newQty, newPrice, newCustomerName, newNote)
+            onEditSale = { newQty, newPrice, newPaid, newCustomerName, newCustomerPhone, newNote ->
+                viewModel.editSaleTransaction(txToEdit, newQty, newPrice, newPaid, newCustomerName, newCustomerPhone, newNote)
                 editingTransaction = null
             },
             onDeleteSale = {
