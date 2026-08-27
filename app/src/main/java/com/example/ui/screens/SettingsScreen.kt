@@ -1318,17 +1318,17 @@ fun SettingsScreen(
             },
             title = {
                 Text(
-                    text = if (language == "bn") "গুগল ড্রাইভ থেকে আমদানি" else "Import from Google Drive",
+                    text = if (language == "bn") "ক্লাউড ও ড্রাইভ থেকে রিস্টোর" else "Restore from Cloud & Drive",
                     fontWeight = FontWeight.Bold
                 )
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         text = if (language == "bn")
-                            "গুগল ড্রাইভ ক্লাউড থেকে সর্বশেষ ব্যাকআপ ফাইলটি নামিয়ে বর্তমান দোকানের ডাটা রিস্টোর করা হবে।"
+                            "আপনার জিমেইল ক্লাউড থেকে পূর্ববর্তী পণ্য, কাস্টমার, বাকি ও লেনদেনের ডাটা রিস্টোর করা হবে।"
                         else
-                            "The latest backup from Google Drive will be downloaded and restored.",
+                            "The latest backup for your Gmail account will be downloaded and restored.",
                         style = MaterialTheme.typography.bodyMedium
                     )
 
@@ -1351,7 +1351,7 @@ fun SettingsScreen(
                 Button(
                     onClick = {
                         showDriveImportConfirmDialog = false
-                        viewModel.importFromGoogleDriveCloud(context) { res ->
+                        viewModel.importFromGoogleDriveCloud(context, customEmail = shopInfo.userEmail) { res ->
                             restoreResultData = res
                             showRestoreResultDialog = true
                         }

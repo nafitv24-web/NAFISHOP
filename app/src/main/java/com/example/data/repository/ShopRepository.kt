@@ -762,7 +762,17 @@ class ShopRepository(private val database: AppDatabase) {
 
     suspend fun importDataFromJson(jsonStr: String, cleanSlate: Boolean = true): RestoreResult = withContext(Dispatchers.IO) {
         try {
-            val root = JSONObject(jsonStr)
+            var root = JSONObject(jsonStr)
+            if (root.has("backup") && root.optJSONObject("backup") != null) {
+                root = root.getJSONObject("backup")
+            } else if (root.has("backup") && root.optString("backup").startsWith("{")) {
+                try { root = JSONObject(root.getString("backup")) } catch (e: Exception) {}
+            } else if (root.has("data") && root.optJSONObject("data") != null) {
+                root = root.getJSONObject("data")
+            } else if (root.has("data") && root.optString("data").startsWith("{")) {
+                try { root = JSONObject(root.getString("data")) } catch (e: Exception) {}
+            }
+
             var pCount = 0
             var cCount = 0
             var tCount = 0

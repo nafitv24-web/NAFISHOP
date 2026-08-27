@@ -234,7 +234,8 @@ class FirebaseRealtimeManager {
     }
 
     /**
-     * Restore complete shop data from Firebase Realtime Database strictly for this user
+     * Restore complete shop data from Firebase Realtime Database strictly for this user.
+     * Supports multiple candidate endpoints and nested backup wrappers.
      */
     suspend fun restoreShopData(
         email: String
@@ -247,23 +248,106 @@ class FirebaseRealtimeManager {
                 )
             }
             val sanitized = sanitizeEmail(email)
-            val userBackupUrl = "$DATABASE_URL/shops/$sanitized/backup.json"
+            val trimmedEmail = email.trim().lowercase()
 
-            val req = Request.Builder().url(userBackupUrl).get().build()
-            val resp = client.newCall(req).execute()
-            val body = resp.body?.string()
+            val candidateUrls = listOf(
+                "$DATABASE_URL/shops/$sanitized/backup.json",
+                "$DATABASE_URL/shops/$sanitized.json",
+                "$DATABASE_URL/users/$sanitized/backup.json",
+                "$DATABASE_URL/users/$sanitized.json",
+                "$DATABASE_URL/shops/$trimmedEmail/backup.json",
+                "$DATABASE_URL/shops/$trimmedEmail.json",
+                "$DATABASE_URL/backup.json"
+            )
 
-            if (!resp.isSuccessful || body.isNullOrBlank() || body == "null") {
+            var bestData: String? = null
+            var bestScore = 0
+
+            for (url in candidateUrls) {
+                try {
+                    val req = Request.Builder().url(url).get().build()
+                    val resp = client.newCall(req).execute()
+                    val body = resp.body?.string()
+                    if (resp.isSuccessful && !body.isNullOrBlank() && body != "null" && body != "{}") {
+                        // Check content score
+                        var score = 0
+                        var extractedJson = body
+
+                        try {
+                            val obj = JSONObject(body)
+                            if (obj.has("backup") && obj.optJSONObject("backup") != null) {
+                                extractedJson = obj.getJSONObject("backup").toString()
+                            } else if (obj.has("backup") && obj.optString("backup").startsWith("{")) {
+                                extractedJson = obj.getString("backup")
+                            } else if (obj.has("data") && obj.optJSONObject("data") != null) {
+                                extractedJson = obj.getJSONObject("data").toString()
+                            }
+
+                            val inspectObj = JSONObject(extractedJson)
+                            if (inspectObj.has("products")) score += inspectObj.optJSONArray("products")?.length() ?: 0
+                            if (inspectObj.has("transactions")) score += (inspectObj.optJSONArray("transactions")?.length() ?: 0) * 2
+                            if (inspectObj.has("customers")) score += (inspectObj.optJSONArray("customers")?.length() ?: 0) * 2
+                            if (inspectObj.has("dueLogs")) score += inspectObj.optJSONArray("dueLogs")?.length() ?: 0
+                            if (inspectObj.has("expenses")) score += inspectObj.optJSONArray("expenses")?.length() ?: 0
+                            if (inspectObj.has("shopInfo")) score += 5
+                        } catch (e: Exception) {
+                            // If not JSON object, maybe raw string
+                        }
+
+                        if (score > bestScore || (bestData == null && extractedJson.isNotBlank())) {
+                            bestScore = score
+                            bestData = extractedJson
+                            if (bestScore > 0) {
+                                break // Found rich backup
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Try next candidate
+                }
+            }
+
+            // If still not found, search shops list under $DATABASE_URL/shops.json
+            if (bestData == null) {
+                try {
+                    val reqAll = Request.Builder().url("$DATABASE_URL/shops.json").get().build()
+                    val respAll = client.newCall(reqAll).execute()
+                    val bodyAll = respAll.body?.string()
+                    if (respAll.isSuccessful && !bodyAll.isNullOrBlank() && bodyAll != "null") {
+                        val allShops = JSONObject(bodyAll)
+                        val keys = allShops.keys()
+                        while (keys.hasNext()) {
+                            val k = keys.next()
+                            if (k.contains(sanitized, ignoreCase = true) || k.contains(trimmedEmail.replace("@", ""), ignoreCase = true)) {
+                                val item = allShops.optJSONObject(k)
+                                if (item != null) {
+                                    if (item.has("backup")) {
+                                        bestData = item.opt("backup").toString()
+                                        break
+                                    } else {
+                                        bestData = item.toString()
+                                        break
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Ignore
+                }
+            }
+
+            if (bestData == null || bestData.isBlank() || bestData == "{}" || bestData == "null") {
                 return@withContext FirebaseOperationResult(
                     success = false,
-                    message = "আপনার অ্যাকাউন্ট (${email})-এর জন্য Firebase ক্লাউডে কোনো পূর্ববর্তী ব্যাকআপ পাওয়া যায়নি! অনুগ্রহ করে প্রথমে ব্যাকআপ রাখুন।"
+                    message = "আপনার অ্যাকাউন্ট (${email})-এর জন্য ক্লাউডে কোনো পূর্ববর্তী ব্যাকআপ পাওয়া যায়নি।"
                 )
             }
 
             FirebaseOperationResult(
                 success = true,
-                message = "আপনার অ্যাকাউন্ট (${email})-এর ব্যাকআপ সফলভাবে পাওয়া গেছে!",
-                data = body
+                message = "আপনার অ্যাকাউন্ট (${email})-এর ক্লাউড ব্যাকআপ সফলভাবে পাওয়া গেছে!",
+                data = bestData
             )
         } catch (e: Exception) {
             Log.e(TAG, "Firebase restore failed", e)

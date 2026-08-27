@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import android.app.DatePickerDialog
 import android.content.Intent
+import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -1804,10 +1805,20 @@ fun DashboardScreen(
         CloudBackupInfoDialog(
             language = language,
             shopName = shopInfo.shopName,
+            userEmail = shopInfo.userEmail,
             onDismiss = { showCloudBackupInfoDialog = false },
             onBackupNow = {
-                viewModel.backupToLocalFile(context)
-                showCloudBackupInfoDialog = false
+                viewModel.backupToLocalFile(context) { success, path ->
+                    Toast.makeText(context, if (success) "ব্যাকআপ ফাইল তৈরি হয়েছে: $path" else "ব্যর্থ: $path", Toast.LENGTH_LONG).show()
+                }
+            },
+            onRestoreFromCloud = { customEmail, onDone ->
+                if (customEmail.isNotBlank() && customEmail != shopInfo.userEmail) {
+                    viewModel.updateUserEmail(customEmail)
+                }
+                viewModel.importFromGoogleDriveCloud(context, customEmail = customEmail) { res ->
+                    onDone(res)
+                }
             }
         )
     }
@@ -3370,48 +3381,57 @@ fun DueSmsReminderDialog(
 fun CloudBackupInfoDialog(
     language: String,
     shopName: String,
+    userEmail: String,
     onDismiss: () -> Unit,
-    onBackupNow: () -> Unit
+    onBackupNow: () -> Unit,
+    onRestoreFromCloud: (String, (com.example.data.model.RestoreResult) -> Unit) -> Unit
 ) {
+    var emailInput by remember { mutableStateOf(userEmail) }
+    var isRestoring by remember { mutableStateOf(false) }
+    var restoreFeedback by remember { mutableStateOf<String?>(null) }
+    var isSuccessFeedback by remember { mutableStateOf(false) }
+
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp)
+                .padding(8.dp)
         ) {
             Column(
-                modifier = Modifier.padding(20.dp),
+                modifier = Modifier
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Box(
                     modifier = Modifier
-                        .size(54.dp)
+                        .size(52.dp)
                         .background(Color(0xFFF5F3FF), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.CloudSync, contentDescription = null, tint = Color(0xFF7C3AED), modifier = Modifier.size(32.dp))
+                    Icon(Icons.Default.CloudSync, contentDescription = null, tint = Color(0xFF7C3AED), modifier = Modifier.size(30.dp))
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 Text(
-                    text = if (language == "bn") "ক্লাউড ও ডাটা ব্যাকআপ" else "Cloud & Data Backup",
+                    text = if (language == "bn") "ক্লাউড ডাটা ও রিস্টোর" else "Cloud Data & Restore",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
-                    text = if (language == "bn") "আপনার সকল পণ্য, বিক্রি, বাকি এবং ক্যাশ খাতার ডাটা সম্পূর্ণ নিরাপদ এবং স্বয়ংক্রিয়ভাবে সংরক্ষিত রয়েছে।" else "All your sales, inventory, due and cash ledger data is safe and synced.",
+                    text = if (language == "bn") "আপনার জিমেইল অ্যাকাউন্টের মাধ্যমে পণ্য, কাস্টমার, বাকি ও বিক্রির ডাটা ক্লাউডে সুরক্ষিত থাকে।" else "Your products, due records and sales are safely synced to your Gmail cloud.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.outline,
                     textAlign = TextAlign.Center
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 Surface(
                     shape = RoundedCornerShape(10.dp),
@@ -3420,14 +3440,14 @@ fun CloudBackupInfoDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier.padding(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(Icons.Default.CheckCircle, contentDescription = null, tint = ProfitGreen, modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text(
-                                text = if (language == "bn") "লাইভ অটো ব্যাকআপ চালু" else "Live Auto-Sync Active",
+                                text = if (language == "bn") "লাইভ ক্লাউড ব্যাকআপ সক্রিয়" else "Live Cloud Sync Active",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF166534)
@@ -3441,20 +3461,88 @@ fun CloudBackupInfoDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
+                // Gmail address field
+                OutlinedTextField(
+                    value = emailInput,
+                    onValueChange = { emailInput = it },
+                    label = { Text(if (language == "bn") "আপনার জিমেইল / অ্যাকাউন্ট" else "Your Gmail / Account") },
+                    placeholder = { Text("example@gmail.com") },
+                    leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (restoreFeedback != null) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (isSuccessFeedback) Color(0xFFDCFCE7) else Color(0xFFFEE2E2),
+                        border = BorderStroke(1.dp, if (isSuccessFeedback) Color(0xFF86EFAC) else Color(0xFFFCA5A5)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = restoreFeedback ?: "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isSuccessFeedback) Color(0xFF166534) else Color(0xFF991B1B),
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(10.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Cloud Restore Button
                 Button(
+                    onClick = {
+                        isRestoring = true
+                        restoreFeedback = null
+                        onRestoreFromCloud(emailInput) { res ->
+                            isRestoring = false
+                            isSuccessFeedback = res.success
+                            if (res.success) {
+                                restoreFeedback = if (language == "bn")
+                                    "ডাটা সফলভাবে রিস্টোর হয়েছে!\n• পণ্য: ${res.productCount} টি\n• কাস্টমার: ${res.customerCount} জন\n• লেনদেন: ${res.transactionCount} টি\n• বাকি খাতা: ${res.dueLogCount} টি"
+                                else
+                                    "Restored successfully!\n• Products: ${res.productCount}\n• Customers: ${res.customerCount}\n• Transactions: ${res.transactionCount}"
+                            } else {
+                                restoreFeedback = res.message
+                            }
+                        }
+                    },
+                    shape = RoundedCornerShape(10.dp),
+                    enabled = !isRestoring,
+                    colors = ButtonDefaults.buttonColors(containerColor = StockBlue),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (isRestoring) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(if (language == "bn") "ক্লাউড থেকে লোড হচ্ছে..." else "Loading from Cloud...")
+                    } else {
+                        Icon(Icons.Default.CloudDownload, contentDescription = null)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(if (language == "bn") "ক্লাউড থেকে আগের ডাটা লোড করুন" else "Load Previous Data from Cloud", fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Local Backup Save Button
+                OutlinedButton(
                     onClick = onBackupNow,
                     shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(Icons.Default.Save, contentDescription = null)
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(if (language == "bn") "ফাইলে ব্যাকআপ সেভ করুন" else "Save Backup to File", fontWeight = FontWeight.Bold)
+                    Text(if (language == "bn") "ফাইলে ব্যাকআপ সেভ করুন" else "Save Backup to File", fontWeight = FontWeight.SemiBold)
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
                 TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
                     Text(if (language == "bn") "বন্ধ করুন" else "Close")
