@@ -42,12 +42,18 @@ interface ProductDao {
     @Query("UPDATE products SET stockQuantity = stockQuantity - :qty WHERE id = :productId")
     suspend fun decreaseStock(productId: Long, qty: Double)
 
+    @Query("SELECT COUNT(*) FROM products")
+    suspend fun getCount(): Int
+
     @Query("DELETE FROM products")
     suspend fun clearAll()
 }
 
 @Dao
 interface TransactionDao {
+    @Query("SELECT COUNT(*) FROM transactions")
+    suspend fun getCount(): Int
+
     @Query("SELECT * FROM transactions ORDER BY timestamp DESC")
     fun getAllTransactions(): Flow<List<TransactionRecord>>
 
@@ -129,12 +135,18 @@ interface CustomerDao {
     @Query("UPDATE transactions SET customerName = :newName WHERE customerName = :oldName")
     suspend fun reassignTransactionsByName(oldName: String, newName: String)
 
+    @Query("SELECT COUNT(*) FROM customers")
+    suspend fun getCount(): Int
+
     @Query("DELETE FROM customers")
     suspend fun clearAll()
 }
 
 @Dao
 interface DueLogDao {
+    @Query("SELECT COUNT(*) FROM due_logs")
+    suspend fun getCount(): Int
+
     @Query("SELECT * FROM due_logs ORDER BY timestamp DESC")
     fun getAllDueLogs(): Flow<List<DueLog>>
 

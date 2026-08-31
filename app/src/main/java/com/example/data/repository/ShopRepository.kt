@@ -33,6 +33,14 @@ class ShopRepository(private val database: AppDatabase) {
     val allExpenses: Flow<List<Expense>> = expenseDao.getAllExpenses()
     val allCashLogs: Flow<List<CashLog>> = cashLogDao.getAllCashLogs()
 
+    suspend fun isDatabaseEmpty(): Boolean = withContext(Dispatchers.IO) {
+        val prodCount = productDao.getCount()
+        val txCount = transactionDao.getCount()
+        val custCount = customerDao.getCount()
+        val dueCount = dueLogDao.getCount()
+        (prodCount == 0 && txCount == 0 && custCount == 0 && dueCount == 0)
+    }
+
     suspend fun saveProduct(product: Product) = withContext(Dispatchers.IO) {
         val sanitized = product.copy(
             buyPrice = round2(product.buyPrice),

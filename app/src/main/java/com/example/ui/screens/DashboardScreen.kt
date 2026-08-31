@@ -70,6 +70,8 @@ fun DashboardScreen(
     val shopInfo by viewModel.shopInfo.collectAsState()
     val language by viewModel.language.collectAsState()
     val cashLogs by viewModel.cashLogs.collectAsState()
+    val isOnline by viewModel.isOnline.collectAsState()
+    val autoBackupStatus by viewModel.autoBackupStatus.collectAsState()
     val mainBalance = shopInfo.mainBalance
     val currency = shopInfo.currency
 
@@ -1819,6 +1821,8 @@ fun DashboardScreen(
             language = language,
             shopName = shopInfo.shopName,
             userEmail = shopInfo.userEmail,
+            isOnline = isOnline,
+            autoBackupStatus = autoBackupStatus,
             onDismiss = { showCloudBackupInfoDialog = false },
             onBackupNow = {
                 viewModel.backupToLocalFile(context) { success, path ->
@@ -3338,6 +3342,8 @@ fun CloudBackupInfoDialog(
     language: String,
     shopName: String,
     userEmail: String,
+    isOnline: Boolean,
+    autoBackupStatus: String?,
     onDismiss: () -> Unit,
     onBackupNow: () -> Unit,
     onRestoreFromCloud: (String, (com.example.data.model.RestoreResult) -> Unit) -> Unit
@@ -3391,27 +3397,32 @@ fun CloudBackupInfoDialog(
 
                 Surface(
                     shape = RoundedCornerShape(10.dp),
-                    color = Color(0xFFF0FDF4),
-                    border = BorderStroke(1.dp, Color(0xFFBBF7D0)),
+                    color = if (isOnline) Color(0xFFF0FDF4) else Color(0xFFFFFBEB),
+                    border = BorderStroke(1.dp, if (isOnline) Color(0xFFBBF7D0) else Color(0xFFFDE68A)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
                         modifier = Modifier.padding(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = ProfitGreen, modifier = Modifier.size(20.dp))
+                        Icon(
+                            if (isOnline) Icons.Default.CheckCircle else Icons.Default.CloudOff,
+                            contentDescription = null,
+                            tint = if (isOnline) ProfitGreen else DueOrange,
+                            modifier = Modifier.size(20.dp)
+                        )
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text(
-                                text = if (language == "bn") "লাইভ ক্লাউড ব্যাকআপ সক্রিয়" else "Live Cloud Sync Active",
+                                text = autoBackupStatus ?: (if (isOnline) (if (language == "bn") "অনলাইন - ক্লাউড সিঙ্ক সক্রিয়" else "Online - Cloud Sync Active") else (if (language == "bn") "অফলাইন মোড" else "Offline Mode")),
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF166534)
+                                color = if (isOnline) Color(0xFF166534) else Color(0xFF92400E)
                             )
                             Text(
-                                text = shopName,
+                                text = if (isOnline) shopName else (if (language == "bn") "ইন্টারনেট পেলে সকল অফলাইন হিসাব স্বয়ংক্রিয় ব্যাকআপ হবে" else "All offline records will auto-backup once connected"),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF15803D)
+                                color = if (isOnline) Color(0xFF15803D) else Color(0xFFB45309)
                             )
                         }
                     }

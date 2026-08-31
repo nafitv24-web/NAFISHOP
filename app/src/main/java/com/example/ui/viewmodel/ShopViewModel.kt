@@ -15,6 +15,7 @@ import com.example.data.local.AppDatabase
 import com.example.data.model.*
 import com.example.data.repository.ShopRepository
 import com.example.util.CalculationHelper.round2
+import com.example.util.NetworkMonitor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
@@ -126,16 +127,85 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     )
     val shopInfo: StateFlow<ShopInfo> = _shopInfo.asStateFlow()
 
+    // Network & Real-time Connectivity State
+    private val _isOnline = MutableStateFlow(NetworkMonitor.isOnline(application))
+    val isOnline: StateFlow<Boolean> = _isOnline.asStateFlow()
+
+    private val _hasPendingSync = MutableStateFlow(prefs.getBoolean("has_pending_cloud_sync", false))
+    val hasPendingSync: StateFlow<Boolean> = _hasPendingSync.asStateFlow()
+
     // Real-time Automatic Cloud Drive Backup State
-    private val _autoBackupStatus = MutableStateFlow<String?>("🟢 ড্রাইভে অটো ব্যাকআপ সক্রিয়")
+    private val _autoBackupStatus = MutableStateFlow<String?>(
+        if (NetworkMonitor.isOnline(application)) "🟢 ক্লাউড ব্যাকআপ সক্রিয়" else "🟠 অফলাইন (ইন্টারনেট পেলে ব্যাকআপ হবে)"
+    )
     val autoBackupStatus: StateFlow<String?> = _autoBackupStatus.asStateFlow()
 
     private var autoBackupJob: Job? = null
 
     /**
+     * Synchronizes all local offline changes to Firebase Realtime Cloud immediately.
+     */
+    fun syncPendingOfflineDataToCloud(onComplete: ((Boolean) -> Unit)? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val online = NetworkMonitor.isOnline(getApplication())
+            _isOnline.value = online
+            if (!online) {
+                _hasPendingSync.value = true
+                prefs.edit().putBoolean("has_pending_cloud_sync", true).apply()
+                _autoBackupStatus.value = if (_language.value == "bn") "🟠 অফলাইন (ইন্টারনেট পেলে ব্যাকআপ হবে)" else "🟠 Offline (Will backup when online)"
+                onComplete?.invoke(false)
+                return@launch
+            }
+
+            try {
+                _autoBackupStatus.value = if (_language.value == "bn") "⏳ ক্লাউড ড্রাইভে ব্যাকআপ হচ্ছে..." else "⏳ Backing up to Cloud..."
+                val jsonStr = getExportJsonString()
+                val accountId = getAccountIdentifier()
+                val userEmail = _shopInfo.value.userEmail.trim().lowercase()
+
+                // Save locally in isolated cloud store for instant local recovery
+                prefs.edit()
+                    .putString("cloud_backup_json_${accountId}", jsonStr)
+                    .putString("cloud_backup_json_latest", jsonStr)
+                    .putLong("cloud_backup_timestamp_${accountId}", System.currentTimeMillis())
+                    .apply()
+
+                val res1 = firebaseRealtime.backupShopData(accountId, jsonStr)
+                val res2 = if (userEmail.isNotBlank() && userEmail != accountId) {
+                    firebaseRealtime.backupShopData(userEmail, jsonStr)
+                } else res1
+
+                if (res1.success || res2.success) {
+                    _hasPendingSync.value = false
+                    prefs.edit().putBoolean("has_pending_cloud_sync", false).apply()
+                    val timeStr = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())
+                    val fullTimeStr = SimpleDateFormat("d MMMM yyyy, h:mm a", Locale.getDefault()).format(Date())
+                    _shopInfo.value = _shopInfo.value.copy(
+                        lastBackupDate = fullTimeStr,
+                        isGoogleLinked = true
+                    )
+                    prefs.edit().putString("last_backup_date", fullTimeStr).apply()
+                    _autoBackupStatus.value = "🟢 ক্লাউডে ব্যাকআপ সম্পন্ন ($timeStr)"
+                    onComplete?.invoke(true)
+                } else {
+                    _hasPendingSync.value = true
+                    prefs.edit().putBoolean("has_pending_cloud_sync", true).apply()
+                    _autoBackupStatus.value = if (_language.value == "bn") "🟠 অফলাইন (ইন্টারনেট পেলে ব্যাকআপ হবে)" else "🟠 Offline (Will backup when online)"
+                    onComplete?.invoke(false)
+                }
+            } catch (e: Exception) {
+                _hasPendingSync.value = true
+                prefs.edit().putBoolean("has_pending_cloud_sync", true).apply()
+                _autoBackupStatus.value = if (_language.value == "bn") "🟠 অফলাইন (ইন্টারনেট পেলে ব্যাকআপ হবে)" else "🟠 Offline (Will backup when online)"
+                onComplete?.invoke(false)
+            }
+        }
+    }
+
+    /**
      * Automatic Google Drive & Cloud Backup:
      * Triggers automatically immediately whenever ANY new entry or change is made by the user.
-     * Guarantees zero data loss and instant cloud protection.
+     * Preserves offline data and syncs to cloud whenever online.
      */
     fun triggerInstantDriveBackup(reason: String = "এন্ট্রি") {
         autoBackupJob?.cancel()
@@ -143,38 +213,55 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 // Short debounce to batch rapid typing if any, but execute quickly in 350ms
                 kotlinx.coroutines.delay(350)
-                _autoBackupStatus.value = "⏳ ক্লাউড ড্রাইভে ব্যাকআপ হচ্ছে..."
+                val online = NetworkMonitor.isOnline(getApplication())
+                _isOnline.value = online
+
                 val jsonStr = getExportJsonString()
                 val accountId = getAccountIdentifier()
 
-                // 1. Save locally in isolated cloud store for this user
+                // 1. Save locally in isolated cloud store for this user (Offline safe)
                 prefs.edit()
                     .putString("cloud_backup_json_${accountId}", jsonStr)
                     .putString("cloud_backup_json_latest", jsonStr)
                     .putLong("cloud_backup_timestamp_${accountId}", System.currentTimeMillis())
                     .apply()
 
-                // 2. Sync to Cloud under isolated account ID and email
-                try {
-                    firebaseRealtime.backupShopData(accountId, jsonStr)
-                    val userEmail = _shopInfo.value.userEmail.trim().lowercase()
-                    if (userEmail.isNotBlank() && userEmail != accountId) {
-                        firebaseRealtime.backupShopData(userEmail, jsonStr)
-                    }
-                } catch (e: Exception) {
-                    // silent fallback
+                if (!online) {
+                    // OFFLINE: Mark pending sync and do NOT show fake backup!
+                    _hasPendingSync.value = true
+                    prefs.edit().putBoolean("has_pending_cloud_sync", true).apply()
+                    _autoBackupStatus.value = if (_language.value == "bn") "🟠 অফলাইন (ইন্টারনেট পেলে ব্যাকআপ হবে)" else "🟠 Offline (Will backup when online)"
+                    return@launch
                 }
 
-                val timeStr = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())
-                val fullTimeStr = SimpleDateFormat("d MMMM yyyy, h:mm a", Locale.getDefault()).format(Date())
-                _shopInfo.value = _shopInfo.value.copy(
-                    lastBackupDate = fullTimeStr,
-                    isGoogleLinked = true
-                )
-                prefs.edit().putString("last_backup_date", fullTimeStr).apply()
-                _autoBackupStatus.value = "🟢 ড্রাইভে ব্যাকআপ সম্পন্ন ($timeStr)"
+                // 2. Online: Sync to Cloud under isolated account ID and email
+                _autoBackupStatus.value = if (_language.value == "bn") "⏳ ক্লাউড ড্রাইভে ব্যাকআপ হচ্ছে..." else "⏳ Backing up to Cloud..."
+                val res1 = firebaseRealtime.backupShopData(accountId, jsonStr)
+                val userEmail = _shopInfo.value.userEmail.trim().lowercase()
+                val res2 = if (userEmail.isNotBlank() && userEmail != accountId) {
+                    firebaseRealtime.backupShopData(userEmail, jsonStr)
+                } else res1
+
+                if (res1.success || res2.success) {
+                    _hasPendingSync.value = false
+                    prefs.edit().putBoolean("has_pending_cloud_sync", false).apply()
+                    val timeStr = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())
+                    val fullTimeStr = SimpleDateFormat("d MMMM yyyy, h:mm a", Locale.getDefault()).format(Date())
+                    _shopInfo.value = _shopInfo.value.copy(
+                        lastBackupDate = fullTimeStr,
+                        isGoogleLinked = true
+                    )
+                    prefs.edit().putString("last_backup_date", fullTimeStr).apply()
+                    _autoBackupStatus.value = "🟢 ক্লাউডে ব্যাকআপ সম্পন্ন ($timeStr)"
+                } else {
+                    _hasPendingSync.value = true
+                    prefs.edit().putBoolean("has_pending_cloud_sync", true).apply()
+                    _autoBackupStatus.value = if (_language.value == "bn") "🟠 অফলাইন (ইন্টারনেট পেলে ব্যাকআপ হবে)" else "🟠 Offline (Will backup when online)"
+                }
             } catch (e: Exception) {
-                _autoBackupStatus.value = "🟢 ডেটা সংরক্ষিত"
+                _hasPendingSync.value = true
+                prefs.edit().putBoolean("has_pending_cloud_sync", true).apply()
+                _autoBackupStatus.value = if (_language.value == "bn") "🟠 অফলাইন (ইন্টারনেট পেলে ব্যাকআপ হবে)" else "🟠 Offline (Will backup when online)"
             }
         }
     }
@@ -276,13 +363,29 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         checkForUpdates(manualCheck = false)
         viewModelScope.launch {
             repository.deduplicateAndMergeCustomers()
-            // Auto restore previous shop data from Cloud / Drive on startup
+            // Check if local database is empty; only restore if local db is empty!
+            val isDbEmpty = repository.isDatabaseEmpty()
             val savedEmail = prefs.getString("user_email", "") ?: ""
             val emailToUse = if (savedEmail.isNotBlank()) savedEmail else _shopInfo.value.userEmail
-            if (emailToUse.isNotBlank()) {
-                autoRestoreOnLogin(emailToUse)
-            } else {
-                autoRestoreOnLogin(getAccountIdentifier())
+            if (isDbEmpty && emailToUse.isNotBlank()) {
+                autoRestoreOnLogin(emailToUse, forceOverwrite = true)
+            } else if (!isDbEmpty && _hasPendingSync.value) {
+                syncPendingOfflineDataToCloud()
+            }
+        }
+
+        // Real-time network connectivity listener
+        viewModelScope.launch {
+            NetworkMonitor.observeConnectivity(application).collect { online ->
+                _isOnline.value = online
+                if (online) {
+                    // Back online! Auto-sync all offline transactions/entries to Cloud immediately!
+                    if (_hasPendingSync.value || _autoBackupStatus.value?.contains("অফলাইন") == true) {
+                        syncPendingOfflineDataToCloud()
+                    }
+                } else {
+                    _autoBackupStatus.value = if (_language.value == "bn") "🟠 অফলাইন (ইন্টারনেট পেলে ব্যাকআপ হবে)" else "🟠 Offline (Will backup when online)"
+                }
             }
         }
     }
@@ -437,10 +540,20 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * Automatically restore user's previous transaction history, products, dues, expenses,
      * cash logs and shop info immediately upon login from Google Drive / Cloud storage.
+     * If local database already has offline data and not forced, it preserves local data and syncs to cloud!
      */
-    fun autoRestoreOnLogin(accountId: String, onRestored: ((Boolean) -> Unit)? = null) {
+    fun autoRestoreOnLogin(accountId: String, forceOverwrite: Boolean = false, onRestored: ((Boolean) -> Unit)? = null) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
+                // If local database already has items and this is not a forced user action, don't overwrite offline work!
+                val isDbEmpty = repository.isDatabaseEmpty()
+                if (!isDbEmpty && !forceOverwrite) {
+                    syncPendingOfflineDataToCloud { success ->
+                        onRestored?.invoke(success)
+                    }
+                    return@launch
+                }
+
                 _autoBackupStatus.value = "⏳ ক্লাউড থেকে পূর্বের খাতা লোড হচ্ছে..."
                 val cleanAccountId = accountId.trim().lowercase().ifBlank { getAccountIdentifier() }
 
@@ -497,10 +610,10 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                         return@launch
                     }
                 }
-                _autoBackupStatus.value = "🟢 ড্রাইভে অটো ব্যাকআপ সক্রিয়"
+                _autoBackupStatus.value = if (NetworkMonitor.isOnline(getApplication())) "🟢 ড্রাইভে অটো ব্যাকআপ সক্রিয়" else "🟠 অফলাইন (ইন্টারনেট পেলে ব্যাকআপ হবে)"
                 onRestored?.invoke(false)
             } catch (e: Exception) {
-                _autoBackupStatus.value = "🟢 ড্রাইভে ব্যাকআপ সক্রিয়"
+                _autoBackupStatus.value = if (NetworkMonitor.isOnline(getApplication())) "🟢 ড্রাইভে ব্যাকআপ সক্রিয়" else "🟠 অফলাইন (ইন্টারনেট পেলে ব্যাকআপ হবে)"
                 onRestored?.invoke(false)
             }
         }
@@ -1253,16 +1366,23 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     // Cloud & Local Backup
     fun backupToGoogleCloud() {
         viewModelScope.launch {
+            if (!NetworkMonitor.isOnline(getApplication())) {
+                _hasPendingSync.value = true
+                prefs.edit().putBoolean("has_pending_cloud_sync", true).apply()
+                _autoBackupStatus.value = if (_language.value == "bn") "🟠 অফলাইন (ইন্টারনেট পেলে ব্যাকআপ হবে)" else "🟠 Offline (Will backup when online)"
+                syncMessage.value = if (_language.value == "bn") "ইন্টারনেট সংযোগ নেই! ইন্টারনেট চালু হলে স্বয়ংক্রিয়ভাবে ব্যাকআপ হবে।" else "No internet connection! Will auto-backup once online."
+                return@launch
+            }
             isSyncing.value = true
             syncMessage.value = if (_language.value == "bn") "গুগল ড্রাইভে ডাটা ব্যাকআপ হচ্ছে..." else "Backing up data to Google Drive..."
-            kotlinx.coroutines.delay(1200)
-            val timeStr = SimpleDateFormat("h:mm a, d MMM", Locale.getDefault()).format(Date())
-            _shopInfo.value = _shopInfo.value.copy(
-                isGoogleLinked = true,
-                lastBackupDate = timeStr
-            )
-            isSyncing.value = false
-            syncMessage.value = if (_language.value == "bn") "সফলভাবে গুগল ড্রাইভে ব্যাকআপ সম্পন্ন হয়েছে!" else "Backup completed successfully to Google Drive!"
+            syncPendingOfflineDataToCloud { success ->
+                isSyncing.value = false
+                if (success) {
+                    syncMessage.value = if (_language.value == "bn") "সফলভাবে গুগল ড্রাইভে ব্যাকআপ সম্পন্ন হয়েছে!" else "Backup completed successfully to Google Drive!"
+                } else {
+                    syncMessage.value = if (_language.value == "bn") "ব্যাকআপ সম্পন্ন হতে ব্যর্থ হয়েছে" else "Backup failed"
+                }
+            }
         }
     }
 
@@ -1412,9 +1532,18 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
 
     fun exportToGoogleDriveCloud(context: Context, onComplete: (Boolean, String) -> Unit) {
         viewModelScope.launch {
+            if (!NetworkMonitor.isOnline(context)) {
+                _hasPendingSync.value = true
+                prefs.edit().putBoolean("has_pending_cloud_sync", true).apply()
+                _autoBackupStatus.value = if (_language.value == "bn") "🟠 অফলাইন (ইন্টারনেট পেলে ব্যাকআপ হবে)" else "🟠 Offline (Will backup when online)"
+                val errorMsg = if (_language.value == "bn") "ইন্টারনেট সংযোগ নেই! ইন্টারনেট চালু হলে স্বয়ংক্রিয়ভাবে ব্যাকআপ হবে।" else "No internet connection! Will auto-backup once online."
+                syncMessage.value = errorMsg
+                onComplete(false, errorMsg)
+                return@launch
+            }
+
             isSyncing.value = true
             syncMessage.value = if (_language.value == "bn") "গুগল ড্রাইভ অ্যাপ ফোল্ডারে ব্যাকআপ আপলোড হচ্ছে..." else "Uploading backup to Google Drive AppFolder..."
-            kotlinx.coroutines.delay(800) // Smooth cloud handshake feel
 
             val jsonStr = getExportJsonString()
             val accountId = getAccountIdentifier()
@@ -1422,28 +1551,47 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             // Save strictly to isolated cloud store for this user's specific account
             prefs.edit()
                 .putString("cloud_backup_json_${accountId}", jsonStr)
+                .putString("cloud_backup_json_latest", jsonStr)
                 .putLong("cloud_backup_timestamp_${accountId}", System.currentTimeMillis())
                 .apply()
 
-            // Also automatically sync to Firebase Realtime DB under this user's isolated path for extra redundancy
+            var uploadSuccess = false
+            var resMessage = ""
             try {
-                firebaseRealtime.backupShopData(accountId, jsonStr)
+                val res = firebaseRealtime.backupShopData(accountId, jsonStr)
+                val userEmail = _shopInfo.value.userEmail.trim().lowercase()
+                if (userEmail.isNotBlank() && userEmail != accountId) {
+                    firebaseRealtime.backupShopData(userEmail, jsonStr)
+                }
+                uploadSuccess = res.success
+                resMessage = res.message
             } catch (e: Exception) {
-                // non-blocking
+                uploadSuccess = false
+                resMessage = e.localizedMessage ?: "Unknown error"
             }
 
-            val timeFormat = SimpleDateFormat("d MMMM yyyy, h:mm a", Locale.getDefault())
-            val timeStr = timeFormat.format(Date())
-
-            _shopInfo.value = _shopInfo.value.copy(
-                lastBackupDate = timeStr,
-                isGoogleLinked = true
-            )
-            prefs.edit().putString("last_backup_date", timeStr).apply()
-
             isSyncing.value = false
-            syncMessage.value = if (_language.value == "bn") "গুগল ড্রাইভে ব্যাকআপ সফল হয়েছে!" else "Google Drive backup successful!"
-            onComplete(true, timeStr)
+            if (uploadSuccess) {
+                _hasPendingSync.value = false
+                prefs.edit().putBoolean("has_pending_cloud_sync", false).apply()
+                val timeFormat = SimpleDateFormat("d MMMM yyyy, h:mm a", Locale.getDefault())
+                val timeStr = timeFormat.format(Date())
+
+                _shopInfo.value = _shopInfo.value.copy(
+                    lastBackupDate = timeStr,
+                    isGoogleLinked = true
+                )
+                prefs.edit().putString("last_backup_date", timeStr).apply()
+                _autoBackupStatus.value = "🟢 ক্লাউডে ব্যাকআপ সম্পন্ন (${SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())})"
+                syncMessage.value = if (_language.value == "bn") "গুগল ড্রাইভে ব্যাকআপ সফল হয়েছে!" else "Google Drive backup successful!"
+                onComplete(true, timeStr)
+            } else {
+                _hasPendingSync.value = true
+                _autoBackupStatus.value = if (_language.value == "bn") "🟠 ব্যাকআপ ব্যর্থ হয়েছে" else "🟠 Backup failed"
+                val errorMsg = if (_language.value == "bn") "ব্যাকআপ আপলোড ব্যর্থ হয়েছে: $resMessage" else "Backup failed: $resMessage"
+                syncMessage.value = errorMsg
+                onComplete(false, errorMsg)
+            }
         }
     }
 

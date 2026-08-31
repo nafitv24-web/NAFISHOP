@@ -1281,11 +1281,17 @@ fun SettingsScreen(
                 Button(
                     onClick = {
                         showDriveExportConfirmDialog = false
-                        viewModel.exportToGoogleDriveCloud(context) { success, timeStr ->
+                        viewModel.exportToGoogleDriveCloud(context) { success, resultMsg ->
                             if (success) {
                                 Toast.makeText(
                                     context,
-                                    if (language == "bn") "✅ গুগল ড্রাইভে সফলভাবে রপ্তানি হয়েছে! ($timeStr)" else "✅ Successfully exported to Google Drive! ($timeStr)",
+                                    if (language == "bn") "✅ গুগল ড্রাইভে সফলভাবে রপ্তানি হয়েছে! ($resultMsg)" else "✅ Successfully exported to Google Drive! ($resultMsg)",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    resultMsg,
                                     Toast.LENGTH_LONG
                                 ).show()
                             }
