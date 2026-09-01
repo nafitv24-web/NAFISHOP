@@ -1168,11 +1168,14 @@ fun DashboardScreen(
                                                 customerName = tx.customerName.ifBlank { "সম্মানিত ক্রেতা" },
                                                 invoiceNo = tx.invoiceNumber,
                                                 purchasedItemsSummary = "• ${tx.productName} (${tx.quantity.toIntOrNull() ?: tx.quantity} ${tx.unit}) = $currency${tx.totalAmount.toIntOrNull() ?: tx.totalAmount}",
+                                                subTotal = tx.totalAmount,
+                                                discount = 0.0,
                                                 saleTotal = tx.totalAmount,
                                                 paidAmount = tx.paidAmount,
                                                 todayNewDue = tx.dueAmount,
                                                 previousDue = prevDue,
                                                 totalCurrentDue = custTotalDue,
+                                                paymentMethod = tx.paymentMethod,
                                                 currency = currency
                                             )
 

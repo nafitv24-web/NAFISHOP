@@ -352,20 +352,23 @@ fun InvoiceDialog(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    val itemsSummary = invoice.items.joinToString("\n") {
-                                        "• ${it.product.name} (${it.quantity.toIntOrNull() ?: it.quantity} ${it.product.unit}) = $currency${it.total.toIntOrNull() ?: it.total}"
-                                    }
+                                    val itemsSummary = invoice.items.mapIndexed { idx, it ->
+                                        "${idx + 1}. ${it.product.name} (${it.quantity.toIntOrNull() ?: it.quantity} ${it.product.unit} x $currency${it.customPrice.toIntOrNull() ?: it.customPrice}) = $currency${it.total.toIntOrNull() ?: it.total}"
+                                    }.joinToString("\n")
                                     val dueSms = com.example.util.CustomerSmsHelper.buildDueSaleMessage(
                                         shopName = invoice.shopName,
                                         shopPhone = invoice.shopPhone,
                                         customerName = invoice.customerName,
                                         invoiceNo = invoice.invoiceNumber,
                                         purchasedItemsSummary = itemsSummary,
+                                        subTotal = invoice.subTotal,
+                                        discount = invoice.discount,
                                         saleTotal = invoice.grandTotal,
                                         paidAmount = invoice.paidAmount,
                                         todayNewDue = invoice.dueAmount,
                                         previousDue = invoice.previousDue,
                                         totalCurrentDue = invoice.totalCurrentDue,
+                                        paymentMethod = invoice.paymentMethod,
                                         currency = currency
                                     )
 
@@ -452,22 +455,44 @@ fun InvoiceDialog(
                     OutlinedButton(
                         onClick = {
                             val shareBody = buildString {
-                                appendLine("🛒 ${invoice.shopName} - ক্যাশ মেমো")
+                                appendLine("🏪 ${invoice.shopName} - ডিজিটাল ক্যাশ মেমো")
+                                if (invoice.shopPhone.isNotBlank()) {
+                                    appendLine("মোবাইল: ${invoice.shopPhone}")
+                                }
                                 appendLine("মেমো নং: ${invoice.invoiceNumber}")
                                 appendLine("তারিখ: $dateStr")
                                 appendLine("ক্রেতা: ${invoice.customerName}")
-                                appendLine("-----------------------------")
-                                invoice.items.forEach { item ->
-                                    appendLine("${item.product.name} x ${item.quantity.toIntOrNull() ?: item.quantity} = $currency${item.total}")
+                                if (invoice.customerPhone.isNotBlank()) {
+                                    appendLine("মোবাইল: ${invoice.customerPhone}")
                                 }
                                 appendLine("-----------------------------")
-                                appendLine("সর্বমোট: $currency${invoice.grandTotal}")
-                                appendLine("পরিশোধ: $currency${invoice.paidAmount}")
-                                if (invoice.dueAmount > 0) {
-                                    appendLine("বাকি: $currency${invoice.dueAmount}")
+                                appendLine("🛍️ পণ্যের বিবরণ:")
+                                invoice.items.forEachIndexed { index, item ->
+                                    appendLine("${index + 1}. ${item.product.name} (${item.quantity.toIntOrNull() ?: item.quantity} ${item.product.unit} x $currency${item.customPrice.toIntOrNull() ?: item.customPrice}) = $currency${item.total.toIntOrNull() ?: item.total}")
                                 }
-                                appendLine("পেমেন্ট মাধ্যম: ${invoice.paymentMethod}")
-                                appendLine("ধন্যবাদ!")
+                                appendLine("-----------------------------")
+                                if (invoice.discount > 0) {
+                                    appendLine("মোট মূল্য (Subtotal): $currency${invoice.subTotal.toIntOrNull() ?: invoice.subTotal}")
+                                    appendLine("ডিসকাউন্ট / ছাড়: - $currency${invoice.discount.toIntOrNull() ?: invoice.discount}")
+                                }
+                                appendLine("সর্বমোট প্রদেয়: $currency${invoice.grandTotal.toIntOrNull() ?: invoice.grandTotal}")
+                                appendLine("জমা / পরিশোধিত: $currency${invoice.paidAmount.toIntOrNull() ?: invoice.paidAmount}")
+                                if (invoice.dueAmount > 0 || invoice.totalCurrentDue > 0) {
+                                    appendLine("আজকের নতুন বাকি: $currency${invoice.dueAmount.toIntOrNull() ?: invoice.dueAmount}")
+                                    if (invoice.previousDue > 0) {
+                                        appendLine("পূর্বের বাকি ছিল: $currency${invoice.previousDue.toIntOrNull() ?: invoice.previousDue}")
+                                    }
+                                    appendLine("সর্বমোট বর্তমান বকেয়া: $currency${invoice.totalCurrentDue.toIntOrNull() ?: invoice.totalCurrentDue}")
+                                }
+                                val pmStr = when(invoice.paymentMethod) {
+                                    "BKASH" -> "bKash (বিকাশ)"
+                                    "NAGAD" -> "Nagad (নগদ)"
+                                    "DUE" -> "বাকি (Credit)"
+                                    else -> "নগদ ক্যাশ (Cash)"
+                                }
+                                appendLine("পেমেন্ট মাধ্যম: $pmStr")
+                                appendLine("-----------------------------")
+                                appendLine("ধন্যবাদ! আবার আসবেন।")
                                 appendLine("-----------------------------")
                                 appendLine(com.example.util.CustomerSmsHelper.SPONSOR_FOOTER)
                             }

@@ -14,13 +14,17 @@ object CustomerSmsHelper {
 
     /**
      * Builds the complete customer message containing:
-     * - Shop Name & Header
+     * - Shop Name & Phone
      * - Customer Name
-     * - Purchased Products breakdown with quantities & prices
-     * - Sale Total & Cash Paid
-     * - Today's New Due amount
-     * - Previous Due (পূর্বের বাকি)
-     * - Total Outstanding Due (সর্বমোট বর্তমান বকেয়া = পূর্বের বাকি + আজকের বাকি)
+     * - Memo Number
+     * - Purchased Products breakdown with quantities, rates & totals
+     * - Subtotal & Discount (if any)
+     * - Sale Total (সর্বমোট প্রদেয়)
+     * - Paid Amount (জমা / পরিশোধিত)
+     * - Today's New Due (আজকের নতুন বাকি)
+     * - Previous Due (পূর্বের বাকি ছিল)
+     * - Total Current Due (সর্বমোট বর্তমান বকেয়া)
+     * - Payment Method (পেমেন্ট মাধ্যম)
      * - Sponsor Footer with link
      */
     fun buildDueSaleMessage(
@@ -29,37 +33,57 @@ object CustomerSmsHelper {
         customerName: String,
         invoiceNo: String?,
         purchasedItemsSummary: String,
+        subTotal: Double = 0.0,
+        discount: Double = 0.0,
         saleTotal: Double,
         paidAmount: Double,
         todayNewDue: Double,
         previousDue: Double,
         totalCurrentDue: Double,
+        paymentMethod: String = "বাকি (Credit)",
         currency: String = "৳"
     ): String {
         return buildString {
             appendLine("🏪 $shopName")
-            appendLine("প্রিয় $customerName,")
-            if (purchasedItemsSummary.isNotBlank()) {
-                appendLine("🛍️ আজকের ক্রয়কৃত পণ্য:")
-                appendLine(purchasedItemsSummary)
+            if (shopPhone.isNotBlank()) {
+                appendLine("মোবাইল: $shopPhone")
             }
+            appendLine("-------------------------")
+            appendLine("প্রিয় $customerName,")
             if (!invoiceNo.isNullOrBlank()) {
                 appendLine("মেমো নং: $invoiceNo")
             }
-            appendLine("মোট বিল: $currency${saleTotal.toIntOrNull() ?: saleTotal}")
-            if (paidAmount > 0) {
-                appendLine("নগদ পরিশোধ: $currency${paidAmount.toIntOrNull() ?: paidAmount}")
+            if (purchasedItemsSummary.isNotBlank()) {
+                appendLine("🛍️ পণ্যের বিবরণ:")
+                appendLine(purchasedItemsSummary)
+                appendLine("-------------------------")
             }
-            if (todayNewDue > 0) {
+            if (discount > 0 && subTotal > 0) {
+                appendLine("মোট মূল্য (Subtotal): $currency${subTotal.toIntOrNull() ?: subTotal}")
+                appendLine("ডিসকাউন্ট / ছাড়: - $currency${discount.toIntOrNull() ?: discount}")
+            }
+            appendLine("সর্বমোট প্রদেয়: $currency${saleTotal.toIntOrNull() ?: saleTotal}")
+            appendLine("জমা / পরিশোধিত: $currency${paidAmount.toIntOrNull() ?: paidAmount}")
+            if (todayNewDue > 0 || totalCurrentDue > 0) {
                 appendLine("আজকের নতুন বাকি: $currency${todayNewDue.toIntOrNull() ?: todayNewDue}")
+                if (previousDue > 0) {
+                    appendLine("পূর্বের বাকি ছিল: $currency${previousDue.toIntOrNull() ?: previousDue}")
+                }
+                appendLine("সর্বমোট বর্তমান বকেয়া: $currency${totalCurrentDue.toIntOrNull() ?: totalCurrentDue}")
             }
+            val pmStr = when (paymentMethod) {
+                "DUE" -> "বাকি (Credit)"
+                "BKASH" -> "bKash (বিকাশ)"
+                "NAGAD" -> "Nagad (নগদ)"
+                "CASH" -> "নগদ ক্যাশ (Cash)"
+                else -> paymentMethod
+            }
+            appendLine("পেমেন্ট মাধ্যম: $pmStr")
             appendLine("-------------------------")
-            appendLine("পূর্বের বাকি ছিল: $currency${previousDue.toIntOrNull() ?: previousDue}")
-            appendLine("সর্বমোট বর্তমান বকেয়া: $currency${totalCurrentDue.toIntOrNull() ?: totalCurrentDue}")
-            appendLine("-------------------------")
-            appendLine("অনুগ্রহ করে সময়মতো পরিশোধ করুন। ধন্যবাদ!")
-            if (shopPhone.isNotBlank()) {
-                appendLine("দোকান যোগাযোগ: $shopPhone")
+            if (todayNewDue > 0 || totalCurrentDue > 0) {
+                appendLine("অনুগ্রহ করে সুবিধামতো পরিশোধ করুন। ধন্যবাদ!")
+            } else {
+                appendLine("ধন্যবাদ! আবার আসবেন।")
             }
             appendLine("-------------------------")
             appendLine(SPONSOR_FOOTER)

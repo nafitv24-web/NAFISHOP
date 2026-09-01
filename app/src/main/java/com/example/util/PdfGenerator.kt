@@ -161,11 +161,32 @@ object PdfGenerator {
         }
         canvas.drawRoundRect(RectF(35f, y - 14f, 560f, y + 12f), 4f, 4f, tableHeaderPaint)
 
-        canvas.drawText("SL", 45f, y, boldPaint)
-        canvas.drawText("Item / Description", 80f, y, boldPaint)
-        canvas.drawText("Qty", 320f, y, boldPaint)
-        canvas.drawText("Rate ($currency)", 400f, y, boldPaint)
-        canvas.drawText("Total ($currency)", 480f, y, boldPaint)
+        val rightBoldHeader = Paint().apply {
+            isAntiAlias = true
+            textSize = 10.5f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(15, 23, 42)
+            textAlign = Paint.Align.RIGHT
+        }
+        val rightTextPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 10.5f
+            color = Color.rgb(30, 41, 59)
+            textAlign = Paint.Align.RIGHT
+        }
+        val rightBoldPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 11f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(15, 23, 42)
+            textAlign = Paint.Align.RIGHT
+        }
+
+        canvas.drawText("নং", 45f, y, boldPaint)
+        canvas.drawText("পণ্যের বিবরণ (Item)", 75f, y, boldPaint)
+        canvas.drawText("পরিমাণ (Qty)", 300f, y, boldPaint)
+        canvas.drawText("দর (Rate)", 400f, y, boldPaint)
+        canvas.drawText("মোট (Total)", 555f, y, rightBoldHeader)
         y += 22f
 
         // Items List
@@ -175,11 +196,11 @@ object PdfGenerator {
                 canvas.drawRect(RectF(35f, y - 12f, 560f, y + 8f), rowBgAlt)
             }
             canvas.drawText("${index + 1}", 45f, y, textPaint)
-            val prodTitle = if (item.product.name.length > 30) item.product.name.take(28) + ".." else item.product.name
-            canvas.drawText(prodTitle, 80f, y, textPaint)
-            canvas.drawText("${item.quantity.toIntOrNull() ?: item.quantity} ${item.product.unit}", 320f, y, textPaint)
-            canvas.drawText("${item.customPrice.toIntOrNull() ?: item.customPrice}", 400f, y, textPaint)
-            canvas.drawText("${item.total.toIntOrNull() ?: item.total}", 480f, y, boldPaint)
+            val prodTitle = if (item.product.name.length > 32) item.product.name.take(30) + ".." else item.product.name
+            canvas.drawText(prodTitle, 75f, y, textPaint)
+            canvas.drawText("${item.quantity.toIntOrNull() ?: item.quantity} ${item.product.unit}", 300f, y, textPaint)
+            canvas.drawText("$currency${item.customPrice.toIntOrNull() ?: item.customPrice}", 400f, y, textPaint)
+            canvas.drawText("$currency${item.total.toIntOrNull() ?: item.total}", 555f, y, rightBoldPaint)
 
             y += 20f
         }
@@ -188,40 +209,107 @@ object PdfGenerator {
         canvas.drawLine(35f, y, 560f, y, linePaint)
         y += 18f
 
-        // Financial Summary on Right Side
-        val summaryX = 350f
-        canvas.drawText("Sub Total:", summaryX, y, textPaint)
-        canvas.drawText("$currency${invoice.subTotal.toIntOrNull() ?: invoice.subTotal}", 480f, y, textPaint)
+        // Financial Summary on Right Side (Subtotal, Discount, Grand Total, Paid, Today Due, Prev Due, Total Due)
+        val summaryX = 290f
+        val valX = 555f
+
+        val greenRightPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 10.5f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(4, 120, 87)
+            textAlign = Paint.Align.RIGHT
+        }
+        val dueOrangeRightPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 11f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(234, 88, 12)
+            textAlign = Paint.Align.RIGHT
+        }
+        val totalDueRedRightPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 12f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(220, 38, 38)
+            textAlign = Paint.Align.RIGHT
+        }
+
+        // Sub Total
+        canvas.drawText("মোট মূল্য (Subtotal):", summaryX, y, textPaint)
+        canvas.drawText("$currency${invoice.subTotal.toIntOrNull() ?: invoice.subTotal}", valX, y, rightTextPaint)
         y += 16f
 
         if (invoice.discount > 0) {
-            canvas.drawText("Discount:", summaryX, y, textPaint)
-            canvas.drawText("- $currency${invoice.discount.toIntOrNull() ?: invoice.discount}", 480f, y, textPaint)
+            canvas.drawText("ডিসকাউন্ট / ছাড় (Discount):", summaryX, y, textPaint)
+            canvas.drawText("- $currency${invoice.discount.toIntOrNull() ?: invoice.discount}", valX, y, greenRightPaint)
             y += 16f
         }
 
-        canvas.drawText("Grand Total:", summaryX, y, boldPaint)
-        canvas.drawText("$currency${invoice.grandTotal.toIntOrNull() ?: invoice.grandTotal}", 480f, y, boldPaint)
+        canvas.drawText("সর্বমোট প্রদেয় (Grand Total):", summaryX, y, boldPaint)
+        canvas.drawText("$currency${invoice.grandTotal.toIntOrNull() ?: invoice.grandTotal}", valX, y, rightBoldPaint)
         y += 16f
 
-        canvas.drawText("Paid Amount:", summaryX, y, textPaint)
-        canvas.drawText("$currency${invoice.paidAmount.toIntOrNull() ?: invoice.paidAmount}", 480f, y, textPaint)
+        canvas.drawText("জমা / পরিশোধিত (Paid):", summaryX, y, textPaint)
+        canvas.drawText("$currency${invoice.paidAmount.toIntOrNull() ?: invoice.paidAmount}", valX, y, greenRightPaint)
         y += 16f
 
-        if (invoice.dueAmount > 0) {
-            val duePaint = Paint().apply {
+        if (invoice.dueAmount > 0 || invoice.totalCurrentDue > 0) {
+            val dueOrangeLabel = Paint().apply {
                 isAntiAlias = true
-                textSize = 12f
+                textSize = 11f
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                 color = Color.rgb(234, 88, 12)
             }
-            canvas.drawText("Due Balance:", summaryX, y, duePaint)
-            canvas.drawText("$currency${invoice.dueAmount.toIntOrNull() ?: invoice.dueAmount}", 480f, y, duePaint)
+            canvas.drawText("আজকের নতুন বাকি (Today's Due):", summaryX, y, dueOrangeLabel)
+            canvas.drawText("$currency${invoice.dueAmount.toIntOrNull() ?: invoice.dueAmount}", valX, y, dueOrangeRightPaint)
             y += 16f
+
+            if (invoice.previousDue > 0) {
+                val prevDueLabel = Paint().apply {
+                    isAntiAlias = true
+                    textSize = 10.5f
+                    color = Color.rgb(100, 116, 139)
+                }
+                canvas.drawText("পূর্বের বাকি ছিল (Previous Due):", summaryX, y, prevDueLabel)
+                canvas.drawText("$currency${invoice.previousDue.toIntOrNull() ?: invoice.previousDue}", valX, y, rightTextPaint)
+                y += 16f
+            }
+
+            // Total Due Box / Highlight
+            val totalDueBg = Paint().apply {
+                color = Color.rgb(254, 242, 242)
+                style = Paint.Style.FILL
+            }
+            val totalDueBorder = Paint().apply {
+                color = Color.rgb(254, 202, 202)
+                style = Paint.Style.STROKE
+                strokeWidth = 1f
+            }
+            canvas.drawRoundRect(RectF(summaryX - 6f, y - 13f, valX + 6f, y + 6f), 4f, 4f, totalDueBg)
+            canvas.drawRoundRect(RectF(summaryX - 6f, y - 13f, valX + 6f, y + 6f), 4f, 4f, totalDueBorder)
+
+            val totalDueRedLabel = Paint().apply {
+                isAntiAlias = true
+                textSize = 11.5f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                color = Color.rgb(220, 38, 38)
+            }
+            canvas.drawText("সর্বমোট বর্তমান বকেয়া (Total Due):", summaryX, y, totalDueRedLabel)
+            canvas.drawText("$currency${invoice.totalCurrentDue.toIntOrNull() ?: invoice.totalCurrentDue}", valX, y, totalDueRedRightPaint)
+            y += 20f
         }
 
-        canvas.drawText("Payment Mode: ${invoice.paymentMethod}", summaryX, y, textPaint)
-        y += 40f
+        val pmDisplay = when (invoice.paymentMethod) {
+            "DUE" -> "বাকি (Credit)"
+            "BKASH" -> "bKash (বিকাশ)"
+            "NAGAD" -> "Nagad (নগদ)"
+            "CASH" -> "নগদ ক্যাশ (Cash)"
+            else -> invoice.paymentMethod
+        }
+        canvas.drawText("পেমেন্ট মাধ্যম (Payment Mode):", summaryX, y, textPaint)
+        canvas.drawText(pmDisplay, valX, y, rightBoldPaint)
+        y += 35f
 
         // Thank you footer & signature
         canvas.drawLine(35f, y + 40f, 150f, y + 40f, linePaint)
