@@ -41,18 +41,39 @@ class ShopRepository(private val database: AppDatabase) {
         (prodCount == 0 && txCount == 0 && custCount == 0 && dueCount == 0)
     }
 
-    suspend fun saveProduct(product: Product) = withContext(Dispatchers.IO) {
+    suspend fun saveProduct(product: Product): Double = withContext(Dispatchers.IO) {
         val sanitized = product.copy(
             buyPrice = round2(product.buyPrice),
             sellPrice = round2(product.sellPrice),
             stockQuantity = round2(product.stockQuantity),
             minStockAlert = round2(product.minStockAlert)
         )
+        var initialStockCost = 0.0
         if (sanitized.id == 0L) {
-            productDao.insertProduct(sanitized)
+            val insertedId = productDao.insertProduct(sanitized)
+            if (sanitized.stockQuantity > 0 && sanitized.buyPrice > 0) {
+                initialStockCost = round2(sanitized.stockQuantity * sanitized.buyPrice)
+                val tx = TransactionRecord(
+                    type = "STOCK_IN",
+                    invoiceNumber = "STK-${System.currentTimeMillis() % 100000}",
+                    productId = insertedId,
+                    productName = sanitized.name,
+                    quantity = sanitized.stockQuantity,
+                    unit = sanitized.unit,
+                    unitPrice = sanitized.buyPrice,
+                    costPrice = sanitized.buyPrice,
+                    totalAmount = initialStockCost,
+                    profitAmount = 0.0,
+                    paymentMethod = "CASH",
+                    note = "প্রারম্ভিক স্টক ক্রয়",
+                    timestamp = System.currentTimeMillis()
+                )
+                transactionDao.insertTransaction(tx)
+            }
         } else {
             productDao.updateProduct(sanitized)
         }
+        initialStockCost
     }
 
     suspend fun deleteProduct(product: Product) = withContext(Dispatchers.IO) {
@@ -65,8 +86,8 @@ class ShopRepository(private val database: AppDatabase) {
         buyPrice: Double?,
         sellPrice: Double?,
         note: String = "স্টক ইন"
-    ) = withContext(Dispatchers.IO) {
-        val existing = productDao.getProductById(productId) ?: return@withContext
+    ): Double = withContext(Dispatchers.IO) {
+        val existing = productDao.getProductById(productId) ?: return@withContext 0.0
         val updatedBuy = round2(buyPrice ?: existing.buyPrice)
         val updatedSell = round2(sellPrice ?: existing.sellPrice)
         val cleanQty = round2(quantity)
@@ -77,6 +98,7 @@ class ShopRepository(private val database: AppDatabase) {
         )
         productDao.updateProduct(updatedProduct)
 
+        val totalCost = round2(cleanQty * updatedBuy)
         val tx = TransactionRecord(
             type = "STOCK_IN",
             invoiceNumber = "STK-${System.currentTimeMillis() % 100000}",
@@ -86,13 +108,14 @@ class ShopRepository(private val database: AppDatabase) {
             unit = existing.unit,
             unitPrice = updatedBuy,
             costPrice = updatedBuy,
-            totalAmount = round2(cleanQty * updatedBuy),
+            totalAmount = totalCost,
             profitAmount = 0.0,
             paymentMethod = "CASH",
             note = note,
             timestamp = System.currentTimeMillis()
         )
         transactionDao.insertTransaction(tx)
+        totalCost
     }
 
     suspend fun recordStockOutManual(

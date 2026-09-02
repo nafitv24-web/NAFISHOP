@@ -956,7 +956,10 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             addCustomCategory(cat)
         }
         viewModelScope.launch {
-            repository.saveProduct(product)
+            val initialStockCost = repository.saveProduct(product)
+            if (initialStockCost > 0) {
+                withdrawCashFromMainBalance(initialStockCost, "পণ্য ক্রয়: ${product.name}")
+            }
             triggerInstantDriveBackup("পণ্য সংরক্ষণ")
         }
     }
@@ -970,7 +973,11 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
 
     fun stockIn(productId: Long, quantity: Double, buyPrice: Double?, sellPrice: Double?, note: String) {
         viewModelScope.launch {
-            repository.recordStockIn(productId, quantity, buyPrice, sellPrice, note)
+            val totalCost = repository.recordStockIn(productId, quantity, buyPrice, sellPrice, note)
+            if (totalCost > 0) {
+                val label = note.ifBlank { "পণ্য স্টক ইন" }
+                withdrawCashFromMainBalance(totalCost, "পণ্য ক্রয়: $label")
+            }
             triggerInstantDriveBackup("স্টক ইন")
         }
     }
@@ -1125,8 +1132,11 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     fun collectCustomerDue(customer: Customer, amountPaid: Double, note: String) {
         viewModelScope.launch {
             val cleanPaid = round2(amountPaid)
-            repository.collectCustomerDuePayment(customer, cleanPaid, note)
-            triggerInstantDriveBackup("বাকি আদায় (${customer.name})")
+            if (cleanPaid > 0) {
+                repository.collectCustomerDuePayment(customer, cleanPaid, note)
+                addCashToMainBalance(cleanPaid, "বাকি আদায়: ${customer.name}")
+                triggerInstantDriveBackup("বাকি আদায় (${customer.name})")
+            }
         }
     }
 
@@ -1195,6 +1205,9 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteSaleAndRestock(tx: TransactionRecord) {
         viewModelScope.launch {
+            if (tx.paidAmount > 0) {
+                withdrawCashFromMainBalance(tx.paidAmount, "বিক্রি বাতিল/টাকা ফেরত: ${tx.productName}")
+            }
             repository.deleteTransaction(tx)
             triggerInstantDriveBackup("ট্রানজেকশন বাতিল ও রিস্টক")
         }
@@ -1209,6 +1222,11 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteTransaction(tx: TransactionRecord) {
         viewModelScope.launch {
+            if ((tx.type == "STOCK_IN" || tx.type == "PURCHASE") && tx.totalAmount > 0) {
+                addCashToMainBalance(tx.totalAmount, "পণ্য ক্রয় বাতিল/ক্যাশ ফেরত: ${tx.productName}")
+            } else if (tx.type == "SALE" && tx.paidAmount > 0) {
+                withdrawCashFromMainBalance(tx.paidAmount, "বিক্রি বাতিল/টাকা ফেরত: ${tx.productName}")
+            }
             repository.deleteTransaction(tx)
             triggerInstantDriveBackup("ট্রানজেকশন মুছে ফেলা")
         }
