@@ -792,7 +792,7 @@ fun CashBookScreen(
                                     ) {
                                         val bal = item.runningBalance
                                         Text(
-                                            text = "${if (bal < 0) "-" else ""}$currency${Math.abs(bal).toIntOrNull() ?: Math.abs(bal)}",
+                                            text = CalculationHelper.formatCurrency(bal, currency),
                                             style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = FontWeight.Bold,
                                             color = if (bal < 0) LossRed else DueOrange
@@ -932,7 +932,7 @@ fun CashBookScreen(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "$currency${netBalance.toIntOrNull() ?: netBalance} ক্যাশ",
+                                text = "${CalculationHelper.formatCurrency(netBalance, currency)} ${if (language == "bn") "ক্যাশ" else "Cash"}",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = if (netBalance >= 0) Color(0xFF4ADE80) else Color(0xFFF87171)

@@ -46,6 +46,7 @@ import com.example.ui.components.NafiShopSmallLogo
 import com.example.ui.components.toIntOrNull
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.ShopViewModel
+import com.example.util.CalculationHelper
 import com.example.util.PdfGenerator
 import java.text.SimpleDateFormat
 import java.util.*
@@ -439,14 +440,14 @@ fun DashboardScreen(
                                         Surface(
                                             onClick = { showCashHistoryDialog = true },
                                             shape = RoundedCornerShape(6.dp),
-                                            color = Color(0xFF0F5147).copy(alpha = 0.12f)
+                                            color = if (mainBalance < 0) Color(0xFFFEE2E2) else Color(0xFF0F5147).copy(alpha = 0.12f)
                                         ) {
                                             Text(
-                                                text = "${if (language == "bn") "হাতে নগদ:" else "Cash:"} $currency${mainBalance.toIntOrNull() ?: mainBalance}",
+                                                text = "${if (language == "bn") "হাতে নগদ:" else "Cash:"} ${CalculationHelper.formatCurrency(mainBalance, currency)}",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 fontSize = 11.sp,
                                                 fontWeight = FontWeight.Bold,
-                                                color = Color(0xFF0F5147),
+                                                color = if (mainBalance < 0) Color(0xFFDC2626) else Color(0xFF0F5147),
                                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                             )
                                         }
@@ -790,10 +791,10 @@ fun DashboardScreen(
                                         fontSize = 11.sp
                                     )
                                     Text(
-                                        text = "$currency${mainBalance.toIntOrNull() ?: String.format(Locale.US, "%.2f", mainBalance)}",
+                                        text = CalculationHelper.formatCurrency(mainBalance, currency),
                                         style = MaterialTheme.typography.titleLarge,
                                         fontWeight = FontWeight.ExtraBold,
-                                        color = Color(0xFF047857)
+                                        color = if (mainBalance < 0) Color(0xFFDC2626) else Color(0xFF047857)
                                     )
                                 }
 
@@ -2089,7 +2090,7 @@ fun EditMainCashBalanceDialog(
     val resultingBalance = remember(mode, enteredAmount, currentBalance) {
         when (mode) {
             "ADD" -> currentBalance + enteredAmount
-            "SUBTRACT" -> (currentBalance - enteredAmount).coerceAtLeast(0.0)
+            "SUBTRACT" -> currentBalance - enteredAmount
             else -> enteredAmount
         }
     }
@@ -2241,10 +2242,10 @@ fun EditMainCashBalanceDialog(
                             fontWeight = FontWeight.Medium
                         )
                         Text(
-                            text = "$currency${resultingBalance.toIntOrNull() ?: resultingBalance}",
+                            text = CalculationHelper.formatCurrency(resultingBalance, currency),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
-                            color = EmeraldPrimary
+                            color = if (resultingBalance < 0) Color(0xFFDC2626) else EmeraldPrimary
                         )
                     }
                 }
@@ -3593,7 +3594,7 @@ fun BusinessSummaryDetailDialog(
                         ) {
                             Column {
                                 Text(if (language == "bn") "দোকানের মূল ক্যাশ (হাতে নগদ)" else "Cash in Hand", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = Color(0xFF166534))
-                                Text(text = "$currency${mainBalance.toIntOrNull() ?: mainBalance}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold, color = EmeraldPrimary)
+                                Text(text = CalculationHelper.formatCurrency(mainBalance, currency), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold, color = if (mainBalance < 0) Color(0xFFDC2626) else EmeraldPrimary)
                             }
                             Button(onClick = onOpenCashBook, shape = RoundedCornerShape(8.dp), colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)) {
                                 Text(if (language == "bn") "ক্যাশ খাতা" else "Cash Book", fontSize = 11.sp)

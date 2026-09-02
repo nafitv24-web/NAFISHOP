@@ -46,10 +46,24 @@ object CalculationHelper {
 
     fun formatAmount(amount: Double): String {
         val rounded = round2(amount)
-        return if (rounded % 1.0 == 0.0) {
-            String.format(java.util.Locale.US, "%.0f", rounded)
+        val absVal = Math.abs(rounded)
+        val formatted = if (absVal % 1.0 == 0.0) {
+            String.format(java.util.Locale.US, "%.0f", absVal)
         } else {
-            String.format(java.util.Locale.US, "%.2f", rounded)
+            String.format(java.util.Locale.US, "%.2f", absVal)
         }
+        return if (rounded < 0.0) "-$formatted" else formatted
+    }
+
+    fun formatCurrency(amount: Double, currency: String): String {
+        val rounded = round2(amount)
+        val isNegative = rounded < 0.0
+        val absVal = Math.abs(rounded)
+        val formatted = if (absVal % 1.0 == 0.0) {
+            String.format(java.util.Locale.US, "%.0f", absVal)
+        } else {
+            String.format(java.util.Locale.US, "%.2f", absVal)
+        }
+        return if (isNegative) "-$currency$formatted" else "$currency$formatted"
     }
 }

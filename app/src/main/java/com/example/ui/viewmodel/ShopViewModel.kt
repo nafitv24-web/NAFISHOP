@@ -916,7 +916,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     fun withdrawCashFromMainBalance(amount: Double, reason: String = "ক্যাশ উত্তোলন", timestamp: Long = System.currentTimeMillis()) {
         if (amount <= 0) return
         val cleanAmount = round2(amount)
-        val newBal = round2((_shopInfo.value.mainBalance - cleanAmount).coerceAtLeast(0.0))
+        val newBal = round2(_shopInfo.value.mainBalance - cleanAmount)
         _shopInfo.value = _shopInfo.value.copy(mainBalance = newBal)
         prefs.edit().putFloat("main_balance", newBal.toFloat()).apply()
         viewModelScope.launch {
@@ -928,7 +928,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     fun addCashExpense(amount: Double, reason: String = "ক্যাশ খরচ", category: String = "অন্যান্য", timestamp: Long = System.currentTimeMillis()) {
         if (amount <= 0) return
         val cleanAmount = round2(amount)
-        val newBal = round2((_shopInfo.value.mainBalance - cleanAmount).coerceAtLeast(0.0))
+        val newBal = round2(_shopInfo.value.mainBalance - cleanAmount)
         _shopInfo.value = _shopInfo.value.copy(mainBalance = newBal)
         prefs.edit().putFloat("main_balance", newBal.toFloat()).apply()
         viewModelScope.launch {
@@ -1226,8 +1226,8 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             // Adjust current main balance based on entry type
             val curBal = _shopInfo.value.mainBalance
             val newBal = when (oldLog.type) {
-                "DEPOSIT", "INCOME", "DAY_END_CLOSING" -> round2((curBal + diff).coerceAtLeast(0.0))
-                "WITHDRAWAL", "EXPENSE" -> round2((curBal - diff).coerceAtLeast(0.0))
+                "DEPOSIT", "INCOME", "DAY_END_CLOSING" -> round2(curBal + diff)
+                "WITHDRAWAL", "EXPENSE" -> round2(curBal - diff)
                 "MANUAL_ADJUST" -> cleanNewAmount
                 else -> curBal
             }
@@ -1248,7 +1248,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             // Revert balance impact upon deletion
             val curBal = _shopInfo.value.mainBalance
             val newBal = when (cashLog.type) {
-                "DEPOSIT", "INCOME", "DAY_END_CLOSING" -> round2((curBal - cashLog.amount).coerceAtLeast(0.0))
+                "DEPOSIT", "INCOME", "DAY_END_CLOSING" -> round2(curBal - cashLog.amount)
                 "WITHDRAWAL", "EXPENSE" -> round2(curBal + cashLog.amount)
                 else -> curBal
             }

@@ -143,14 +143,12 @@ object CustomerSmsHelper {
                 Intent(Intent.ACTION_SENDTO).apply {
                     data = Uri.parse("smsto:$cleanPhone")
                     putExtra("sms_body", message)
-                    putExtra(Intent.EXTRA_TEXT, message)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
             } else {
                 Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
                     putExtra(Intent.EXTRA_TEXT, message)
-                    putExtra("sms_body", message)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
             }
