@@ -889,10 +889,19 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     // Main Balance Management
     fun updateMainBalance(newBalance: Double, note: String = "ব্যালেন্স পরিবর্তন") {
         val cleanBalance = round2(newBalance)
+        val curBal = _shopInfo.value.mainBalance
+        val diff = round2(cleanBalance - curBal)
+        if (Math.abs(diff) < 0.001) return
+
         _shopInfo.value = _shopInfo.value.copy(mainBalance = cleanBalance)
         prefs.edit().putFloat("main_balance", cleanBalance.toFloat()).apply()
         viewModelScope.launch {
-            repository.recordCashLog("MANUAL_ADJUST", cleanBalance, cleanBalance, note)
+            val label = if (note.isNotBlank() && note != "ব্যালেন্স পরিবর্তন" && note != "MANUAL_ADJUST") {
+                note
+            } else {
+                if (diff >= 0) "ক্যাশ সমন্বয় (বৃদ্ধি): +${diff} টাকা" else "ক্যাশ সমন্বয় (ঘাটতি): -${Math.abs(diff)} টাকা"
+            }
+            repository.recordCashLog("MANUAL_ADJUST", diff, cleanBalance, label)
             triggerInstantDriveBackup("ব্যালেন্স আপডেট")
         }
     }

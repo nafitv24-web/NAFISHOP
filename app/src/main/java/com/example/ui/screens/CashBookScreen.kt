@@ -70,6 +70,7 @@ fun CashBookScreen(
     var editingCashLog by remember { mutableStateOf<CashLog?>(null) }
     var deletingCashLog by remember { mutableStateOf<CashLog?>(null) }
     var viewingEntryDetails by remember { mutableStateOf<MasterCashEntry?>(null) }
+    var showAdjustBalanceDialog by remember { mutableStateOf(false) }
 
     val now = remember { System.currentTimeMillis() }
     val calendar = remember { Calendar.getInstance() }
@@ -231,8 +232,19 @@ fun CashBookScreen(
             val isAutoDayEndDuplicate = noteLower.startsWith("দিনশেষের বিক্রি")
             val isAutoSaleDuplicate = noteLower.startsWith("বিক্রি বাতিল") || noteLower.startsWith("ট্রানজেকশন")
 
-            if (!isAutoExpenseDuplicate && !isAutoDueDuplicate && !isAutoPurchaseDuplicate && !isAutoDayEndDuplicate && !isAutoSaleDuplicate) {
-                val isAdd = log.type in listOf("DEPOSIT", "INCOME", "DAY_END_CLOSING") || (log.type == "MANUAL_ADJUST" && log.amount >= 0)
+            if (!isAutoExpenseDuplicate && !isAutoDueDuplicate && !isAutoPurchaseDuplicate && !isAutoSaleDuplicate) {
+                val isAdd = when (log.type) {
+                    "DEPOSIT", "INCOME", "DAY_END_CLOSING" -> true
+                    "WITHDRAWAL", "EXPENSE" -> false
+                    "MANUAL_ADJUST" -> {
+                        if (log.note.contains("ঘাটতি") || log.note.contains("কমানো") || log.amount < 0) {
+                            false
+                        } else {
+                            true
+                        }
+                    }
+                    else -> log.amount >= 0
+                }
                 val typeLabel = when (log.type) {
                     "DEPOSIT" -> if (language == "bn") "ক্যাশ জমা" else "Cash Deposit"
                     "WITHDRAWAL" -> if (language == "bn") "ক্যাশ উত্তোলন" else "Cash Withdrawal"
@@ -259,18 +271,26 @@ fun CashBookScreen(
             }
         }
 
-        // F. Opening / Initial Cash in Hand (only if ledger is otherwise empty and balance is set)
-        if (list.isEmpty() && Math.abs(shopInfo.mainBalance) > 0.01) {
+        // F. Opening Capital / Cash In Hand Baseline Reconciliation
+        // Calculate the net cash movement from all recorded transactions so far
+        val transactionsNetSum = list.sumOf { if (it.isAddition) it.amount else -it.amount }
+        // The baseline difference between the shop's true cash in hand and the recorded transactions:
+        val baselineDiff = CalculationHelper.round2(shopInfo.mainBalance - transactionsNetSum)
+
+        // If there is an opening cash balance, initial capital, or historical baseline difference,
+        // include it as the foundational opening cash entry at the start of the ledger:
+        if (Math.abs(baselineDiff) > 0.001) {
+            val earliestTimestamp = list.minOfOrNull { it.timestamp } ?: (System.currentTimeMillis() - 86400000L)
             list.add(
                 MasterCashEntry(
                     id = "OPENING_BALANCE",
                     source = "INITIAL_BALANCE",
-                    timestamp = System.currentTimeMillis() - 86400000L,
+                    timestamp = earliestTimestamp - 60000L, // 1 minute before the first transaction
                     title = if (language == "bn") "প্রারম্ভিক ক্যাশ তহবিল (হাতে নগদ)" else "Opening Cash Balance",
-                    note = if (language == "bn") "দোকানের নগদ ক্যাশ ব্যালেন্স" else "Initial Starting Cash",
+                    note = if (language == "bn") "দোকানের মূল ক্যাশ তহবিল / ব্যালেন্স সমন্বয়" else "Opening Shop Cash Balance",
                     categoryOrCustomer = if (language == "bn") "প্রারম্ভিক তহবিল" else "Opening Funds",
-                    amount = Math.abs(shopInfo.mainBalance),
-                    isAddition = shopInfo.mainBalance > 0,
+                    amount = Math.abs(baselineDiff),
+                    isAddition = baselineDiff > 0,
                     paymentMethod = "CASH"
                 )
             )
@@ -418,6 +438,15 @@ fun CashBookScreen(
                         Icon(Icons.Default.PictureAsPdf, contentDescription = "Export PDF", tint = MaterialTheme.colorScheme.primary)
                     }
 
+                    // Cash Balance Adjustment Button
+                    IconButton(onClick = { showAdjustBalanceDialog = true }) {
+                        Icon(
+                            Icons.Default.Tune,
+                            contentDescription = if (language == "bn") "ক্যাশ সংশোধন" else "Adjust Cash",
+                            tint = DueOrange
+                        )
+                    }
+
                     // Search Button
                     IconButton(onClick = {
                         isSearchActive = !isSearchActive
@@ -503,22 +532,36 @@ fun CashBookScreen(
 
                             VerticalDivider(modifier = Modifier.height(26.dp), color = Color(0xFF475569))
 
-                            // Balance
+                            // Balance (Clickable to adjust cash)
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.weight(1.2f)
+                                modifier = Modifier
+                                    .weight(1.2f)
+                                    .clickable { showAdjustBalanceDialog = true }
+                                    .padding(horizontal = 2.dp)
                             ) {
-                                Text(
-                                    text = if (language == "bn") "ব্যালেন্স" else "Balance",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFF94A3B8)
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = if (language == "bn") "ব্যালেন্স" else "Balance",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFF94A3B8)
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Icon(
+                                        Icons.Default.Edit,
+                                        contentDescription = "Edit Balance",
+                                        tint = DueOrange,
+                                        modifier = Modifier.size(11.dp)
+                                    )
+                                }
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "${CalculationHelper.formatCurrency(netBalance, currency)} ${if (language == "bn") "ক্যাশ" else "Cash"}",
+                                    text = "${CalculationHelper.formatCurrency(if (selectedPeriod == "সব") netBalance else shopInfo.mainBalance, currency)} ${if (language == "bn") "ক্যাশ" else "Cash"}",
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = if (netBalance >= 0) Color(0xFF4ADE80) else Color(0xFFF87171)
+                                    color = if ((if (selectedPeriod == "সব") netBalance else shopInfo.mainBalance) >= 0) Color(0xFF4ADE80) else Color(0xFFF87171),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
@@ -1157,6 +1200,19 @@ fun CashBookScreen(
                 TextButton(onClick = { deletingCashLog = null }) {
                     Text(if (language == "bn") "বাতিল" else "Cancel")
                 }
+            }
+        )
+    }
+
+    if (showAdjustBalanceDialog) {
+        EditMainCashBalanceDialog(
+            currentBalance = shopInfo.mainBalance,
+            currency = currency,
+            language = language,
+            onDismiss = { showAdjustBalanceDialog = false },
+            onConfirm = { newBalance, note ->
+                viewModel.updateMainBalance(newBalance, note)
+                showAdjustBalanceDialog = false
             }
         )
     }
