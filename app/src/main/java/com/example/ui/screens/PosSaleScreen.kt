@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -704,6 +705,10 @@ fun PosCartItemRow(
     onPriceChange: (Double) -> Unit,
     onRemove: () -> Unit
 ) {
+    var showPriceDialog by remember { mutableStateOf(false) }
+    var showQuantityDialog by remember { mutableStateOf(false) }
+    val isPriceCustomized = item.customPrice != item.product.sellPrice
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -717,6 +722,7 @@ fun PosCartItemRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
+            // Product Name and Clickable Editable Rate Chip
             Column(modifier = Modifier.weight(1.2f)) {
                 Text(
                     text = item.product.name,
@@ -724,11 +730,48 @@ fun PosCartItemRow(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                Text(
-                    text = "${if (language == "bn") "দর: " else "Rate: "}$currency${item.customPrice.toIntOrNull() ?: item.customPrice} / ${item.product.unit}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
+                Spacer(modifier = Modifier.height(3.dp))
+
+                // Interactive Rate Chip - Allows setting/raising/lowering the price
+                Surface(
+                    onClick = { showPriceDialog = true },
+                    shape = RoundedCornerShape(6.dp),
+                    color = if (isPriceCustomized) EmeraldPrimary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
+                    border = BorderStroke(
+                        1.dp,
+                        if (isPriceCustomized) EmeraldPrimary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${if (language == "bn") "দর: " else "Rate: "}$currency${item.customPrice.toIntOrNull() ?: item.customPrice} / ${item.product.unit}",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isPriceCustomized) EmeraldPrimary else MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = "Edit Price",
+                            tint = if (isPriceCustomized) EmeraldPrimary else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(11.dp)
+                        )
+                    }
+                }
+
+                if (isPriceCustomized) {
+                    Spacer(modifier = Modifier.height(1.dp))
+                    Text(
+                        text = "${if (language == "bn") "মূল দর: " else "Orig: "}$currency${item.product.sellPrice.toIntOrNull() ?: item.product.sellPrice}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.outline,
+                        textDecoration = TextDecoration.LineThrough
+                    )
+                }
             }
 
             // Stepper for quantity
@@ -745,12 +788,19 @@ fun PosCartItemRow(
                     Icon(Icons.Default.Remove, contentDescription = "Decrease", modifier = Modifier.size(16.dp))
                 }
 
-                Text(
-                    text = "${item.quantity.toIntOrNull() ?: item.quantity}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    modifier = Modifier.padding(horizontal = 6.dp)
-                )
+                Surface(
+                    onClick = { showQuantityDialog = true },
+                    shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.padding(horizontal = 2.dp)
+                ) {
+                    Text(
+                        text = "${item.quantity.toIntOrNull() ?: item.quantity}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                    )
+                }
 
                 IconButton(
                     onClick = { onQuantityChange(item.quantity + 1.0) },
@@ -767,12 +817,19 @@ fun PosCartItemRow(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Text(
-                    text = "$currency${item.total.toIntOrNull() ?: item.total}",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = EmeraldPrimary
-                )
+                Surface(
+                    onClick = { showPriceDialog = true },
+                    shape = RoundedCornerShape(6.dp),
+                    color = EmeraldPrimary.copy(alpha = 0.08f)
+                ) {
+                    Text(
+                        text = "$currency${item.total.toIntOrNull() ?: item.total}",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = EmeraldPrimary,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
                 IconButton(
                     onClick = onRemove,
                     modifier = Modifier.size(28.dp)
@@ -782,4 +839,448 @@ fun PosCartItemRow(
             }
         }
     }
+
+    // Price Edit & Adjustment Dialog
+    if (showPriceDialog) {
+        EditCartItemPriceDialog(
+            item = item,
+            currency = currency,
+            language = language,
+            onDismiss = { showPriceDialog = false },
+            onConfirm = { newPrice ->
+                onPriceChange(newPrice)
+                showPriceDialog = false
+            }
+        )
+    }
+
+    // Quantity Edit Dialog
+    if (showQuantityDialog) {
+        EditCartItemQuantityDialog(
+            item = item,
+            language = language,
+            onDismiss = { showQuantityDialog = false },
+            onConfirm = { newQty ->
+                onQuantityChange(newQty)
+                showQuantityDialog = false
+            }
+        )
+    }
 }
+
+@Composable
+fun EditCartItemPriceDialog(
+    item: CartItem,
+    currency: String,
+    language: String,
+    onDismiss: () -> Unit,
+    onConfirm: (Double) -> Unit
+) {
+    var priceText by remember {
+        mutableStateOf(
+            if (item.customPrice % 1.0 == 0.0) item.customPrice.toLong().toString()
+            else item.customPrice.toString()
+        )
+    }
+    val currentPrice = priceText.toDoubleOrNull() ?: 0.0
+    val originalPrice = item.product.sellPrice
+    val buyPrice = item.product.buyPrice
+    val unitProfit = currentPrice - buyPrice
+    val totalProfit = unitProfit * item.quantity
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            elevation = CardDefaults.cardElevation(8.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp)
+            ) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (language == "bn") "মালের দর / দাম পরিবর্তন" else "Change Item Selling Rate",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = item.product.name,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = EmeraldPrimary,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1
+                        )
+                    }
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = MaterialTheme.colorScheme.outline)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Default info pills: Original Sell Price & Buy Price
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Surface(
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
+                            Text(
+                                text = if (language == "bn") "মূল বিক্রয় দর:" else "Regular Rate:",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                            Text(
+                                text = "$currency${originalPrice.toIntOrNull() ?: originalPrice} / ${item.product.unit}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+
+                    if (buyPrice > 0.0) {
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFFEFF6FF)
+                        ) {
+                            Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
+                                Text(
+                                    text = if (language == "bn") "ক্রয়মূল্য (আসল):" else "Purchase Cost:",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 10.sp,
+                                    color = Color(0xFF1E40AF)
+                                )
+                                Text(
+                                    text = "$currency${buyPrice.toIntOrNull() ?: buyPrice}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF1D4ED8)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Price Input with Steppers on the sides
+                Text(
+                    text = if (language == "bn") "বিক্রয় দর বসান বা বাড়ান/কমান ($currency):" else "Enter Selling Rate ($currency):",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Quick minus 5 button
+                    FilledTonalIconButton(
+                        onClick = {
+                            val newP = maxOf(0.0, currentPrice - 5.0)
+                            priceText = if (newP % 1.0 == 0.0) newP.toLong().toString() else newP.toString()
+                        },
+                        modifier = Modifier.size(44.dp),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("-৫", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+
+                    OutlinedTextField(
+                        value = priceText,
+                        onValueChange = { priceText = it },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        textStyle = MaterialTheme.typography.titleLarge.copy(
+                            textAlign = TextAlign.Center,
+                            fontWeight = FontWeight.Bold,
+                            color = EmeraldPrimary
+                        ),
+                        prefix = {
+                            Text(currency, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.outline)
+                        }
+                    )
+
+                    // Quick plus 5 button
+                    FilledTonalIconButton(
+                        onClick = {
+                            val newP = currentPrice + 5.0
+                            priceText = if (newP % 1.0 == 0.0) newP.toLong().toString() else newP.toString()
+                        },
+                        modifier = Modifier.size(44.dp),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("+৫", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = EmeraldPrimary)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Quick Adjustment Chips Row: [-৫০] [-১০] [+১০] [+৫০]
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf(-50.0, -10.0, 10.0, 50.0).forEach { delta ->
+                        SuggestionChip(
+                            onClick = {
+                                val newP = maxOf(0.0, currentPrice + delta)
+                                priceText = if (newP % 1.0 == 0.0) newP.toLong().toString() else newP.toString()
+                            },
+                            label = {
+                                Text(
+                                    text = if (delta > 0) "+$currency${delta.toLong()}" else "$currency${delta.toLong()}",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Reset to regular price button
+                TextButton(
+                    onClick = {
+                        priceText = if (originalPrice % 1.0 == 0.0) originalPrice.toLong().toString() else originalPrice.toString()
+                    },
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (language == "bn") "নিয়মিত দর দিন ($currency${originalPrice.toIntOrNull() ?: originalPrice})"
+                        else "Reset to regular rate ($currency${originalPrice.toIntOrNull() ?: originalPrice})",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Live Summary Calculation Card
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (buyPrice > 0.0 && currentPrice < buyPrice) Color(0xFFFEE2E2) else Color(0xFFF0FDF4),
+                    border = BorderStroke(
+                        1.dp,
+                        if (buyPrice > 0.0 && currentPrice < buyPrice) Color(0xFFFCA5A5) else Color(0xFFA7F3D0)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "${item.quantity.toIntOrNull() ?: item.quantity} ${item.product.unit} × $currency${currentPrice.toIntOrNull() ?: currentPrice} =",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF334155)
+                            )
+                            Text(
+                                text = "$currency${(item.quantity * currentPrice).toIntOrNull() ?: (item.quantity * currentPrice)}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (buyPrice > 0.0 && currentPrice < buyPrice) LossRed else EmeraldPrimary
+                            )
+                        }
+
+                        if (buyPrice > 0.0) {
+                            Spacer(modifier = Modifier.height(3.dp))
+                            if (currentPrice < buyPrice) {
+                                Text(
+                                    text = if (language == "bn") "⚠️ সতর্কবাণী: ক্রয়মূল্যের চেয়ে কমে বিক্রি হচ্ছে (লোকসান: $currency${(buyPrice - currentPrice) * item.quantity})!"
+                                    else "⚠️ Warning: Selling below purchase cost!",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFFDC2626),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.sp
+                                )
+                            } else {
+                                Text(
+                                    text = if (language == "bn") "লাভ হবে: +$currency${totalProfit.toIntOrNull() ?: totalProfit} (+${unitProfit.toIntOrNull() ?: unitProfit} / ${item.product.unit})"
+                                    else "Profit: +$currency${totalProfit.toIntOrNull() ?: totalProfit}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFF15803D),
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Action Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text(if (language == "bn") "বাতিল" else "Cancel")
+                    }
+
+                    Button(
+                        onClick = {
+                            val validPrice = priceText.toDoubleOrNull()
+                            if (validPrice != null && validPrice >= 0.0) {
+                                onConfirm(validPrice)
+                                onDismiss()
+                            }
+                        },
+                        modifier = Modifier.weight(1.3f),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(if (language == "bn") "দাম নিশ্চিত করুন" else "Set Price", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun EditCartItemQuantityDialog(
+    item: CartItem,
+    language: String,
+    onDismiss: () -> Unit,
+    onConfirm: (Double) -> Unit
+) {
+    var qtyText by remember {
+        mutableStateOf(
+            if (item.quantity % 1.0 == 0.0) item.quantity.toLong().toString()
+            else item.quantity.toString()
+        )
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            elevation = CardDefaults.cardElevation(8.dp)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (language == "bn") "পণ্যের পরিমাণ বসান" else "Enter Quantity",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = item.product.name,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = EmeraldPrimary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = MaterialTheme.colorScheme.outline)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                OutlinedTextField(
+                    value = qtyText,
+                    onValueChange = { qtyText = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    label = { Text(if (language == "bn") "পরিমাণ (${item.product.unit})" else "Quantity (${item.product.unit})") },
+                    textStyle = MaterialTheme.typography.titleLarge.copy(
+                        textAlign = TextAlign.Center,
+                        fontWeight = FontWeight.Bold
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Quick preset numbers: 1, 2, 5, 10, 20
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf(1.0, 2.0, 5.0, 10.0, 20.0).forEach { q ->
+                        SuggestionChip(
+                            onClick = { qtyText = q.toInt().toString() },
+                            label = { Text("${q.toInt()}", fontWeight = FontWeight.Bold) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text(if (language == "bn") "বাতিল" else "Cancel")
+                    }
+
+                    Button(
+                        onClick = {
+                            val validQ = qtyText.toDoubleOrNull()
+                            if (validQ != null && validQ > 0.0) {
+                                onConfirm(validQ)
+                                onDismiss()
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
+                    ) {
+                        Text(if (language == "bn") "নিশ্চিত" else "OK", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
