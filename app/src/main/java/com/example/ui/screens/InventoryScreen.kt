@@ -73,6 +73,7 @@ fun InventoryScreen(
     var stockOutProduct by remember { mutableStateOf<Product?>(null) }
 
     var showBarcodeScannerModal by remember { mutableStateOf(false) }
+    var showLowStockOrderDialog by remember { mutableStateOf(false) }
 
     val categories = remember(customCategories, language) {
         listOf(if (language == "bn") "সব" else "All") + customCategories
@@ -304,7 +305,7 @@ fun InventoryScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(modifier = Modifier.weight(1f, fill = false)) {
                         Text(
                             text = "${if (language == "bn") "মোট প্রদর্শিত: " else "Showing: "}${displayedProducts.size} ${if (language == "bn") "টি পণ্য" else "items"}",
                             style = MaterialTheme.typography.bodySmall,
@@ -320,43 +321,75 @@ fun InventoryScreen(
                         )
                     }
 
-                    // Download Products PDF Button
-                    FilledTonalButton(
-                        onClick = {
-                            val pdfFile = PdfGenerator.generateAllProductsPdf(
-                                context = context,
-                                shopName = shopInfo.shopName,
-                                products = displayedProducts,
-                                currency = currency
-                            )
-                            if (pdfFile != null) {
-                                PdfGenerator.openOrSharePdf(
-                                    context = context,
-                                    file = pdfFile,
-                                    chooserTitle = if (language == "bn") "পণ্য তালিকা PDF ডাউনলোড / শেয়ার করুন" else "Download / Share Products PDF"
-                                )
-                            } else {
-                                Toast.makeText(
-                                    context,
-                                    if (language == "bn") "PDF তৈরি করতে সমস্যা হয়েছে" else "Failed to generate PDF",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        },
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                        ),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.PictureAsPdf, contentDescription = "Download PDF", modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = if (language == "bn") "পণ্য PDF" else "Product PDF",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold
-                        )
+                        // Order low stock / stock order button (পণ্য অর্ডার)
+                        FilledTonalButton(
+                            onClick = {
+                                showLowStockOrderDialog = true
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = if (currentViewTab == 1 || lowStockProducts.isNotEmpty()) Color(0xFFFEF3C7) else MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = if (currentViewTab == 1 || lowStockProducts.isNotEmpty()) Color(0xFF92400E) else MaterialTheme.colorScheme.onSecondaryContainer
+                            ),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.AddShoppingCart,
+                                contentDescription = "Order Low Stock",
+                                modifier = Modifier.size(16.dp),
+                                tint = if (currentViewTab == 1 || lowStockProducts.isNotEmpty()) Color(0xFFD97706) else MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (language == "bn") "পণ্য অর্ডার" else "Order Stock",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (currentViewTab == 1 || lowStockProducts.isNotEmpty()) Color(0xFF92400E) else MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+
+                        // Download Products PDF Button
+                        FilledTonalButton(
+                            onClick = {
+                                val pdfFile = PdfGenerator.generateAllProductsPdf(
+                                    context = context,
+                                    shopName = shopInfo.shopName,
+                                    products = displayedProducts,
+                                    currency = currency
+                                )
+                                if (pdfFile != null) {
+                                    PdfGenerator.openOrSharePdf(
+                                        context = context,
+                                        file = pdfFile,
+                                        chooserTitle = if (language == "bn") "পণ্য তালিকা PDF ডাউনলোড / শেয়ার করুন" else "Download / Share Products PDF"
+                                    )
+                                } else {
+                                    Toast.makeText(
+                                        context,
+                                        if (language == "bn") "PDF তৈরি করতে সমস্যা হয়েছে" else "Failed to generate PDF",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            ),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Icon(Icons.Default.PictureAsPdf, contentDescription = "Download PDF", modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (language == "bn") "পণ্য PDF" else "Product PDF",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }
@@ -481,6 +514,31 @@ fun InventoryScreen(
             onSelectProduct = { barcode ->
                 viewModel.searchQuery.value = barcode
                 showBarcodeScannerModal = false
+            }
+        )
+    }
+
+    // Low Stock Purchase Order Dialog
+    if (showLowStockOrderDialog) {
+        LowStockOrderDialog(
+            allProducts = allProducts,
+            lowStockProducts = lowStockProducts,
+            currency = currency,
+            language = language,
+            shopName = shopInfo.shopName,
+            shopPhone = shopInfo.phone,
+            onDismiss = { showLowStockOrderDialog = false },
+            onQuickStockIn = { reorderedItems ->
+                reorderedItems.forEach { item ->
+                    viewModel.stockIn(
+                        productId = item.product.id,
+                        quantity = item.orderQuantity,
+                        buyPrice = item.unitPrice,
+                        sellPrice = null,
+                        note = "অর্ডারকৃত পণ্য স্টক-ইন"
+                    )
+                }
+                showLowStockOrderDialog = false
             }
         )
     }

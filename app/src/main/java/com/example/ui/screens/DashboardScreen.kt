@@ -59,7 +59,8 @@ fun DashboardScreen(
     onNavigateToDue: () -> Unit,
     onNavigateToExpenses: () -> Unit,
     onOpenStockInDialog: () -> Unit,
-    onOpenAddExpenseDialog: () -> Unit
+    onOpenAddExpenseDialog: () -> Unit,
+    onNavigateToAccounts: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val summary by viewModel.dashboardSummary.collectAsState()
@@ -790,14 +791,14 @@ fun DashboardScreen(
                         onClick = onNavigateToDue
                     )
 
-                    // 3. ক্যাশ খাতা
+                    // 3. হিসাব ও ক্যাশ
                     CoreGridActionCard(
-                        title = if (language == "bn") "ক্যাশ খাতা" else "Cash Book",
-                        icon = Icons.Default.ReceiptLong,
+                        title = if (language == "bn") "হিসাব ও ক্যাশ" else "Accounts",
+                        icon = Icons.Default.Calculate,
                         iconBg = Color(0xFFF0FDF4),
                         iconTint = ProfitGreen,
                         modifier = Modifier.weight(1f),
-                        onClick = { showCashHistoryDialog = true }
+                        onClick = onNavigateToAccounts
                     )
                 }
 
@@ -1953,7 +1954,7 @@ fun DashboardScreen(
             },
             onOpenCashBook = {
                 showAllServicesDialog = false
-                showCashHistoryDialog = true
+                onNavigateToAccounts()
             },
             onOpenStockIn = {
                 showAllServicesDialog = false
@@ -3819,8 +3820,8 @@ fun AllServicesDialog(
                             onClick = onNavigateDue
                         )
                         CoreGridActionCard(
-                            title = if (language == "bn") "ক্যাশ খাতা" else "Cash Book",
-                            icon = Icons.Default.ReceiptLong,
+                            title = if (language == "bn") "হিসাব ও ক্যাশ" else "Accounts",
+                            icon = Icons.Default.Calculate,
                             iconBg = Color(0xFFF0FDF4),
                             iconTint = ProfitGreen,
                             modifier = Modifier.weight(1f),

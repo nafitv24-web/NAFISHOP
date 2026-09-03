@@ -47,7 +47,9 @@ import java.util.*
 
 @Composable
 fun SettingsScreen(
-    viewModel: ShopViewModel
+    viewModel: ShopViewModel,
+    onNavigateToAccounts: (() -> Unit)? = null,
+    onNavigateToReports: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -169,6 +171,105 @@ fun SettingsScreen(
                         IconButton(onClick = { showEditProfileDialog = true }) {
                             Icon(Icons.Default.Edit, contentDescription = "Edit Profile", tint = MaterialTheme.colorScheme.primary)
                         }
+                    }
+                }
+            }
+        }
+
+        // 1.5 Quick Business Shortcuts (হিসাব নিকাশ ও রিপোর্ট)
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = CardDefaults.outlinedCardBorder()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = if (language == "bn") "ব্যবসার হিসাব ও রিপোর্ট" else "Accounts & Reports",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = EmeraldPrimary
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { onNavigateToAccounts?.invoke() }
+                            .background(Color(0xFFECFDF5))
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(EmeraldPrimary, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Calculate, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = if (language == "bn") "দোকানের হিসাব নিকাশ (Accounts)" else "Shop Master Accounts",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF065F46)
+                                )
+                                Text(
+                                    text = if (language == "bn") "ক্যাশ খাতা, দৈনিক হিসাব, নোট গণক ও ক্যালকুলেটর" else "Cash book, closing, denominations & calculator",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF047857),
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = EmeraldPrimary)
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { onNavigateToReports?.invoke() }
+                            .background(Color(0xFFFAF5FF))
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(Color(0xFF7C3AED), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Assessment, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = if (language == "bn") "লাভ-ক্ষতি ও পূর্ণাঙ্গ রিপোর্ট" else "Profit & Loss Reports",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF5B21B6)
+                                )
+                                Text(
+                                    text = if (language == "bn") "দৈনিক, মাসিক ও বার্ষিক আর্থিক রিপোর্ট" else "Daily, monthly & yearly reports",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF6D28D9),
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color(0xFF7C3AED))
                     }
                 }
             }

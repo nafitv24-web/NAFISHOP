@@ -36,6 +36,7 @@ enum class ShopScreen(
 ) {
     DASHBOARD("ড্যাশবোর্ড", "Dashboard", Icons.Default.Dashboard),
     POS("বিক্রয় POS", "POS Sale", Icons.Default.PointOfSale),
+    ACCOUNTS("হিসাব", "Accounts", Icons.Default.Calculate),
     INVENTORY("স্টক ও পণ্য", "Stock & Inventory", Icons.Default.Inventory2),
     DUE_KHATA("বাকি খাতা", "Due Khata", Icons.Default.AccountBalanceWallet),
     EXPENSES("খরচ হিসাব", "Expenses", Icons.Default.ReceiptLong),
@@ -216,10 +217,10 @@ fun MainAppScaffold(
                         }
                     }
 
-                    // 2. Reports / লাভ-রিপোর্ট
-                    val isReports = currentScreen == ShopScreen.REPORTS
+                    // 2. Accounts / হিসাব
+                    val isAccounts = currentScreen == ShopScreen.ACCOUNTS
                     IconButton(
-                        onClick = { currentScreen = ShopScreen.REPORTS },
+                        onClick = { currentScreen = ShopScreen.ACCOUNTS },
                         modifier = Modifier.weight(1f)
                     ) {
                         Column(
@@ -227,18 +228,18 @@ fun MainAppScaffold(
                             verticalArrangement = Arrangement.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Assessment,
-                                contentDescription = "Reports",
-                                tint = if (isReports) EmeraldPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                imageVector = Icons.Default.Calculate,
+                                contentDescription = "Accounts",
+                                tint = if (isAccounts) EmeraldPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                 modifier = Modifier.size(24.dp)
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = if (language == "bn") "রিপোর্ট" else "Reports",
+                                text = if (language == "bn") "হিসাব" else "Accounts",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontSize = 10.sp,
-                                fontWeight = if (isReports) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isReports) EmeraldPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                fontWeight = if (isAccounts) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isAccounts) EmeraldPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                             )
                         }
                     }
@@ -341,7 +342,8 @@ fun MainAppScaffold(
                         onNavigateToDue = { currentScreen = ShopScreen.DUE_KHATA },
                         onNavigateToExpenses = { currentScreen = ShopScreen.EXPENSES },
                         onOpenStockInDialog = { showQuickStockInDialog = true },
-                        onOpenAddExpenseDialog = { showQuickAddExpenseDialog = true }
+                        onOpenAddExpenseDialog = { showQuickAddExpenseDialog = true },
+                        onNavigateToAccounts = { currentScreen = ShopScreen.ACCOUNTS }
                     )
                 }
                 ShopScreen.POS -> {
@@ -350,6 +352,13 @@ fun MainAppScaffold(
                         onSaleCompleted = {
                             // Automatically triggers invoiceDetails modal
                         }
+                    )
+                }
+                ShopScreen.ACCOUNTS -> {
+                    AccountsScreen(
+                        viewModel = viewModel,
+                        onNavigateToDue = { currentScreen = ShopScreen.DUE_KHATA },
+                        onNavigateToPos = { currentScreen = ShopScreen.POS }
                     )
                 }
                 ShopScreen.INVENTORY -> {
@@ -375,7 +384,9 @@ fun MainAppScaffold(
                 }
                 ShopScreen.SETTINGS -> {
                     SettingsScreen(
-                        viewModel = viewModel
+                        viewModel = viewModel,
+                        onNavigateToAccounts = { currentScreen = ShopScreen.ACCOUNTS },
+                        onNavigateToReports = { currentScreen = ShopScreen.REPORTS }
                     )
                 }
             }

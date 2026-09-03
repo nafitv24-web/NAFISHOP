@@ -182,3 +182,10 @@ data class AppNotice(
     val actionUrl: String = ""
 )
 
+data class ReorderItem(
+    val product: Product,
+    val orderQuantity: Double,
+    val unitPrice: Double = product.buyPrice,
+    val note: String = ""
+)
+

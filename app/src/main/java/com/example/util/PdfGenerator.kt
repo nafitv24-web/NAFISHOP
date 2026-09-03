@@ -14,6 +14,7 @@ import com.example.data.model.DueLog
 import com.example.data.model.Expense
 import com.example.data.model.MasterCashEntry
 import com.example.data.model.Product
+import com.example.data.model.ReorderItem
 import com.example.data.model.TransactionRecord
 import com.example.ui.components.toIntOrNull
 import com.example.ui.viewmodel.InvoiceDetails
@@ -1597,6 +1598,197 @@ object PdfGenerator {
 
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
         return savePdfToFile(context, pdfDocument, "CashBook_Statement_$timestamp.pdf")
+    }
+
+    /**
+     * Generates Low Stock Purchase Order / Reorder Sheet PDF
+     */
+    fun generateLowStockOrderPdf(
+        context: Context,
+        shopName: String,
+        shopPhone: String = "",
+        supplierName: String = "",
+        note: String = "",
+        items: List<ReorderItem>,
+        currency: String = "৳"
+    ): File? {
+        val pdfDocument = PdfDocument()
+        var pageNumber = 1
+        var pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+        var page = pdfDocument.startPage(pageInfo)
+        var canvas = page.canvas
+
+        val titlePaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 18f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(15, 23, 42)
+            textAlign = Paint.Align.CENTER
+        }
+        val subPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 10f
+            color = Color.rgb(100, 116, 139)
+            textAlign = Paint.Align.CENTER
+        }
+        val boldPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 10f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(15, 23, 42)
+        }
+        val textPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 9.5f
+            color = Color.rgb(30, 41, 59)
+        }
+        val linePaint = Paint().apply {
+            color = Color.rgb(226, 232, 240)
+            strokeWidth = 1f
+        }
+        val headerPaint = Paint().apply {
+            color = Color.rgb(254, 243, 199) // Soft warm amber header
+            style = Paint.Style.FILL
+        }
+
+        val totalPcs = items.sumOf { it.orderQuantity }
+        val totalCost = items.sumOf { it.orderQuantity * it.unitPrice }
+
+        fun drawHeaderAndSummary(drawSummaryBox: Boolean) {
+            val topBarPaint = Paint().apply { color = Color.rgb(217, 119, 6); style = Paint.Style.FILL } // Amber
+            canvas.drawRect(0f, 0f, 595f, 12f, topBarPaint)
+
+            var y = 40f
+            canvas.drawText(shopName, 297.5f, y, titlePaint)
+            y += 16f
+            canvas.drawText("পণ্য ক্রয় ও রি-অর্ডার মেমো (Purchase Reorder Sheet)", 297.5f, y, subPaint)
+            y += 14f
+            val genDate = SimpleDateFormat("dd MMMM yyyy, hh:mm a", Locale.getDefault()).format(Date())
+            val supText = if (supplierName.isNotBlank()) " | সরবরাহকারী: $supplierName" else ""
+            canvas.drawText("তারিখ: $genDate$supText | পৃষ্ঠা: $pageNumber", 297.5f, y, subPaint)
+
+            if (drawSummaryBox) {
+                y += 18f
+                val boxPaint = Paint().apply { color = Color.rgb(255, 251, 235); style = Paint.Style.FILL }
+                canvas.drawRoundRect(RectF(35f, y, 560f, y + 42f), 6f, 6f, boxPaint)
+                canvas.drawRoundRect(RectF(35f, y, 560f, y + 42f), 6f, 6f, linePaint)
+
+                y += 18f
+                canvas.drawText("মোট পণ্য: ${items.size} টি", 50f, y, boldPaint)
+                canvas.drawText("মোট অর্ডার: ${totalPcs.toIntOrNull() ?: totalPcs} পিছ", 190f, y, boldPaint)
+                val totalCostStr = if (totalCost % 1.0 == 0.0) totalCost.toInt().toString() else "%.2f".format(totalCost)
+                canvas.drawText("আনুমানিক মোট খরচ: $currency$totalCostStr", 370f, y, boldPaint)
+
+                if (note.isNotBlank()) {
+                    y += 15f
+                    val notePaint = Paint().apply {
+                        isAntiAlias = true
+                        textSize = 8.5f
+                        color = Color.rgb(120, 53, 15)
+                    }
+                    val nText = if (note.length > 90) note.take(88) + ".." else note
+                    canvas.drawText("বিশেষ নোট: $nText", 50f, y, notePaint)
+                }
+            }
+        }
+
+        fun drawTableHeader(y: Float): Float {
+            canvas.drawRect(RectF(35f, y, 560f, y + 20f), headerPaint)
+            canvas.drawRect(RectF(35f, y, 560f, y + 20f), linePaint)
+
+            canvas.drawText("নং", 42f, y + 14f, boldPaint)
+            canvas.drawText("পণ্যের নাম ও বিবরণ", 70f, y + 14f, boldPaint)
+            canvas.drawText("ক্যাটাগরি", 240f, y + 14f, boldPaint)
+            canvas.drawText("বর্তমান স্টক", 330f, y + 14f, boldPaint)
+            canvas.drawText("অর্ডার (পিছ)", 410f, y + 14f, boldPaint)
+            canvas.drawText("ক্রয় দর", 475f, y + 14f, boldPaint)
+            canvas.drawText("মোট মূল্য", 520f, y + 14f, boldPaint)
+            return y + 28f
+        }
+
+        drawHeaderAndSummary(drawSummaryBox = true)
+        var y = if (note.isNotBlank()) 140f else 125f
+        y = drawTableHeader(y)
+
+        val rowBgAlt = Paint().apply { color = Color.rgb(248, 250, 252); style = Paint.Style.FILL }
+
+        for ((index, item) in items.withIndex()) {
+            if (y > 750f) {
+                drawSponsorFooter(canvas, 802f, "Purchase Reorder Sheet")
+                pdfDocument.finishPage(page)
+                pageNumber++
+                pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+                page = pdfDocument.startPage(pageInfo)
+                canvas = page.canvas
+                drawHeaderAndSummary(drawSummaryBox = false)
+                y = 90f
+                y = drawTableHeader(y)
+            }
+
+            if (index % 2 == 1) {
+                canvas.drawRect(RectF(35f, y - 10f, 560f, y + 6f), rowBgAlt)
+            }
+
+            val p = item.product
+            val itemTotal = item.orderQuantity * item.unitPrice
+            canvas.drawText("${index + 1}", 42f, y, textPaint)
+            val nameStr = if (p.name.length > 25) p.name.take(23) + ".." else p.name
+            canvas.drawText(nameStr, 70f, y, boldPaint)
+            val catStr = if (p.category.length > 14) p.category.take(12) + ".." else p.category
+            canvas.drawText(catStr, 240f, y, textPaint)
+            canvas.drawText("${p.stockQuantity.toIntOrNull() ?: p.stockQuantity} ${p.unit}", 330f, y, textPaint)
+            
+            // Order quantity highlight
+            val orderQtyStr = "${item.orderQuantity.toIntOrNull() ?: item.orderQuantity} ${p.unit}"
+            canvas.drawText(orderQtyStr, 410f, y, boldPaint)
+
+            canvas.drawText("${item.unitPrice.toIntOrNull() ?: item.unitPrice}", 475f, y, textPaint)
+            val itemTotalStr = if (itemTotal % 1.0 == 0.0) itemTotal.toInt().toString() else "%.1f".format(itemTotal)
+            canvas.drawText(itemTotalStr, 520f, y, boldPaint)
+
+            y += 16f
+        }
+
+        // Totals bar
+        if (y > 730f) {
+            drawSponsorFooter(canvas, 802f, "Purchase Reorder Sheet")
+            pdfDocument.finishPage(page)
+            pageNumber++
+            pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+            page = pdfDocument.startPage(pageInfo)
+            canvas = page.canvas
+            drawHeaderAndSummary(drawSummaryBox = false)
+            y = 90f
+        }
+
+        y += 8f
+        val grandTotalPaint = Paint().apply { color = Color.rgb(254, 243, 199); style = Paint.Style.FILL }
+        canvas.drawRoundRect(RectF(35f, y, 560f, y + 26f), 4f, 4f, grandTotalPaint)
+        canvas.drawRoundRect(RectF(35f, y, 560f, y + 26f), 4f, 4f, linePaint)
+        val totalCostStr = if (totalCost % 1.0 == 0.0) totalCost.toInt().toString() else "%.2f".format(totalCost)
+        canvas.drawText("সর্বমোট অর্ডার: ${totalPcs.toIntOrNull() ?: totalPcs} পিছ", 50f, y + 17f, boldPaint)
+        canvas.drawText("আনুমানিক মোট প্রদেয় বিল: $currency$totalCostStr", 350f, y + 17f, boldPaint)
+
+        // Signature blocks
+        y += 48f
+        if (y < 750f) {
+            val sigPaint = Paint().apply {
+                isAntiAlias = true
+                textSize = 9f
+                color = Color.rgb(100, 116, 139)
+            }
+            canvas.drawLine(50f, y, 180f, y, linePaint)
+            canvas.drawText("দোকানদারের স্বাক্ষর", 75f, y + 12f, sigPaint)
+
+            canvas.drawLine(415f, y, 545f, y, linePaint)
+            canvas.drawText("সরবরাহকারী / ডিলারের স্বাক্ষর", 418f, y + 12f, sigPaint)
+        }
+
+        drawSponsorFooter(canvas, 802f, "Purchase Reorder Sheet")
+        pdfDocument.finishPage(page)
+
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
+        return savePdfToFile(context, pdfDocument, "Stock_Reorder_$timestamp.pdf")
     }
 
     private fun savePdfToFile(context: Context, pdfDocument: PdfDocument, filename: String): File? {
