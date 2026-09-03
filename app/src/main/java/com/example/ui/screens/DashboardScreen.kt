@@ -354,7 +354,7 @@ fun DashboardScreen(
             }
         }
 
-        // 2. Hero Promotional & Stats Carousel Banner
+        // 2. Hero Cash & Today's Sales Status Card (Sleek Hierarchy: 1. Main Cash Big, 2. Sales & Balance Medium, 3. Cash & Due Profit Small)
         item {
             Column(
                 modifier = Modifier
@@ -368,103 +368,138 @@ fun DashboardScreen(
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                     border = BorderStroke(1.dp, CardBorder)
                 ) {
-                    Box(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(
-                                Brush.linearGradient(
+                                Brush.verticalGradient(
                                     colors = listOf(
                                         Color(0xFFF0FDF4),
-                                        Color(0xFFE6F4F1),
-                                        Color(0xFFECFDF5)
+                                        Color(0xFFF8FCFA),
+                                        Color(0xFFFFFFFF)
                                     )
                                 )
                             )
                             .padding(16.dp)
                     ) {
+                        // Top Header Row: Brand/Cash Title & History/Set Actions
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Left Brand & Details
-                            Row(
-                                modifier = Modifier.weight(1f),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Rounded Brand Logo
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 Surface(
                                     shape = CircleShape,
                                     color = Color.White,
-                                    shadowElevation = 3.dp,
-                                    modifier = Modifier.size(46.dp)
+                                    shadowElevation = 2.dp,
+                                    modifier = Modifier.size(38.dp)
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
-                                        NafiShopSmallLogo(size = 42.dp)
+                                        NafiShopSmallLogo(size = 34.dp)
                                     }
                                 }
-
-                                Spacer(modifier = Modifier.width(12.dp))
-
+                                Spacer(modifier = Modifier.width(10.dp))
                                 Column {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = if (language == "bn") "আজকের মোট বিক্রি" else "Today's Total Sales",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = Color(0xFF0F5147),
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Surface(
-                                            shape = RoundedCornerShape(4.dp),
-                                            color = Color(0xFFDCFCE7),
-                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                                        ) {
-                                            Text(
-                                                text = if (summary.todayProfit >= 0) "+$currency${summary.todayProfit.toIntOrNull() ?: summary.todayProfit}" else "$currency${summary.todayProfit.toIntOrNull() ?: summary.todayProfit}",
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (summary.todayProfit >= 0) ProfitGreen else LossRed,
-                                                modifier = Modifier.padding(horizontal = 4.dp)
-                                            )
-                                        }
-                                    }
                                     Text(
-                                        text = "$currency${summary.todayTotalSales.toIntOrNull() ?: summary.todayTotalSales}",
-                                        style = MaterialTheme.typography.headlineSmall,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = TealDarkHeader
+                                        text = if (language == "bn") "দোকানের ক্যাশ" else "Shop Cash",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF166534)
                                     )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Surface(
-                                            onClick = { showCashHistoryDialog = true },
-                                            shape = RoundedCornerShape(6.dp),
-                                            color = if (mainBalance < 0) Color(0xFFFEE2E2) else Color(0xFF0F5147).copy(alpha = 0.12f)
-                                        ) {
-                                            Text(
-                                                text = "${if (language == "bn") "হাতে নগদ:" else "Cash:"} ${CalculationHelper.formatCurrency(mainBalance, currency)}",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (mainBalance < 0) Color(0xFFDC2626) else Color(0xFF0F5147),
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                            )
-                                        }
-                                    }
+                                    Text(
+                                        text = if (language == "bn") "হাতে নগদ ক্যাশ তহবিল" else "Cash in Hand Funds",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontSize = 11.sp,
+                                        color = Color(0xFF64748B)
+                                    )
                                 }
                             }
 
-                            // Right Visual Action Pill
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                // Cash History Icon
+                                IconButton(
+                                    onClick = { showCashHistoryDialog = true },
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFDCFCE7).copy(alpha = 0.8f))
+                                        .size(32.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.History,
+                                        contentDescription = "History",
+                                        tint = EmeraldPrimary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+
+                                // Edit / Set Balance
+                                Surface(
+                                    onClick = { showSetBalanceDialog = true },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFFE2E8F0),
+                                    modifier = Modifier.height(30.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Edit,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(12.dp),
+                                            tint = Color(0xFF475569)
+                                        )
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text(
+                                            text = if (language == "bn") "সংশোধন" else "Set",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Color(0xFF334155)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // 1. সবার উপরে দোকানের ক্যাশ থাকবে বড় করে লেখা
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = if (language == "bn") "হাতে নগদ ক্যাশ:" else "Cash in Hand:",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF166534),
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = CalculationHelper.formatCurrency(mainBalance, currency),
+                                    style = MaterialTheme.typography.headlineMedium.copy(fontSize = 32.sp),
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = if (mainBalance < 0) Color(0xFFDC2626) else Color(0xFF047857)
+                                )
+                            }
+
+                            // Quick New Sale Button
                             Surface(
                                 onClick = onNavigateToPos,
-                                shape = RoundedCornerShape(14.dp),
+                                shape = RoundedCornerShape(12.dp),
                                 color = TealDarkHeader,
-                                shadowElevation = 2.dp,
-                                modifier = Modifier.padding(start = 6.dp)
+                                shadowElevation = 2.dp
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(
@@ -473,37 +508,251 @@ fun DashboardScreen(
                                         tint = Color.White,
                                         modifier = Modifier.size(16.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Spacer(modifier = Modifier.width(5.dp))
                                     Text(
                                         text = if (language == "bn") "মেমো তৈরি" else "New Sale",
-                                        style = MaterialTheme.typography.labelSmall,
+                                        style = MaterialTheme.typography.labelMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = Color.White
                                     )
                                 }
                             }
                         }
-                    }
-                }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
+                        HorizontalDivider(color = Color(0xFFE2E8F0))
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                // Carousel Dots Indicator
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    repeat(3) { index ->
-                        val isSelected = index == bannerPageIndex
-                        Box(
-                            modifier = Modifier
-                                .padding(horizontal = 3.dp)
-                                .clip(CircleShape)
-                                .background(if (isSelected) TealDarkHeader else Color(0xFFCBD5E1))
-                                .size(width = if (isSelected) 18.dp else 6.dp, height = 6.dp)
-                                .clickable { bannerPageIndex = index }
-                        )
+                        // 2. তা নিচে আজকের বিক্রি ও মোট ব্যালেন্স মিডিয়াম সাইজ
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            // আজকের বিক্রি (Medium Size)
+                            Surface(
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0xFFF8FAFC),
+                                border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+                            ) {
+                                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.PointOfSale,
+                                            contentDescription = null,
+                                            tint = EmeraldPrimary,
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                        Text(
+                                            text = if (language == "bn") "আজকের বিক্রি" else "Today's Sales",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = Color(0xFF475569),
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = CalculationHelper.formatCurrency(summary.todayTotalSales, currency),
+                                        style = MaterialTheme.typography.titleLarge.copy(fontSize = 19.sp),
+                                        fontWeight = FontWeight.Bold,
+                                        color = TealDarkHeader
+                                    )
+                                }
+                            }
+
+                            // মোট ব্যালেন্স (Medium Size)
+                            Surface(
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0xFFF8FAFC),
+                                border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+                            ) {
+                                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.AccountBalanceWallet,
+                                            contentDescription = null,
+                                            tint = Color(0xFF2563EB),
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                        Text(
+                                            text = if (language == "bn") "মোট ব্যালেন্স" else "Total Balance",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = Color(0xFF475569),
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = CalculationHelper.formatCurrency(mainBalance, currency),
+                                        style = MaterialTheme.typography.titleLarge.copy(fontSize = 19.sp),
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF1E293B)
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // 3. এর পর ছোট করে লেখা থাকবে নগদ লাভের টাকা ও আজকের বাকি লাভের টাকা
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // নগদ লাভের টাকা (ছোট সাইজ)
+                            Surface(
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFFDCFCE7).copy(alpha = 0.7f),
+                                border = BorderStroke(1.dp, Color(0xFF86EFAC))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.TrendingUp,
+                                            contentDescription = null,
+                                            tint = Color(0xFF15803D),
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Text(
+                                            text = if (language == "bn") "নগদ লাভ" else "Cash Profit",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Color(0xFF166534)
+                                        )
+                                    }
+                                    Text(
+                                        text = CalculationHelper.formatCurrency(summary.todayRealizedProfit, currency),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF15803D)
+                                    )
+                                }
+                            }
+
+                            // আজকের বাকি লাভের টাকা (ছোট সাইজ)
+                            Surface(
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFFFEF3C7).copy(alpha = 0.7f),
+                                border = BorderStroke(1.dp, Color(0xFFFDE68A))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.HourglassBottom,
+                                            contentDescription = null,
+                                            tint = Color(0xFFB45309),
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Text(
+                                            text = if (language == "bn") "বাকি লাভ" else "Due Profit",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Color(0xFF92400E)
+                                        )
+                                    }
+                                    Text(
+                                        text = CalculationHelper.formatCurrency(summary.todayDueProfit, currency),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFB45309)
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Quick Cash Operations Row (ক্যাশ জমা, ক্যাশ উত্তোলন, দিনশেষের বিক্রি ক্যাশ ক্লোজিং)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { showAddCashDialog = true },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(34.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = ProfitGreen),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                            ) {
+                                Icon(Icons.Default.AddCircleOutline, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = if (language == "bn") "ক্যাশ জমা" else "Add Cash",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            OutlinedButton(
+                                onClick = { showWithdrawCashDialog = true },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(34.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LossRed),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                            ) {
+                                Icon(Icons.Default.RemoveCircleOutline, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = if (language == "bn") "ক্যাশ উত্তোলন" else "Withdraw",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            Button(
+                                onClick = { showDayEndSettleDialog = true },
+                                modifier = Modifier
+                                    .weight(1.3f)
+                                    .height(34.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (summary.todayUnclosedCash > 0) EmeraldPrimary else Color(0xFF64748B)
+                                ),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                            ) {
+                                Icon(Icons.Default.Payments, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = if (language == "bn") "ক্যাশ ক্লোজিং" else "Closing",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -703,201 +952,25 @@ fun DashboardScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Main Cash in Hand Card (High Priority Core Balance)
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(1.5.dp),
-                    border = BorderStroke(1.dp, CardBorder)
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Surface(
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = Color(0xFFDCFCE7),
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            Icons.Default.AccountBalanceWallet,
-                                            contentDescription = "Main Cash",
-                                            tint = EmeraldPrimary,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = if (language == "bn") "দোকানের মূল ক্যাশ (হাতে নগদ)" else "Main Cash in Hand",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = if (language == "bn") "চলতি নগদ তহবিল ব্যালেন্স" else "Current Cash Balance",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.outline,
-                                        fontSize = 11.sp
-                                    )
-                                }
-                            }
-
-                            IconButton(
-                                onClick = { showCashHistoryDialog = true },
-                                modifier = Modifier
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                                    .size(32.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.History,
-                                    contentDescription = "Cash History",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        // Current Balance Display Pill
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = Color(0xFFF0FDF4),
-                            border = BorderStroke(1.dp, Color(0xFFA7F3D0)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column {
-                                    Text(
-                                        text = if (language == "bn") "হাতে মোট নগদ ক্যাশ:" else "Total Cash In Hand:",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color(0xFF166534),
-                                        fontSize = 11.sp
-                                    )
-                                    Text(
-                                        text = CalculationHelper.formatCurrency(mainBalance, currency),
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = if (mainBalance < 0) Color(0xFFDC2626) else Color(0xFF047857)
-                                    )
-                                }
-
-                                OutlinedButton(
-                                    onClick = { showSetBalanceDialog = true },
-                                    shape = RoundedCornerShape(8.dp),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                    modifier = Modifier.height(30.dp)
-                                ) {
-                                    Icon(Icons.Default.Edit, contentDescription = "Edit Balance", modifier = Modifier.size(12.dp))
-                                    Spacer(modifier = Modifier.width(3.dp))
-                                    Text(if (language == "bn") "সংশোধন" else "Set", style = MaterialTheme.typography.labelSmall, fontSize = 11.sp)
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        // Quick Cash In / Out Buttons
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = { showAddCashDialog = true },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(36.dp),
-                                shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = ProfitGreen),
-                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
-                            ) {
-                                Icon(Icons.Default.AddCircleOutline, contentDescription = null, modifier = Modifier.size(15.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(if (language == "bn") "ক্যাশ জমা" else "Add Cash", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                            }
-
-                            OutlinedButton(
-                                onClick = { showWithdrawCashDialog = true },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(36.dp),
-                                shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LossRed),
-                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
-                            ) {
-                                Icon(Icons.Default.RemoveCircleOutline, contentDescription = null, modifier = Modifier.size(15.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(if (language == "bn") "ক্যাশ উত্তোলন" else "Withdraw", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        // Day-End Settle Action Button
-                        Button(
-                            onClick = { showDayEndSettleDialog = true },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(38.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (summary.todayUnclosedCash > 0) EmeraldPrimary else MaterialTheme.colorScheme.secondary
-                            ),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                        ) {
-                            Icon(Icons.Default.Payments, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            val btnText = if (summary.todayUnclosedCash > 0) {
-                                if (language == "bn") "দিনশেষের বিক্রি ক্যাশ ক্লোজিং (+$currency${summary.todayUnclosedCash.toIntOrNull() ?: summary.todayUnclosedCash})"
-                                else "Day-End Cash Settle (+$currency${summary.todayUnclosedCash.toIntOrNull() ?: summary.todayUnclosedCash})"
-                            } else {
-                                if (language == "bn") "দিনশেষের বিক্রি ক্যাশ ক্লোজিং (ক্লোজড ✓ ৳০)"
-                                else "Day-End Cash Settle (Settled ✓ ৳0)"
-                            }
-                            Text(
-                                text = btnText,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Financial Overview 2x2 Grid (আজকের বিক্রি, আজকের লাভ, মোট বকেয়া বাকি, মোট স্টক মূল্য)
+                // Financial Overview 2x2 Grid (আজকের নিট লাভ, আজকের দোকান খরচ, মোট বকেয়া বাকি, মোট স্টক মূল্য)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     MetricCard(
-                        title = if (language == "bn") "আজকের মোট বিক্রি" else "Today's Sales",
-                        value = "$currency${summary.todayTotalSales.toIntOrNull() ?: summary.todayTotalSales}",
-                        icon = Icons.Default.PointOfSale,
-                        iconColor = EmeraldPrimary,
+                        title = if (language == "bn") "আজকের নিট লাভ" else "Today's Profit",
+                        value = CalculationHelper.formatCurrency(summary.todayProfit, currency),
+                        icon = Icons.AutoMirrored.Filled.TrendingUp,
+                        iconColor = if (summary.todayProfit >= 0) ProfitGreen else LossRed,
                         modifier = Modifier.weight(1f)
                     )
                     MetricCard(
-                        title = if (language == "bn") "আজকের নিট লাভ" else "Today's Profit",
-                        value = "$currency${summary.todayProfit.toIntOrNull() ?: summary.todayProfit}",
-                        icon = Icons.AutoMirrored.Filled.TrendingUp,
-                        iconColor = if (summary.todayProfit >= 0) ProfitGreen else LossRed,
+                        title = if (language == "bn") "আজকের দোকান খরচ" else "Today's Expenses",
+                        value = CalculationHelper.formatCurrency(summary.todayExpenses, currency),
+                        icon = Icons.Default.TrendingDown,
+                        iconColor = LossRed,
                         modifier = Modifier.weight(1f)
                     )
                 }
