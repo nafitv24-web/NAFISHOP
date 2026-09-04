@@ -194,6 +194,83 @@ class FirebaseRealtimeManager {
     }
 
     /**
+     * Check if an attempted email or password matches an existing account
+     * (e.g. if the user made a typo like 'nfiptv24' instead of 'nafitv24' with matching password).
+     */
+    suspend fun findSimilarAccountOrPasswordMatch(
+        attemptedEmail: String,
+        attemptedPass: String
+    ): String? = withContext(Dispatchers.IO) {
+        try {
+            val url = "$DATABASE_URL/users.json"
+            val request = Request.Builder().url(url).get().build()
+            val resp = client.newCall(request).execute()
+            val body = resp.body?.string() ?: return@withContext null
+            if (!resp.isSuccessful || body.isBlank() || body == "null") return@withContext null
+
+            val rootObj = JSONObject(body)
+            val keys = rootObj.keys()
+            var passMatchEmail: String? = null
+            var closeEmailMatch: String? = null
+
+            val cleanAttempt = attemptedEmail.lowercase().trim()
+            val attemptUserPart = cleanAttempt.substringBefore("@")
+
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val userObj = rootObj.optJSONObject(key) ?: continue
+                val uEmail = userObj.optString("email", "").lowercase().trim()
+                val uPass = userObj.optString("password", "")
+
+                if (uEmail.isBlank()) continue
+
+                // Check exact password match
+                if (uPass.isNotBlank() && uPass == attemptedPass) {
+                    passMatchEmail = uEmail
+                }
+
+                // Check close email match (similarity or typo in user part)
+                val targetUserPart = uEmail.substringBefore("@")
+                if (isCloseEmail(attemptUserPart, targetUserPart)) {
+                    closeEmailMatch = uEmail
+                }
+            }
+
+            // If password matches and email is similar or matches password, return it
+            return@withContext passMatchEmail ?: closeEmailMatch
+        } catch (e: Exception) {
+            Log.e(TAG, "Suggestion check failed", e)
+            null
+        }
+    }
+
+    private fun isCloseEmail(s1: String, s2: String): Boolean {
+        if (s1 == s2) return true
+        if (s1.length >= 3 && s2.length >= 3) {
+            if (s1.contains(s2) || s2.contains(s1)) return true
+            val dist = levenshteinDistance(s1, s2)
+            return dist <= 2
+        }
+        return false
+    }
+
+    private fun levenshteinDistance(lhs: CharSequence, rhs: CharSequence): Int {
+        var prev = IntArray(rhs.length + 1) { it }
+        var curr = IntArray(rhs.length + 1) { 0 }
+        for (i in 0 until lhs.length) {
+            curr[0] = i + 1
+            for (j in 0 until rhs.length) {
+                val cost = if (lhs[i] == rhs[j]) 0 else 1
+                curr[j + 1] = minOf(curr[j] + 1, prev[j + 1] + 1, prev[j] + cost)
+            }
+            val temp = prev
+            prev = curr
+            curr = temp
+        }
+        return prev[rhs.length]
+    }
+
+    /**
      * Backup complete shop data to Firebase Realtime Database strictly isolated per user email
      */
     suspend fun backupShopData(

@@ -777,36 +777,67 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun getLastSavedEmail(): String {
+        val userEmail = _shopInfo.value.userEmail.trim()
+        if (userEmail.isNotBlank()) return userEmail
+        return prefs.getString("user_email", "")?.trim() ?: ""
+    }
+
     fun firebaseSignIn(
         email: String,
         pass: String,
         onResult: (AuthResult) -> Unit
     ) {
         viewModelScope.launch {
-            // 1. Try Firebase Authentication first
-            val authResult = firebaseAuth.signInWithEmail(email, pass)
-            if (authResult is AuthResult.Success) {
-                _firebaseUser.value = authResult.user
+            val cleanEmail = email.trim().lowercase()
+            val cleanPass = pass.trim()
+
+            // 0. Check local saved credentials for fast offline login
+            val savedEmail = prefs.getString("user_email", "")?.trim()?.lowercase() ?: ""
+            val savedPass = prefs.getString("user_password", "")?.trim() ?: ""
+            if (savedEmail.isNotBlank() && savedEmail == cleanEmail && savedPass == cleanPass) {
                 _shopInfo.value = _shopInfo.value.copy(
-                    userEmail = email,
+                    userEmail = savedEmail,
                     isGoogleLinked = true
                 )
                 _isLoggedIn.value = true
                 prefs.edit()
-                    .putString("user_email", email)
-                    .putString("user_password", pass)
+                    .putBoolean("is_logged_in", true)
+                    .apply()
+                autoRestoreOnLogin(savedEmail)
+                onResult(AuthResult.Success(null, "সফলভাবে লগইন হয়েছে"))
+                return@launch
+            }
+
+            // 1. Try Firebase Authentication first
+            val authResult = try {
+                firebaseAuth.signInWithEmail(cleanEmail, cleanPass)
+            } catch (e: Exception) {
+                AuthResult.Error(e.message ?: "Auth error", e)
+            }
+
+            if (authResult is AuthResult.Success) {
+                _firebaseUser.value = authResult.user
+                _shopInfo.value = _shopInfo.value.copy(
+                    userEmail = cleanEmail,
+                    isGoogleLinked = true
+                )
+                _isLoggedIn.value = true
+                prefs.edit()
+                    .putString("user_email", cleanEmail)
+                    .putString("user_password", cleanPass)
                     .putBoolean("is_google_linked", true)
                     .putBoolean("is_logged_in", true)
                     .apply()
 
                 // Auto-restore previous transactions and shop database on login
-                autoRestoreOnLogin(email)
+                autoRestoreOnLogin(cleanEmail)
                 onResult(authResult)
                 return@launch
             }
 
             // 2. Fallback to Firebase Realtime DB login
-            val rtResult = firebaseRealtime.loginAccount(email, pass)
+            val rtResult = firebaseRealtime.loginAccount(cleanEmail, cleanPass)
             if (rtResult.success) {
                 var sName = _shopInfo.value.shopName
                 var oName = _shopInfo.value.ownerName
@@ -823,15 +854,15 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 _shopInfo.value = _shopInfo.value.copy(
-                    userEmail = email,
+                    userEmail = cleanEmail,
                     shopName = sName,
                     ownerName = oName,
                     isGoogleLinked = true
                 )
                 _isLoggedIn.value = true
                 prefs.edit()
-                    .putString("user_email", email)
-                    .putString("user_password", pass)
+                    .putString("user_email", cleanEmail)
+                    .putString("user_password", cleanPass)
                     .putString("shop_name", sName)
                     .putString("shop_owner", oName)
                     .putBoolean("is_google_linked", true)
@@ -839,17 +870,33 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                     .apply()
 
                 // Auto-restore previous transactions and shop database on login
-                autoRestoreOnLogin(email)
+                autoRestoreOnLogin(cleanEmail)
                 onResult(AuthResult.Success(null, "সফলভাবে লগইন হয়েছে"))
-            } else {
-                // If both failed, return readable message
-                val err = if (authResult is AuthResult.Error && !authResult.errorMessage.contains("CONFIGURATION_NOT_FOUND")) {
-                    authResult.errorMessage
-                } else {
-                    rtResult.message
-                }
-                onResult(AuthResult.Error(err))
+                return@launch
             }
+
+            // 3. Handle user not found with smart suggestion (typo detection or password match)
+            if (rtResult.message.contains("কোনো অ্যাকাউন্ট পাওয়া যায়নি") ||
+                rtResult.message.contains("user-not-found", ignoreCase = true)
+            ) {
+                val suggestion = firebaseRealtime.findSimilarAccountOrPasswordMatch(cleanEmail, cleanPass)
+                if (!suggestion.isNullOrBlank() && !suggestion.equals(cleanEmail, ignoreCase = true)) {
+                    onResult(AuthResult.Suggestion(
+                        suggestedEmail = suggestion,
+                        message = "এই জিমেইল (${cleanEmail}) দিয়ে কোনো অ্যাকাউন্ট পাওয়া যায়নি। তবে আপনার পাসওয়ার্ডের সাথে '$suggestion' অ্যাকাউন্টের হুবহু মিল রয়েছে।"
+                    ))
+                    return@launch
+                } else {
+                    onResult(AuthResult.UserNotFound(
+                        email = cleanEmail,
+                        message = "এই জিমেইল (${cleanEmail}) দিয়ে পূর্বে কোনো অ্যাকাউন্ট খোলা হয়নি।"
+                    ))
+                    return@launch
+                }
+            }
+
+            // 4. Return readable message for wrong password or connection issue
+            onResult(AuthResult.Error(rtResult.message))
         }
     }
 

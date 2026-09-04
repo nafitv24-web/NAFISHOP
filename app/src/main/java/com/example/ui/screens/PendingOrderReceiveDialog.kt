@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
@@ -30,6 +31,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.example.data.model.PendingOrder
 import com.example.data.model.PendingOrderItem
 import com.example.ui.components.toIntOrNull
@@ -60,6 +63,32 @@ fun PendingOrderReceiveDialog(
     onDeleteOrder: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
+    val activity = context as? android.app.Activity
+    val density = LocalDensity.current
+
+    val navBarInsetPx = remember(activity) {
+        activity?.window?.decorView?.let { decorView ->
+            ViewCompat.getRootWindowInsets(decorView)
+                ?.getInsets(WindowInsetsCompat.Type.navigationBars())?.bottom ?: 0
+        } ?: 0
+    }
+    val navBarBottomDp = with(density) { navBarInsetPx.toDp() }
+    val effectiveBottomPadding = maxOf(
+        WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
+        navBarBottomDp
+    )
+
+    val statusBarInsetPx = remember(activity) {
+        activity?.window?.decorView?.let { decorView ->
+            ViewCompat.getRootWindowInsets(decorView)
+                ?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
+        } ?: 0
+    }
+    val statusBarTopDp = with(density) { statusBarInsetPx.toDp() }
+    val effectiveTopPadding = maxOf(
+        WindowInsets.statusBars.asPaddingValues().calculateTopPadding(),
+        statusBarTopDp
+    )
 
     // Local mutable state for the items being received
     var editableItems by remember(order) {
@@ -90,7 +119,12 @@ fun PendingOrderReceiveDialog(
         Surface(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(10.dp),
+                .padding(
+                    start = 8.dp,
+                    end = 8.dp,
+                    top = maxOf(8.dp, effectiveTopPadding + 4.dp),
+                    bottom = maxOf(8.dp, effectiveBottomPadding + 8.dp)
+                ),
             shape = RoundedCornerShape(16.dp),
             color = MaterialTheme.colorScheme.background,
             tonalElevation = 4.dp
@@ -674,6 +708,22 @@ fun PendingOrdersListDialog(
     val waitingCount = remember(pendingOrders) { pendingOrders.count { it.status == "WAITING" } }
     val receivedCount = remember(pendingOrders) { pendingOrders.count { it.status == "RECEIVED" } }
 
+    val context = LocalContext.current
+    val activity = context as? android.app.Activity
+    val density = LocalDensity.current
+
+    val navBarInsetPx = remember(activity) {
+        activity?.window?.decorView?.let { decorView ->
+            ViewCompat.getRootWindowInsets(decorView)
+                ?.getInsets(WindowInsetsCompat.Type.navigationBars())?.bottom ?: 0
+        } ?: 0
+    }
+    val navBarBottomDp = with(density) { navBarInsetPx.toDp() }
+    val effectiveBottomPadding = maxOf(
+        WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
+        navBarBottomDp
+    )
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -681,7 +731,8 @@ fun PendingOrdersListDialog(
         Card(
             modifier = Modifier
                 .fillMaxWidth(0.95f)
-                .fillMaxHeight(0.88f),
+                .fillMaxHeight(0.88f)
+                .padding(bottom = effectiveBottomPadding),
             shape = RoundedCornerShape(18.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {

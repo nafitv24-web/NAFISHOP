@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -28,6 +29,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.example.data.model.CashLog
 import com.example.data.model.MasterCashEntry
 import com.example.ui.components.toIntOrNull
@@ -45,6 +48,33 @@ fun CashBookScreen(
     onBack: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
+    val activity = context as? android.app.Activity
+    val density = LocalDensity.current
+
+    val navBarInsetPx = remember(activity) {
+        activity?.window?.decorView?.let { decorView ->
+            ViewCompat.getRootWindowInsets(decorView)
+                ?.getInsets(WindowInsetsCompat.Type.navigationBars())?.bottom ?: 0
+        } ?: 0
+    }
+    val navBarBottomDp = with(density) { navBarInsetPx.toDp() }
+    val effectiveNavBottomPadding = maxOf(
+        WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
+        navBarBottomDp
+    )
+
+    val statusBarInsetPx = remember(activity) {
+        activity?.window?.decorView?.let { decorView ->
+            ViewCompat.getRootWindowInsets(decorView)
+                ?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
+        } ?: 0
+    }
+    val statusBarTopDp = with(density) { statusBarInsetPx.toDp() }
+    val effectiveTopPadding = maxOf(
+        WindowInsets.statusBars.asPaddingValues().calculateTopPadding(),
+        statusBarTopDp
+    )
+
     val cashLogs by viewModel.cashLogs.collectAsState()
     val allTransactions by viewModel.allTransactions.collectAsState()
     val dueLogs by viewModel.dueLogs.collectAsState()
@@ -368,6 +398,7 @@ fun CashBookScreen(
     Scaffold(
         topBar = {
             TopAppBar(
+                modifier = if (onBack != null) Modifier.padding(top = effectiveTopPadding) else Modifier,
                 title = {
                     if (isSearchActive) {
                         OutlinedTextField(
@@ -472,7 +503,7 @@ fun CashBookScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .navigationBarsPadding()
+                        .padding(bottom = effectiveNavBottomPadding)
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
@@ -490,16 +521,28 @@ fun CashBookScreen(
                             horizontalArrangement = Arrangement.SpaceAround,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Total Collected / জমা
+                            // Total Collected / জমা (Clickable to add deposit)
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { showIncomeDialog = true }
+                                    .padding(vertical = 2.dp)
                             ) {
-                                Text(
-                                    text = if (language == "bn") "মোট জমা" else "Total Received",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFF94A3B8)
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = if (language == "bn") "মোট জমা" else "Total Received",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFF94A3B8)
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Icon(
+                                        Icons.Default.AddCircle,
+                                        contentDescription = "Add Deposit",
+                                        tint = Color(0xFF4ADE80),
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = CalculationHelper.formatCurrency(totalIncome, currency),
@@ -511,16 +554,28 @@ fun CashBookScreen(
 
                             VerticalDivider(modifier = Modifier.height(26.dp), color = Color(0xFF475569))
 
-                            // Total Given / প্রদত্ত
+                            // Total Given / প্রদত্ত (Clickable to add expense)
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { showExpenseDialog = true }
+                                    .padding(vertical = 2.dp)
                             ) {
-                                Text(
-                                    text = if (language == "bn") "মোট প্রদত্ত" else "Total Given",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFF94A3B8)
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = if (language == "bn") "মোট প্রদত্ত" else "Total Given",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFF94A3B8)
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Icon(
+                                        Icons.Default.RemoveCircle,
+                                        contentDescription = "Add Expense",
+                                        tint = Color(0xFFF87171),
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = CalculationHelper.formatCurrency(totalExpense, currency),
@@ -572,38 +627,38 @@ fun CashBookScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        // Green "জমা" Button (Deposit / Cash In)
+                        // Green "+ জমা" Button (Deposit / Cash In)
                         Button(
                             onClick = { showIncomeDialog = true },
                             modifier = Modifier
                                 .weight(1f)
-                                .height(46.dp),
+                                .height(48.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = ProfitGreen),
                             shape = RoundedCornerShape(10.dp)
                         ) {
                             Icon(Icons.Default.ArrowDownward, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (language == "bn") "জমা" else "Deposit",
+                                text = if (language == "bn") "+ জমা" else "+ Deposit",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
                             )
                         }
 
-                        // Red "প্রদত্ত" Button (Expense / Cash Out)
+                        // Red "- প্রদত্ত" Button (Expense / Cash Out)
                         Button(
                             onClick = { showExpenseDialog = true },
                             modifier = Modifier
                                 .weight(1f)
-                                .height(46.dp),
+                                .height(48.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = LossRed),
                             shape = RoundedCornerShape(10.dp)
                         ) {
                             Icon(Icons.Default.ArrowUpward, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (language == "bn") "প্রদত্ত" else "Given",
+                                text = if (language == "bn") "- প্রদত্ত" else "- Given",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White

@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import android.widget.Toast
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -54,7 +55,8 @@ fun LoginScreen(
 
     var screenMode by remember { mutableStateOf(AuthScreenMode.SIGN_IN) }
 
-    var email by remember { mutableStateOf(shopInfo.userEmail.ifBlank { "" }) }
+    val lastSavedEmail = remember { viewModel.getLastSavedEmail() }
+    var email by remember { mutableStateOf(shopInfo.userEmail.ifBlank { lastSavedEmail.ifBlank { "" } }) }
     var password by remember { mutableStateOf("") }
     var shopName by remember { mutableStateOf(if (shopInfo.shopName != "আমার দোকান") shopInfo.shopName else "NAFI SHOP 24") }
     var ownerName by remember { mutableStateOf(shopInfo.ownerName.ifBlank { "দোকানদার" }) }
@@ -62,6 +64,8 @@ fun LoginScreen(
     var passwordVisible by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var successMessage by remember { mutableStateOf<String?>(null) }
+    var suggestedEmail by remember { mutableStateOf<String?>(null) }
+    var userNotFoundEmail by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
 
     var showForgotPasswordDialog by remember { mutableStateOf(false) }
@@ -264,6 +268,8 @@ fun LoginScreen(
                         onValueChange = {
                             email = it
                             errorMessage = null
+                            suggestedEmail = null
+                            userNotFoundEmail = null
                         },
                         label = { Text(if (isBn) "জিমেইল আইডি (Gmail Address)" else "Gmail Address") },
                         placeholder = { Text("yourname@gmail.com") },
@@ -285,6 +291,47 @@ fun LoginScreen(
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    // Quick chip to select last saved email if available and different
+                    if (lastSavedEmail.isNotBlank() && email != lastSavedEmail) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (isBn) "আগের জিমেইল:" else "Previous:",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF94A3B8)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFF0F172A),
+                                border = BorderStroke(1.dp, EmeraldPrimary.copy(alpha = 0.6f)),
+                                modifier = Modifier.clickable {
+                                    email = lastSavedEmail
+                                    errorMessage = null
+                                    suggestedEmail = null
+                                    userNotFoundEmail = null
+                                }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.History, contentDescription = null, tint = EmeraldPrimary, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = lastSavedEmail,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = EmeraldPrimary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(12.dp))
 
@@ -353,56 +400,214 @@ fun LoginScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                     }
 
-                    // Error Notification Banner with Instant Enter Option
+                    // Error Notification Banner with Instant Enter / Suggestion Options
                     if (errorMessage != null) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = LossRed.copy(alpha = 0.12f),
-                            border = CardDefaults.outlinedCardBorder(),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                        if (suggestedEmail != null) {
+                            // Smart Account Typo Suggestion Card
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = Color(0xFF1E293B),
+                                border = BorderStroke(1.5.dp, Color(0xFFF59E0B)),
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.Top
+                                Column(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = LossRed, modifier = Modifier.size(20.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Lightbulb, contentDescription = null, tint = Color(0xFFFBBF24), modifier = Modifier.size(22.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = if (isBn) "পূর্বের অ্যাকাউন্ট পাওয়া গেছে!" else "Existing Account Detected!",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFFFBBF24)
+                                        )
+                                    }
                                     Text(
                                         text = errorMessage!!,
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = LossRed
+                                        color = Color.White
                                     )
-                                }
-
-                                // Quick Enter Button if Firebase is not yet enabled in Firebase Console
-                                Button(
-                                    onClick = {
-                                        viewModel.updateShopInfo(
-                                            name = shopName.ifBlank { "NAFI SHOP 24" },
-                                            owner = ownerName.ifBlank { "মালিক" },
-                                            phone = "",
-                                            address = "",
-                                            currency = "৳",
-                                            email = email.ifBlank { "nafitv24@gmail.com" }
+                                    // Primary Action: Log in directly with suggested email
+                                    Button(
+                                        onClick = {
+                                            val targetEmail = suggestedEmail!!
+                                            email = targetEmail
+                                            suggestedEmail = null
+                                            errorMessage = null
+                                            isLoading = true
+                                            viewModel.firebaseSignIn(targetEmail, password) { res ->
+                                                isLoading = false
+                                                when (res) {
+                                                    is AuthResult.Success -> {
+                                                        Toast.makeText(context, if (isBn) "লগইন সফল!" else "Login successful!", Toast.LENGTH_SHORT).show()
+                                                        onLoginSuccess()
+                                                    }
+                                                    is AuthResult.Error -> {
+                                                        errorMessage = res.errorMessage
+                                                    }
+                                                    else -> {}
+                                                }
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
+                                        shape = RoundedCornerShape(10.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Icon(Icons.Default.Login, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = if (isBn) "${suggestedEmail} দিয়ে এখনই লগইন করুন" else "Sign In with $suggestedEmail",
+                                            fontWeight = FontWeight.Bold
                                         )
-                                        viewModel.loginAsGuest()
-                                        onLoginSuccess()
-                                    },
-                                    colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
-                                    shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier.fillMaxWidth()
+                                    }
+                                    // Secondary: Create new account with typed email
+                                    OutlinedButton(
+                                        onClick = {
+                                            val createEmail = email.trim().lowercase()
+                                            suggestedEmail = null
+                                            errorMessage = null
+                                            isLoading = true
+                                            viewModel.firebaseSignUp(createEmail, password, shopName, ownerName) { res ->
+                                                isLoading = false
+                                                when (res) {
+                                                    is AuthResult.Success -> {
+                                                        Toast.makeText(context, if (isBn) "অ্যাকাউন্ট সফলভাবে তৈরি হয়েছে!" else "Account created!", Toast.LENGTH_SHORT).show()
+                                                        onLoginSuccess()
+                                                    }
+                                                    is AuthResult.Error -> {
+                                                        errorMessage = res.errorMessage
+                                                    }
+                                                    else -> {}
+                                                }
+                                            }
+                                        },
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF94A3B8)),
+                                        border = BorderStroke(1.dp, Color(0xFF475569)),
+                                        shape = RoundedCornerShape(10.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = if (isBn) "${email.trim()} দিয়ে নতুন অ্যাকাউন্ট খুলুন" else "Create account with ${email.trim()}",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                }
+                            }
+                        } else if (userNotFoundEmail != null) {
+                            // User Not Found Card with 1-Tap Create Account Action
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = Color(0xFF1E293B),
+                                border = BorderStroke(1.5.dp, StockBlue),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    Icon(Icons.Default.Storefront, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Info, contentDescription = null, tint = StockBlue, modifier = Modifier.size(22.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = if (isBn) "অ্যাকাউন্ট তৈরি নেই" else "Account Not Found",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                    }
                                     Text(
-                                        text = if (isBn) "দোকানে প্রবেশ করুন (গুগল ড্রাইভ ও অফলাইন মোড)" else "Enter Shop (Drive & Offline Mode)",
-                                        fontWeight = FontWeight.Bold,
-                                        style = MaterialTheme.typography.labelLarge
+                                        text = errorMessage!!,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color(0xFFCBD5E1)
                                     )
+                                    Button(
+                                        onClick = {
+                                            val targetEmail = userNotFoundEmail!!
+                                            userNotFoundEmail = null
+                                            errorMessage = null
+                                            isLoading = true
+                                            viewModel.firebaseSignUp(targetEmail, password, shopName, ownerName) { res ->
+                                                isLoading = false
+                                                when (res) {
+                                                    is AuthResult.Success -> {
+                                                        Toast.makeText(context, if (isBn) "অ্যাকাউন্ট তৈরি ও লগইন সফল!" else "Account created & signed in!", Toast.LENGTH_SHORT).show()
+                                                        onLoginSuccess()
+                                                    }
+                                                    is AuthResult.Error -> {
+                                                        errorMessage = res.errorMessage
+                                                    }
+                                                    else -> {}
+                                                }
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
+                                        shape = RoundedCornerShape(10.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = if (isBn) "এই তথ্য দিয়ে নতুন অ্যাকাউন্ট খুলুন ও প্রবেশ করুন" else "Create Account & Enter Shop",
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
+                            // Standard Error card with Enter as Guest/Offline option
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = LossRed.copy(alpha = 0.12f),
+                                border = CardDefaults.outlinedCardBorder(),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.Top
+                                    ) {
+                                        Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = LossRed, modifier = Modifier.size(20.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = errorMessage!!,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = LossRed
+                                        )
+                                    }
+
+                                    // Quick Enter Button
+                                    Button(
+                                        onClick = {
+                                            viewModel.updateShopInfo(
+                                                name = shopName.ifBlank { "NAFI SHOP 24" },
+                                                owner = ownerName.ifBlank { "মালিক" },
+                                                phone = "",
+                                                address = "",
+                                                currency = "৳",
+                                                email = email.ifBlank { "nafitv24@gmail.com" }
+                                            )
+                                            viewModel.loginAsGuest()
+                                            onLoginSuccess()
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Icon(Icons.Default.Storefront, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = if (isBn) "দোকানে প্রবেশ করুন (গুগল ড্রাইভ ও অফলাইন মোড)" else "Enter Shop (Drive & Offline Mode)",
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.labelLarge
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -453,6 +658,8 @@ fun LoginScreen(
 
                             isLoading = true
                             errorMessage = null
+                            suggestedEmail = null
+                            userNotFoundEmail = null
                             successMessage = null
 
                             if (screenMode == AuthScreenMode.SIGN_UP) {
@@ -469,6 +676,14 @@ fun LoginScreen(
                                             Toast.makeText(context, successMessage, Toast.LENGTH_SHORT).show()
                                             onLoginSuccess()
                                         }
+                                        is AuthResult.Suggestion -> {
+                                            suggestedEmail = result.suggestedEmail
+                                            errorMessage = result.message
+                                        }
+                                        is AuthResult.UserNotFound -> {
+                                            userNotFoundEmail = result.email
+                                            errorMessage = result.message
+                                        }
                                         is AuthResult.Error -> {
                                             errorMessage = result.errorMessage
                                         }
@@ -482,9 +697,17 @@ fun LoginScreen(
                                     isLoading = false
                                     when (result) {
                                         is AuthResult.Success -> {
-                                            successMessage = if (isBn) "লগইন সফল! ড্রাইভ থেকে পূর্বের সকল লেনদেন ও খাতা লোড হচ্ছে..." else "Signed in! Restoring previous transactions from Drive..."
+                                            successMessage = if (isBn) "লগইন সফল! ক্লাউড থেকে পূর্বের সকল লেনদেন ও খাতা লোড হচ্ছে..." else "Signed in! Restoring previous transactions from Cloud..."
                                             Toast.makeText(context, successMessage, Toast.LENGTH_SHORT).show()
                                             onLoginSuccess()
+                                        }
+                                        is AuthResult.Suggestion -> {
+                                            suggestedEmail = result.suggestedEmail
+                                            errorMessage = result.message
+                                        }
+                                        is AuthResult.UserNotFound -> {
+                                            userNotFoundEmail = result.email
+                                            errorMessage = result.message
                                         }
                                         is AuthResult.Error -> {
                                             errorMessage = result.errorMessage
@@ -656,6 +879,7 @@ fun LoginScreen(
                                 is AuthResult.Error -> {
                                     Toast.makeText(context, res.errorMessage, Toast.LENGTH_LONG).show()
                                 }
+                                else -> {}
                             }
                         }
                     },

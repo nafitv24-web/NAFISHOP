@@ -13,6 +13,8 @@ import kotlin.coroutines.resumeWithException
 
 sealed class AuthResult {
     data class Success(val user: FirebaseUser? = null, val message: String = "সফল হয়েছে") : AuthResult()
+    data class Suggestion(val suggestedEmail: String, val message: String) : AuthResult()
+    data class UserNotFound(val email: String, val message: String) : AuthResult()
     data class Error(val errorMessage: String, val rawException: Throwable? = null) : AuthResult()
 }
 

@@ -27,6 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -34,6 +35,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import coil.compose.AsyncImage
 import com.example.data.model.Customer
 import com.example.data.model.DueLog
@@ -897,6 +900,21 @@ fun AddLedgerTransactionDialog(
         }
     }
 
+    val activity = context as? android.app.Activity
+    val density = LocalDensity.current
+
+    val navBarInsetPx = remember(activity) {
+        activity?.window?.decorView?.let { decorView ->
+            ViewCompat.getRootWindowInsets(decorView)
+                ?.getInsets(WindowInsetsCompat.Type.navigationBars())?.bottom ?: 0
+        } ?: 0
+    }
+    val navBarBottomDp = with(density) { navBarInsetPx.toDp() }
+    val effectiveBottomPadding = maxOf(
+        WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
+        navBarBottomDp
+    )
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -907,6 +925,7 @@ fun AddLedgerTransactionDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight(0.92f)
+                .padding(bottom = effectiveBottomPadding)
         ) {
             Column(
                 modifier = Modifier
