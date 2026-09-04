@@ -20,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
@@ -112,6 +113,97 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _isLoggedIn = MutableStateFlow(prefs.getBoolean("is_logged_in", false) || firebaseAuth.isUserLoggedIn)
     val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
+
+    // Pending Orders (অপেক্ষমান অর্ডার সমূহ)
+    private val _pendingOrders = MutableStateFlow<List<PendingOrder>>(emptyList())
+    val pendingOrders: StateFlow<List<PendingOrder>> = _pendingOrders.asStateFlow()
+
+    private fun loadSavedPendingOrders() {
+        try {
+            val jsonStr = prefs.getString("saved_pending_orders", null)
+            if (!jsonStr.isNullOrBlank()) {
+                val array = JSONArray(jsonStr)
+                val list = mutableListOf<PendingOrder>()
+                for (i in 0 until array.length()) {
+                    val obj = array.getJSONObject(i)
+                    val itemsArray = obj.optJSONArray("items") ?: JSONArray()
+                    val itemsList = mutableListOf<PendingOrderItem>()
+                    for (j in 0 until itemsArray.length()) {
+                        val itemObj = itemsArray.getJSONObject(j)
+                        itemsList.add(
+                            PendingOrderItem(
+                                productId = itemObj.optLong("productId"),
+                                productName = itemObj.optString("productName"),
+                                productBarcode = itemObj.optString("productBarcode"),
+                                category = itemObj.optString("category"),
+                                unit = itemObj.optString("unit", "পিছ"),
+                                orderedQuantity = itemObj.optDouble("orderedQuantity", 0.0),
+                                receivedQuantity = itemObj.optDouble("receivedQuantity", itemObj.optDouble("orderedQuantity", 0.0)),
+                                buyPrice = itemObj.optDouble("buyPrice", 0.0),
+                                sellPrice = itemObj.optDouble("sellPrice", 0.0),
+                                isNotFound = itemObj.optBoolean("isNotFound", false),
+                                note = itemObj.optString("note", "")
+                            )
+                        )
+                    }
+                    list.add(
+                        PendingOrder(
+                            id = obj.optString("id", UUID.randomUUID().toString()),
+                            orderNumber = obj.optString("orderNumber"),
+                            supplierName = obj.optString("supplierName"),
+                            timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
+                            status = obj.optString("status", "WAITING"),
+                            items = itemsList,
+                            orderNote = obj.optString("orderNote"),
+                            receivedTimestamp = if (obj.has("receivedTimestamp") && !obj.isNull("receivedTimestamp")) obj.optLong("receivedTimestamp") else null
+                        )
+                    )
+                }
+                _pendingOrders.value = list
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun persistPendingOrders() {
+        try {
+            val array = JSONArray()
+            for (order in _pendingOrders.value) {
+                val obj = JSONObject()
+                obj.put("id", order.id)
+                obj.put("orderNumber", order.orderNumber)
+                obj.put("supplierName", order.supplierName)
+                obj.put("timestamp", order.timestamp)
+                obj.put("status", order.status)
+                obj.put("orderNote", order.orderNote)
+                if (order.receivedTimestamp != null) {
+                    obj.put("receivedTimestamp", order.receivedTimestamp)
+                }
+                val itemsArray = JSONArray()
+                for (item in order.items) {
+                    val itemObj = JSONObject()
+                    itemObj.put("productId", item.productId)
+                    itemObj.put("productName", item.productName)
+                    itemObj.put("productBarcode", item.productBarcode)
+                    itemObj.put("category", item.category)
+                    itemObj.put("unit", item.unit)
+                    itemObj.put("orderedQuantity", item.orderedQuantity)
+                    itemObj.put("receivedQuantity", item.receivedQuantity)
+                    itemObj.put("buyPrice", item.buyPrice)
+                    itemObj.put("sellPrice", item.sellPrice)
+                    itemObj.put("isNotFound", item.isNotFound)
+                    itemObj.put("note", item.note)
+                    itemsArray.put(itemObj)
+                }
+                obj.put("items", itemsArray)
+                array.put(obj)
+            }
+            prefs.edit().putString("saved_pending_orders", array.toString()).apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 
     private val _shopInfo = MutableStateFlow(
         ShopInfo(
@@ -360,6 +452,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         adminPin = _adminPin.asStateFlow()
 
         loadSavedNotices()
+        loadSavedPendingOrders()
         checkForUpdates(manualCheck = false)
         viewModelScope.launch {
             repository.deduplicateAndMergeCustomers()
@@ -988,6 +1081,79 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                 withdrawCashFromMainBalance(totalCost, "পণ্য ক্রয়: $label")
             }
             triggerInstantDriveBackup("স্টক ইন")
+        }
+    }
+
+    // Pending Order Operations
+    fun savePendingOrder(order: PendingOrder) {
+        val current = _pendingOrders.value.toMutableList()
+        val index = current.indexOfFirst { it.id == order.id }
+        if (index >= 0) {
+            current[index] = order
+        } else {
+            current.add(0, order) // Add to top
+        }
+        _pendingOrders.value = current
+        persistPendingOrders()
+        triggerInstantDriveBackup("অর্ডার সংরক্ষণ: ${order.orderNumber}")
+    }
+
+    fun deletePendingOrder(orderId: String) {
+        _pendingOrders.value = _pendingOrders.value.filter { it.id != orderId }
+        persistPendingOrders()
+        triggerInstantDriveBackup("অর্ডার মুছে ফেলা")
+    }
+
+    /**
+     * Completes stock-in for a pending order:
+     * - Only items with isNotFound == false and receivedQuantity > 0 will be stocked in
+     * - Automatically updates buyPrice/sellPrice in the catalog if specified
+     * - Updates PendingOrder status to "RECEIVED" and records received timestamp
+     */
+    fun receivePendingOrder(
+        order: PendingOrder,
+        receivedItems: List<PendingOrderItem>,
+        onComplete: ((Double, Int, Int) -> Unit)? = null // totalCost, receivedCount, notFoundCount
+    ) {
+        viewModelScope.launch {
+            var totalCostAccumulator = 0.0
+            var receivedCount = 0
+            var notFoundCount = 0
+
+            for (item in receivedItems) {
+                if (item.isNotFound || item.receivedQuantity <= 0.0) {
+                    notFoundCount++
+                    continue
+                }
+
+                val itemBuyPrice = if (item.buyPrice > 0) item.buyPrice else null
+                val itemSellPrice = if (item.sellPrice > 0) item.sellPrice else null
+                val note = "অর্ডার #${order.orderNumber} স্টক-ইন"
+
+                val cost = repository.recordStockIn(
+                    productId = item.productId,
+                    quantity = item.receivedQuantity,
+                    buyPrice = itemBuyPrice,
+                    sellPrice = itemSellPrice,
+                    note = note
+                )
+                totalCostAccumulator += cost
+                receivedCount++
+            }
+
+            if (totalCostAccumulator > 0) {
+                withdrawCashFromMainBalance(totalCostAccumulator, "অর্ডার #${order.orderNumber} স্টক-ইন ক্রয় বিল")
+            }
+
+            // Update order status to RECEIVED
+            val updatedOrder = order.copy(
+                status = "RECEIVED",
+                items = receivedItems,
+                receivedTimestamp = System.currentTimeMillis()
+            )
+            savePendingOrder(updatedOrder)
+            triggerInstantDriveBackup("অর্ডার স্টক-ইন সম্পন্ন: ${order.orderNumber}")
+            onComplete?.invoke(totalCostAccumulator, receivedCount, notFoundCount)
         }
     }
 

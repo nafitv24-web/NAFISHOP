@@ -54,7 +54,9 @@ fun LowStockOrderDialog(
     shopName: String,
     shopPhone: String,
     onDismiss: () -> Unit,
-    onQuickStockIn: (List<ReorderItem>) -> Unit
+    onQuickStockIn: (List<ReorderItem>) -> Unit,
+    onSavePendingOrder: ((com.example.data.model.PendingOrder) -> Unit)? = null,
+    onOpenWaitingOrders: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
@@ -88,6 +90,8 @@ fun LowStockOrderDialog(
     var showAddProductSheet by remember { mutableStateOf(false) }
     var addProductSearchQuery by remember { mutableStateOf("") }
     var showStockInConfirmDialog by remember { mutableStateOf(false) }
+    var itemToEditPrice by remember { mutableStateOf<ReorderItem?>(null) }
+    var showWaitingSavedDialog by remember { mutableStateOf(false) }
 
     val activeSelectedItems = remember(orderItems, selectedProductIds) {
         orderItems.filter { selectedProductIds.contains(it.product.id) && it.orderQuantity > 0 }
@@ -437,19 +441,39 @@ fun LowStockOrderDialog(
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        // Unit Buy Price
-                                        Column {
-                                            Text(
-                                                text = if (language == "bn") "ক্রয় দর" else "Buy Price",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.outline,
-                                                fontSize = 10.sp
-                                            )
-                                            Text(
-                                                text = "$currency${item.unitPrice.toIntOrNull() ?: item.unitPrice}",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = FontWeight.Bold
-                                            )
+                                        // Unit Buy Price (Clickable to edit, support 00)
+                                        Surface(
+                                            onClick = { itemToEditPrice = item },
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                            modifier = Modifier.padding(end = 4.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column {
+                                                    Text(
+                                                        text = if (language == "bn") "ক্রয় দর (এডিট)" else "Buy Price",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.outline,
+                                                        fontSize = 10.sp
+                                                    )
+                                                    Text(
+                                                        text = if (item.unitPrice > 0.0) "$currency${item.unitPrice.toIntOrNull() ?: item.unitPrice}" else "00",
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = if (item.unitPrice > 0.0) MaterialTheme.colorScheme.onSurface else LossRed
+                                                    )
+                                                }
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Icon(
+                                                    Icons.Default.Edit,
+                                                    contentDescription = "Edit Price",
+                                                    modifier = Modifier.size(12.dp),
+                                                    tint = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
                                         }
 
                                         // Quantity Counter (Minus, Value Input, Plus)
@@ -642,7 +666,7 @@ fun LowStockOrderDialog(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Action Buttons: PDF, WhatsApp/SMS, Copy, Stock-in
+                // Action Buttons Row 1: Order PDF & WhatsApp/Share
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -730,7 +754,7 @@ fun LowStockOrderDialog(
                         Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp), tint = EmeraldPrimary)
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = if (language == "bn") "মেসেজ / শেয়ার" else "Share Msg",
+                            text = if (language == "bn") "মেসেজ শেয়ার" else "Share Msg",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = EmeraldPrimary
@@ -772,8 +796,75 @@ fun LowStockOrderDialog(
                             fontWeight = FontWeight.Bold
                         )
                     }
+                }
 
-                    // Quick Stock In Button
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Action Buttons Row 2: "অর্ডার করুন (ওয়েটিং)" & "সরাসরি স্টক-ইন"
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // Place Order / Save as Waiting Order button
+                    Button(
+                        onClick = {
+                            if (activeSelectedItems.isEmpty()) {
+                                Toast.makeText(
+                                    context,
+                                    if (language == "bn") "অনুগ্রহ করে অন্তত একটি পণ্য নির্বাচন করুন" else "Please select at least one item",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                return@Button
+                            }
+
+                            val pendingItems = activeSelectedItems.map { item ->
+                                com.example.data.model.PendingOrderItem(
+                                    productId = item.product.id,
+                                    productName = item.product.name,
+                                    productBarcode = item.product.barcode,
+                                    unit = item.product.unit,
+                                    orderedQuantity = item.orderQuantity,
+                                    receivedQuantity = item.orderQuantity,
+                                    buyPrice = item.unitPrice,
+                                    sellPrice = item.product.sellPrice,
+                                    isNotFound = false
+                                )
+                            }
+
+                            val orderNumber = ((System.currentTimeMillis() % 100000).toInt() + 1000).toString()
+                            val newOrder = com.example.data.model.PendingOrder(
+                                id = UUID.randomUUID().toString(),
+                                orderNumber = orderNumber,
+                                timestamp = System.currentTimeMillis(),
+                                supplierName = supplierName.trim(),
+                                orderNote = orderNote.trim(),
+                                items = pendingItems,
+                                status = "WAITING"
+                            )
+
+                            if (onSavePendingOrder != null) {
+                                onSavePendingOrder(newOrder)
+                            }
+
+                            showWaitingSavedDialog = true
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF4F46E5) // Indigo
+                        ),
+                        modifier = Modifier.weight(1.2f),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp)
+                    ) {
+                        Icon(Icons.Default.HourglassTop, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (language == "bn") "অর্ডার করুন (ওয়েটিং)" else "Place Order (Wait)",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    // Direct Quick Stock In Button
                     FilledTonalButton(
                         onClick = {
                             if (activeSelectedItems.isEmpty()) {
@@ -797,7 +888,7 @@ fun LowStockOrderDialog(
                         Icon(Icons.Default.Inventory2, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF1D4ED8))
                         Spacer(modifier = Modifier.width(3.dp))
                         Text(
-                            text = if (language == "bn") "স্টক-ইন" else "Receive",
+                            text = if (language == "bn") "সরাসরি স্টক-ইন" else "Direct Stock In",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF1D4ED8)
@@ -942,6 +1033,124 @@ fun LowStockOrderDialog(
             dismissButton = {
                 TextButton(onClick = { showStockInConfirmDialog = false }) {
                     Text(if (language == "bn") "বাতিল" else "Cancel")
+                }
+            }
+        )
+    }
+
+    // Modal to Edit Buy Price for a specific product item (supports 00)
+    itemToEditPrice?.let { currentItem ->
+        var editPriceText by remember(currentItem.unitPrice) {
+            mutableStateOf(if (currentItem.unitPrice > 0) (currentItem.unitPrice.toIntOrNull() ?: currentItem.unitPrice).toString() else "00")
+        }
+
+        AlertDialog(
+            onDismissRequest = { itemToEditPrice = null },
+            title = {
+                Text(
+                    text = "${currentItem.product.name} - ${if (language == "bn") "ক্রয় দর এডিট" else "Edit Buy Price"}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = if (language == "bn") "অনেক সময় পণ্যের দাম বাড়ে বা কমে, অথবা জানা থাকে না। না জানা থাকলে 00 দিন।" else "Adjust buy rate if changed, or enter 00 if unknown.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = editPriceText,
+                        onValueChange = { editPriceText = it },
+                        label = { Text(if (language == "bn") "ক্রয় দর ($currency)" else "Buy Price ($currency)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val parsed = if (editPriceText.trim() == "00" || editPriceText.trim() == "0") 0.0 else (editPriceText.toDoubleOrNull() ?: 0.0)
+                        orderItems = orderItems.map {
+                            if (it.product.id == currentItem.product.id) it.copy(unitPrice = parsed) else it
+                        }
+                        itemToEditPrice = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
+                ) {
+                    Text(if (language == "bn") "সংরক্ষণ করুন" else "Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { itemToEditPrice = null }) {
+                    Text(if (language == "bn") "বাতিল" else "Cancel")
+                }
+            }
+        )
+    }
+
+    // Modal when order is successfully placed in Waiting
+    if (showWaitingSavedDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showWaitingSavedDialog = false
+                onDismiss()
+            },
+            icon = { Icon(Icons.Default.HourglassTop, contentDescription = null, tint = Color(0xFF4F46E5), modifier = Modifier.size(36.dp)) },
+            title = {
+                Text(
+                    text = if (language == "bn") "অর্ডারটি সফলভাবে ওয়েটিং-এ রাখা হয়েছে!" else "Order Placed in Waiting!",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = if (language == "bn") {
+                            "আপনার অর্ডারটি 'ওয়েটিং' তালিকায় সংরক্ষিত হয়েছে। যখন মাল আপনার দোকানে আসবে, তখন স্টক-ইন অপশনে গিয়ে এই অর্ডারটি চেক করে রিসিভ করতে পারবেন।"
+                        } else {
+                            "Your order is now in the waiting list. When products arrive, open Stock-In to verify received quantities and stock them in."
+                        },
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = if (language == "bn") {
+                            "💡 ডেলিভারিতে কোনো মাল কম আসলে বা না আসলে তখন পরিমাণ এডিট করতে পারবেন বা 'পাওয়া যায়নি' মার্ক করতে পারবেন।"
+                        } else {
+                            "💡 You can edit quantities or mark missing items as 'Not Found' when receiving."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF4F46E5)
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showWaitingSavedDialog = false
+                        onDismiss()
+                        if (onOpenWaitingOrders != null) {
+                            onOpenWaitingOrders()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4F46E5))
+                ) {
+                    Text(if (language == "bn") "ওয়েটিং তালিকা দেখুন" else "View Waiting Orders")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showWaitingSavedDialog = false
+                        onDismiss()
+                    }
+                ) {
+                    Text(if (language == "bn") "ঠিক আছে" else "OK")
                 }
             }
         )

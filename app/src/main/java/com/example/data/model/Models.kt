@@ -189,3 +189,28 @@ data class ReorderItem(
     val note: String = ""
 )
 
+data class PendingOrderItem(
+    val productId: Long,
+    val productName: String,
+    val productBarcode: String = "",
+    val category: String = "",
+    val unit: String = "পিছ",
+    val orderedQuantity: Double,
+    val receivedQuantity: Double = orderedQuantity,
+    val buyPrice: Double = 0.0,
+    val sellPrice: Double = 0.0,
+    val isNotFound: Boolean = false, // true = পাওয়া যায়নি
+    val note: String = ""
+)
+
+data class PendingOrder(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val orderNumber: String = "",
+    val supplierName: String = "",
+    val timestamp: Long = System.currentTimeMillis(),
+    val status: String = "WAITING", // "WAITING" (অপেক্ষমান), "RECEIVED" (স্টক-ইন সম্পন্ন), "CANCELLED" (বাতিল)
+    val items: List<PendingOrderItem> = emptyList(),
+    val orderNote: String = "",
+    val receivedTimestamp: Long? = null
+)
+

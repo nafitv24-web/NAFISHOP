@@ -1791,6 +1791,224 @@ object PdfGenerator {
         return savePdfToFile(context, pdfDocument, "Stock_Reorder_$timestamp.pdf")
     }
 
+    /**
+     * Generates a final Stock-In / Received Order Memo PDF:
+     * - Shows received items with received quantities and buy rates
+     * - Clearly marks items that were not found / missing as "পাওয়া যায়নি" (NOT FOUND)
+     */
+    fun generateReceivedOrderPdf(
+        context: Context,
+        order: com.example.data.model.PendingOrder,
+        shopName: String,
+        currency: String = "৳"
+    ): File? {
+        val pdfDocument = PdfDocument()
+        var pageNumber = 1
+        var pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+        var page = pdfDocument.startPage(pageInfo)
+        var canvas = page.canvas
+
+        val titlePaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 17f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(15, 23, 42)
+            textAlign = Paint.Align.CENTER
+        }
+        val subPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 9.5f
+            color = Color.rgb(71, 85, 105)
+            textAlign = Paint.Align.CENTER
+        }
+        val boldPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 9.5f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(30, 41, 59)
+        }
+        val textPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 9.5f
+            color = Color.rgb(51, 65, 85)
+        }
+        val notFoundPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 9.5f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(220, 38, 38) // Red
+        }
+        val notFoundBgPaint = Paint().apply {
+            color = Color.rgb(254, 242, 242) // Light red tint
+            style = Paint.Style.FILL
+        }
+        val linePaint = Paint().apply {
+            color = Color.rgb(226, 232, 240)
+            strokeWidth = 1f
+            style = Paint.Style.STROKE
+        }
+        val headerPaint = Paint().apply {
+            color = Color.rgb(219, 234, 254) // Soft blue header
+            style = Paint.Style.FILL
+        }
+
+        val receivedItems = order.items.filter { !it.isNotFound && it.receivedQuantity > 0 }
+        val notFoundItems = order.items.filter { it.isNotFound || it.receivedQuantity <= 0 }
+        val totalReceivedPcs = receivedItems.sumOf { it.receivedQuantity }
+        val totalReceivedCost = receivedItems.sumOf { it.receivedQuantity * it.buyPrice }
+
+        fun drawHeaderAndSummary(drawSummaryBox: Boolean) {
+            val topBarPaint = Paint().apply { color = Color.rgb(37, 99, 235); style = Paint.Style.FILL } // Blue
+            canvas.drawRect(0f, 0f, 595f, 12f, topBarPaint)
+
+            var y = 40f
+            canvas.drawText(shopName, 297.5f, y, titlePaint)
+            y += 16f
+            canvas.drawText("পণ্য স্টক-ইন ও প্রাপ্তি চালান (Stock-In & Receipt Memo)", 297.5f, y, subPaint)
+            y += 14f
+            val genDate = SimpleDateFormat("dd MMMM yyyy, hh:mm a", Locale.getDefault()).format(Date(order.receivedTimestamp ?: System.currentTimeMillis()))
+            val supText = if (order.supplierName.isNotBlank()) " | সরবরাহকারী: ${order.supplierName}" else ""
+            canvas.drawText("অর্ডার #${order.orderNumber} | তারিখ: $genDate$supText | পৃষ্ঠা: $pageNumber", 297.5f, y, subPaint)
+
+            if (drawSummaryBox) {
+                y += 18f
+                val boxPaint = Paint().apply { color = Color.rgb(240, 249, 255); style = Paint.Style.FILL }
+                canvas.drawRoundRect(RectF(35f, y, 560f, y + 42f), 6f, 6f, boxPaint)
+                canvas.drawRoundRect(RectF(35f, y, 560f, y + 42f), 6f, 6f, linePaint)
+
+                y += 18f
+                canvas.drawText("অর্ডার পণ্য: ${order.items.size} টি", 50f, y, boldPaint)
+                canvas.drawText("প্রাপ্ত পণ্য: ${receivedItems.size} টি (${totalReceivedPcs.toIntOrNull() ?: totalReceivedPcs} পিছ)", 175f, y, boldPaint)
+                if (notFoundItems.isNotEmpty()) {
+                    canvas.drawText("পাওয়া যায়নি: ${notFoundItems.size} টি", 345f, y, notFoundPaint)
+                }
+                val totalCostStr = if (totalReceivedCost % 1.0 == 0.0) totalReceivedCost.toInt().toString() else "%.2f".format(totalReceivedCost)
+                canvas.drawText("মোট বিল: $currency$totalCostStr", 450f, y, boldPaint)
+
+                if (order.orderNote.isNotBlank()) {
+                    y += 15f
+                    val notePaint = Paint().apply {
+                        isAntiAlias = true
+                        textSize = 8.5f
+                        color = Color.rgb(30, 58, 138)
+                    }
+                    val nText = if (order.orderNote.length > 90) order.orderNote.take(88) + ".." else order.orderNote
+                    canvas.drawText("নোট: $nText", 50f, y, notePaint)
+                }
+            }
+        }
+
+        fun drawTableHeader(y: Float): Float {
+            canvas.drawRect(RectF(35f, y, 560f, y + 20f), headerPaint)
+            canvas.drawRect(RectF(35f, y, 560f, y + 20f), linePaint)
+
+            canvas.drawText("নং", 42f, y + 14f, boldPaint)
+            canvas.drawText("পণ্যের নাম ও বিবরণ", 70f, y + 14f, boldPaint)
+            canvas.drawText("অর্ডার", 250f, y + 14f, boldPaint)
+            canvas.drawText("প্রাপ্ত (পিছ)", 310f, y + 14f, boldPaint)
+            canvas.drawText("ক্রয় দর", 385f, y + 14f, boldPaint)
+            canvas.drawText("মোট মূল্য", 445f, y + 14f, boldPaint)
+            canvas.drawText("অবস্থা", 510f, y + 14f, boldPaint)
+            return y + 28f
+        }
+
+        drawHeaderAndSummary(drawSummaryBox = true)
+        var y = if (order.orderNote.isNotBlank()) 140f else 125f
+        y = drawTableHeader(y)
+
+        val rowBgAlt = Paint().apply { color = Color.rgb(248, 250, 252); style = Paint.Style.FILL }
+
+        for ((index, item) in order.items.withIndex()) {
+            if (y > 750f) {
+                drawSponsorFooter(canvas, 802f, "Stock-In & Receipt Memo")
+                pdfDocument.finishPage(page)
+                pageNumber++
+                pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+                page = pdfDocument.startPage(pageInfo)
+                canvas = page.canvas
+                drawHeaderAndSummary(drawSummaryBox = false)
+                y = 90f
+                y = drawTableHeader(y)
+            }
+
+            val isMissing = item.isNotFound || item.receivedQuantity <= 0
+            if (isMissing) {
+                canvas.drawRect(RectF(35f, y - 10f, 560f, y + 6f), notFoundBgPaint)
+            } else if (index % 2 == 1) {
+                canvas.drawRect(RectF(35f, y - 10f, 560f, y + 6f), rowBgAlt)
+            }
+
+            canvas.drawText("${index + 1}", 42f, y, textPaint)
+            val nameStr = if (item.productName.length > 25) item.productName.take(23) + ".." else item.productName
+            canvas.drawText(nameStr, 70f, y, if (isMissing) notFoundPaint else boldPaint)
+            
+            // Ordered quantity
+            val orderedQtyStr = "${item.orderedQuantity.toIntOrNull() ?: item.orderedQuantity} ${item.unit}"
+            canvas.drawText(orderedQtyStr, 250f, y, textPaint)
+
+            // Received quantity
+            if (isMissing) {
+                canvas.drawText("0 ${item.unit}", 310f, y, notFoundPaint)
+                val buyPriceStr = if (item.buyPrice > 0) "${item.buyPrice.toIntOrNull() ?: item.buyPrice}" else "00"
+                canvas.drawText(buyPriceStr, 385f, y, textPaint)
+                canvas.drawText("0", 445f, y, textPaint)
+                canvas.drawText("পাওয়া যায়নি", 505f, y, notFoundPaint)
+            } else {
+                val rcvQtyStr = "${item.receivedQuantity.toIntOrNull() ?: item.receivedQuantity} ${item.unit}"
+                canvas.drawText(rcvQtyStr, 310f, y, boldPaint)
+                val buyPriceStr = if (item.buyPrice > 0) "${item.buyPrice.toIntOrNull() ?: item.buyPrice}" else "00"
+                canvas.drawText(buyPriceStr, 385f, y, textPaint)
+                val itemTotal = item.receivedQuantity * item.buyPrice
+                val itemTotalStr = if (itemTotal % 1.0 == 0.0) itemTotal.toInt().toString() else "%.1f".format(itemTotal)
+                canvas.drawText(itemTotalStr, 445f, y, boldPaint)
+                canvas.drawText("প্রাপ্ত", 515f, y, boldPaint)
+            }
+
+            y += 16f
+        }
+
+        // Totals bar
+        if (y > 730f) {
+            drawSponsorFooter(canvas, 802f, "Stock-In & Receipt Memo")
+            pdfDocument.finishPage(page)
+            pageNumber++
+            pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+            page = pdfDocument.startPage(pageInfo)
+            canvas = page.canvas
+            drawHeaderAndSummary(drawSummaryBox = false)
+            y = 90f
+        }
+
+        y += 8f
+        val grandTotalPaint = Paint().apply { color = Color.rgb(219, 234, 254); style = Paint.Style.FILL }
+        canvas.drawRoundRect(RectF(35f, y, 560f, y + 26f), 4f, 4f, grandTotalPaint)
+        canvas.drawRoundRect(RectF(35f, y, 560f, y + 26f), 4f, 4f, linePaint)
+        val totalCostStr = if (totalReceivedCost % 1.0 == 0.0) totalReceivedCost.toInt().toString() else "%.2f".format(totalReceivedCost)
+        canvas.drawText("স্টক-ইন মোট: ${totalReceivedPcs.toIntOrNull() ?: totalReceivedPcs} পিছ (${receivedItems.size} পণ্য)", 50f, y + 17f, boldPaint)
+        canvas.drawText("মোট ক্রয় বিল: $currency$totalCostStr", 380f, y + 17f, boldPaint)
+
+        // Signature blocks
+        y += 48f
+        if (y < 750f) {
+            val sigPaint = Paint().apply {
+                isAntiAlias = true
+                textSize = 9f
+                color = Color.rgb(100, 116, 139)
+            }
+            canvas.drawLine(50f, y, 180f, y, linePaint)
+            canvas.drawText("গ্রহীতা / দোকানদারের স্বাক্ষর", 65f, y + 12f, sigPaint)
+
+            canvas.drawLine(415f, y, 545f, y, linePaint)
+            canvas.drawText("ডেলিভারি প্রদানকারীর স্বাক্ষর", 420f, y + 12f, sigPaint)
+        }
+
+        drawSponsorFooter(canvas, 802f, "Stock-In & Receipt Memo")
+        pdfDocument.finishPage(page)
+
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
+        return savePdfToFile(context, pdfDocument, "StockIn_Receipt_${order.orderNumber}_$timestamp.pdf")
+    }
+
     private fun savePdfToFile(context: Context, pdfDocument: PdfDocument, filename: String): File? {
         return try {
             val pdfDir = File(context.cacheDir, "documents")

@@ -59,6 +59,7 @@ fun InventoryScreen(
     val selectedCategory by viewModel.selectedCategory.collectAsState()
     val shopInfo by viewModel.shopInfo.collectAsState()
     val language by viewModel.language.collectAsState()
+    val pendingOrders by viewModel.pendingOrders.collectAsState()
     val currency = shopInfo.currency
 
     var currentViewTab by remember { mutableStateOf(0) } // 0: All Products, 1: Low Stock, 2: Expiring & Expired
@@ -74,6 +75,14 @@ fun InventoryScreen(
 
     var showBarcodeScannerModal by remember { mutableStateOf(false) }
     var showLowStockOrderDialog by remember { mutableStateOf(false) }
+
+    // Waiting / Pending Orders dialogs
+    var showPendingOrdersListDialog by remember { mutableStateOf(false) }
+    var selectedOrderToReceive by remember { mutableStateOf<com.example.data.model.PendingOrder?>(null) }
+
+    val waitingOrdersCount = remember(pendingOrders) {
+        pendingOrders.count { it.status == "WAITING" }
+    }
 
     val categories = remember(customCategories, language) {
         listOf(if (language == "bn") "সব" else "All") + customCategories
@@ -335,21 +344,62 @@ fun InventoryScreen(
                                 containerColor = if (currentViewTab == 1 || lowStockProducts.isNotEmpty()) Color(0xFFFEF3C7) else MaterialTheme.colorScheme.secondaryContainer,
                                 contentColor = if (currentViewTab == 1 || lowStockProducts.isNotEmpty()) Color(0xFF92400E) else MaterialTheme.colorScheme.onSecondaryContainer
                             ),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
                         ) {
                             Icon(
                                 Icons.Default.AddShoppingCart,
                                 contentDescription = "Order Low Stock",
-                                modifier = Modifier.size(16.dp),
+                                modifier = Modifier.size(15.dp),
                                 tint = if (currentViewTab == 1 || lowStockProducts.isNotEmpty()) Color(0xFFD97706) else MaterialTheme.colorScheme.primary
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
                             Text(
-                                text = if (language == "bn") "পণ্য অর্ডার" else "Order Stock",
+                                text = if (language == "bn") "পণ্য অর্ডার" else "Order",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = if (currentViewTab == 1 || lowStockProducts.isNotEmpty()) Color(0xFF92400E) else MaterialTheme.colorScheme.onSecondaryContainer
                             )
+                        }
+
+                        // Waiting Orders List Button (অর্ডার ওয়েটিং) with badge
+                        FilledTonalButton(
+                            onClick = {
+                                showPendingOrdersListDialog = true
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = if (waitingOrdersCount > 0) Color(0xFFEEF2FF) else MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = if (waitingOrdersCount > 0) Color(0xFF4338CA) else MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.HourglassTop,
+                                contentDescription = "Waiting Orders",
+                                modifier = Modifier.size(15.dp),
+                                tint = if (waitingOrdersCount > 0) Color(0xFF4338CA) else MaterialTheme.colorScheme.outline
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = if (language == "bn") "ওয়েটিং" else "Waiting",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            if (waitingOrdersCount > 0) {
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Surface(
+                                    shape = CircleShape,
+                                    color = Color(0xFF4338CA)
+                                ) {
+                                    Text(
+                                        text = "$waitingOrdersCount",
+                                        color = Color.White,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                    )
+                                }
+                            }
                         }
 
                         // Download Products PDF Button
@@ -380,12 +430,12 @@ fun InventoryScreen(
                                 containerColor = MaterialTheme.colorScheme.secondaryContainer,
                                 contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                             ),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
                         ) {
-                            Icon(Icons.Default.PictureAsPdf, contentDescription = "Download PDF", modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(Icons.Default.PictureAsPdf, contentDescription = "Download PDF", modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
                             Text(
-                                text = if (language == "bn") "পণ্য PDF" else "Product PDF",
+                                text = if (language == "bn") "PDF" else "PDF",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold
                             )
@@ -484,6 +534,11 @@ fun InventoryScreen(
             allProducts = allProducts,
             currency = currency,
             language = language,
+            waitingOrdersCount = waitingOrdersCount,
+            onOpenWaitingOrders = {
+                showStockInDialog = false
+                showPendingOrdersListDialog = true
+            },
             onDismiss = { showStockInDialog = false },
             onConfirm = { targetProd, qty, buyP, sellP, note ->
                 viewModel.stockIn(targetProd.id, qty, buyP, sellP, note)
@@ -528,6 +583,13 @@ fun InventoryScreen(
             shopName = shopInfo.shopName,
             shopPhone = shopInfo.phone,
             onDismiss = { showLowStockOrderDialog = false },
+            onSavePendingOrder = { newOrder ->
+                viewModel.savePendingOrder(newOrder)
+            },
+            onOpenWaitingOrders = {
+                showLowStockOrderDialog = false
+                showPendingOrdersListDialog = true
+            },
             onQuickStockIn = { reorderedItems ->
                 reorderedItems.forEach { item ->
                     viewModel.stockIn(
@@ -539,6 +601,43 @@ fun InventoryScreen(
                     )
                 }
                 showLowStockOrderDialog = false
+            }
+        )
+    }
+
+    // Pending Orders List Dialog (অর্ডারকৃত পণ্য তালিকা / ওয়েটিং তালিকা)
+    if (showPendingOrdersListDialog) {
+        PendingOrdersListDialog(
+            pendingOrders = pendingOrders,
+            currency = currency,
+            language = language,
+            shopName = shopInfo.shopName,
+            onDismiss = { showPendingOrdersListDialog = false },
+            onSelectOrder = { order ->
+                showPendingOrdersListDialog = false
+                selectedOrderToReceive = order
+            },
+            onDeleteOrder = { orderId ->
+                viewModel.deletePendingOrder(orderId)
+            }
+        )
+    }
+
+    // Receive / Edit / Final Stock-In Dialog for a selected Pending Order
+    selectedOrderToReceive?.let { order ->
+        PendingOrderReceiveDialog(
+            order = order,
+            currency = currency,
+            language = language,
+            shopName = shopInfo.shopName,
+            onDismiss = { selectedOrderToReceive = null },
+            onConfirmReceive = { updatedItems ->
+                viewModel.receivePendingOrder(order, updatedItems)
+                selectedOrderToReceive = null
+            },
+            onDeleteOrder = {
+                viewModel.deletePendingOrder(order.id)
+                selectedOrderToReceive = null
             }
         )
     }
@@ -1264,6 +1363,8 @@ fun StockInDialog(
     allProducts: List<Product> = emptyList(),
     currency: String,
     language: String,
+    waitingOrdersCount: Int = 0,
+    onOpenWaitingOrders: (() -> Unit)? = null,
     onDismiss: () -> Unit,
     onConfirm: (Product, Double, Double?, Double?, String) -> Unit
 ) {
@@ -1291,12 +1392,69 @@ fun StockInDialog(
                     .padding(20.dp)
                     .verticalScroll(rememberScrollState())
             ) {
-                Text(
-                    text = if (language == "bn") "স্টক ইন / মাল ক্রয় যোগ" else "Stock In / Add Purchase",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (language == "bn") "স্টক ইন / মাল ক্রয় যোগ" else "Stock In / Add Purchase",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                // If there are waiting orders or callback provided, show the "অর্ডার করা মাল রিসিভ করুন" button
+                if (onOpenWaitingOrders != null) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Surface(
+                        onClick = onOpenWaitingOrders,
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFFEFF6FF),
+                        border = BorderStroke(1.dp, Color(0xFFBFDBFE)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.HourglassTop, contentDescription = null, tint = Color(0xFF1D4ED8), modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = if (language == "bn") "অর্ডারকৃত পণ্য রিসিভ (ওয়েটিং)" else "Receive Ordered Stock (Waiting)",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF1D4ED8)
+                                    )
+                                    Text(
+                                        text = if (language == "bn") "কোম্পানি থেকে মাল আসলে মিলিয়ে স্টক-ইন করুন" else "Check received items vs orders",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color(0xFF2563EB),
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+                            if (waitingOrdersCount > 0) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = Color(0xFF2563EB)
+                                ) {
+                                    Text(
+                                        text = "$waitingOrdersCount",
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(12.dp))
 
