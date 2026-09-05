@@ -1854,8 +1854,7 @@ fun DashboardScreen(
         Dialog(
             onDismissRequest = { showCashHistoryDialog = false },
             properties = DialogProperties(
-                usePlatformDefaultWidth = false,
-                decorFitsSystemWindows = false
+                usePlatformDefaultWidth = false
             )
         ) {
             CashBookScreen(

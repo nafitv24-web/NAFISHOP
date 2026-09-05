@@ -48,32 +48,41 @@ class ShopRepository(private val database: AppDatabase) {
             stockQuantity = round2(product.stockQuantity),
             minStockAlert = round2(product.minStockAlert)
         )
-        var initialStockCost = 0.0
+        var stockCost = 0.0
         if (sanitized.id == 0L) {
-            val insertedId = productDao.insertProduct(sanitized)
-            if (sanitized.stockQuantity > 0 && sanitized.buyPrice > 0) {
-                initialStockCost = round2(sanitized.stockQuantity * sanitized.buyPrice)
-                val tx = TransactionRecord(
-                    type = "STOCK_IN",
-                    invoiceNumber = "STK-${System.currentTimeMillis() % 100000}",
-                    productId = insertedId,
-                    productName = sanitized.name,
-                    quantity = sanitized.stockQuantity,
-                    unit = sanitized.unit,
-                    unitPrice = sanitized.buyPrice,
-                    costPrice = sanitized.buyPrice,
-                    totalAmount = initialStockCost,
-                    profitAmount = 0.0,
-                    paymentMethod = "CASH",
-                    note = "প্রারম্ভিক স্টক ক্রয়",
-                    timestamp = System.currentTimeMillis()
-                )
-                transactionDao.insertTransaction(tx)
-            }
+            // First time product entry: Save product with initial opening stock.
+            // Do NOT deduct money from shop's main cash!
+            productDao.insertProduct(sanitized)
+            stockCost = 0.0
         } else {
+            // Existing product edit: if stock quantity was increased, deduct money for the additional stock added
+            val existing = productDao.getProductById(sanitized.id)
             productDao.updateProduct(sanitized)
+            if (existing != null && sanitized.stockQuantity > existing.stockQuantity && sanitized.buyPrice > 0) {
+                val addedQty = round2(sanitized.stockQuantity - existing.stockQuantity)
+                val cost = round2(addedQty * sanitized.buyPrice)
+                if (cost > 0) {
+                    val tx = TransactionRecord(
+                        type = "STOCK_IN",
+                        invoiceNumber = "STK-${System.currentTimeMillis() % 100000}",
+                        productId = sanitized.id,
+                        productName = sanitized.name,
+                        quantity = addedQty,
+                        unit = sanitized.unit,
+                        unitPrice = sanitized.buyPrice,
+                        costPrice = sanitized.buyPrice,
+                        totalAmount = cost,
+                        profitAmount = 0.0,
+                        paymentMethod = "CASH",
+                        note = "স্টক বৃদ্ধি: ${sanitized.name}",
+                        timestamp = System.currentTimeMillis()
+                    )
+                    transactionDao.insertTransaction(tx)
+                    stockCost = cost
+                }
+            }
         }
-        initialStockCost
+        stockCost
     }
 
     suspend fun deleteProduct(product: Product) = withContext(Dispatchers.IO) {

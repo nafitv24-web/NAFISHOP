@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -48,28 +49,46 @@ fun CashBookScreen(
     onBack: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
+    val view = LocalView.current
     val activity = context as? android.app.Activity
     val density = LocalDensity.current
 
-    val navBarInsetPx = remember(activity) {
-        activity?.window?.decorView?.let { decorView ->
-            ViewCompat.getRootWindowInsets(decorView)
-                ?.getInsets(WindowInsetsCompat.Type.navigationBars())?.bottom ?: 0
-        } ?: 0
+    var navBarBottomPx by remember { mutableIntStateOf(0) }
+    var statusBarTopPx by remember { mutableIntStateOf(0) }
+
+    DisposableEffect(view) {
+        val check = {
+            val root = ViewCompat.getRootWindowInsets(view)
+                ?: activity?.window?.decorView?.let { ViewCompat.getRootWindowInsets(it) }
+            if (root != null) {
+                val nav = root.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+                val sys = root.getInsets(WindowInsetsCompat.Type.systemBars()).bottom
+                navBarBottomPx = maxOf(nav, sys)
+                statusBarTopPx = root.getInsets(WindowInsetsCompat.Type.statusBars()).top
+            }
+        }
+        check()
+        val listener = androidx.core.view.OnApplyWindowInsetsListener { _, insets ->
+            val nav = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            val sys = insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom
+            navBarBottomPx = maxOf(nav, sys)
+            statusBarTopPx = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+            insets
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(view, listener)
+        onDispose {
+            ViewCompat.setOnApplyWindowInsetsListener(view, null)
+        }
     }
-    val navBarBottomDp = with(density) { navBarInsetPx.toDp() }
+
+    val navBarBottomDp = with(density) { navBarBottomPx.toDp() }
     val effectiveNavBottomPadding = maxOf(
         WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
+        WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding(),
         navBarBottomDp
     )
 
-    val statusBarInsetPx = remember(activity) {
-        activity?.window?.decorView?.let { decorView ->
-            ViewCompat.getRootWindowInsets(decorView)
-                ?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
-        } ?: 0
-    }
-    val statusBarTopDp = with(density) { statusBarInsetPx.toDp() }
+    val statusBarTopDp = with(density) { statusBarTopPx.toDp() }
     val effectiveTopPadding = maxOf(
         WindowInsets.statusBars.asPaddingValues().calculateTopPadding(),
         statusBarTopDp
@@ -498,12 +517,14 @@ fun CashBookScreen(
             Surface(
                 color = MaterialTheme.colorScheme.surface,
                 shadowElevation = 8.dp,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = effectiveNavBottomPadding)
+                        .padding(bottom = if (effectiveNavBottomPadding > 0.dp) 2.dp else 6.dp)
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
@@ -517,7 +538,7 @@ fun CashBookScreen(
                             onClick = { showIncomeDialog = true },
                             modifier = Modifier
                                 .weight(1f)
-                                .height(46.dp),
+                                .height(44.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = ProfitGreen),
                             shape = RoundedCornerShape(10.dp)
                         ) {
@@ -536,7 +557,7 @@ fun CashBookScreen(
                             onClick = { showExpenseDialog = true },
                             modifier = Modifier
                                 .weight(1f)
-                                .height(46.dp),
+                                .height(44.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = LossRed),
                             shape = RoundedCornerShape(10.dp)
                         ) {

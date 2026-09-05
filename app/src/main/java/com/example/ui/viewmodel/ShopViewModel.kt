@@ -1105,9 +1105,9 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             addCustomCategory(cat)
         }
         viewModelScope.launch {
-            val initialStockCost = repository.saveProduct(product)
-            if (initialStockCost > 0) {
-                withdrawCashFromMainBalance(initialStockCost, "পণ্য ক্রয়: ${product.name}")
+            val additionalStockCost = repository.saveProduct(product)
+            if (additionalStockCost > 0) {
+                withdrawCashFromMainBalance(additionalStockCost, "পণ্য ক্রয়: ${product.name}")
             }
             triggerInstantDriveBackup("পণ্য সংরক্ষণ")
         }
