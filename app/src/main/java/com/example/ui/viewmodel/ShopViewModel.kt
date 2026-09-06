@@ -1404,10 +1404,10 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         newCustomerName: String,
         newNote: String
     ) {
-        viewModelScope.launch {
-            repository.editSaleTransaction(oldTx, newQuantity, newUnitPrice, newCustomerName, newNote)
-            triggerInstantDriveBackup("বিক্রয় সংশোধন")
-        }
+        val cleanQty = round2(newQuantity.coerceAtLeast(0.01))
+        val cleanPrice = round2(newUnitPrice.coerceAtLeast(0.0))
+        val paidAmount = if (oldTx.dueAmount == 0.0) round2(cleanQty * cleanPrice) else oldTx.paidAmount
+        editSaleTransaction(oldTx, cleanQty, cleanPrice, paidAmount, newCustomerName, oldTx.customerPhone, newNote)
     }
 
     fun editSaleTransaction(
@@ -1420,6 +1420,30 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         newNote: String
     ) {
         viewModelScope.launch {
+            val isStockIn = oldTx.type.equals("STOCK_IN", ignoreCase = true) || oldTx.type.equals("PURCHASE", ignoreCase = true)
+            val isSale = oldTx.type.equals("SALE", ignoreCase = true)
+
+            // Adjust main cash balance based on changes
+            if (isStockIn) {
+                val oldCost = oldTx.totalAmount
+                val newCost = round2(newQuantity * newUnitPrice)
+                val costDiff = round2(oldCost - newCost)
+                if (costDiff > 0.0) {
+                    // Purchase cost reduced -> refund excess money back to cash balance
+                    addCashToMainBalance(costDiff, "স্টক ক্রয় সংশোধন/ক্যাশ ফেরত: ${oldTx.productName}")
+                } else if (costDiff < 0.0) {
+                    // Purchase cost increased -> deduct extra expenditure from cash balance
+                    withdrawCashFromMainBalance(kotlin.math.abs(costDiff), "স্টক ক্রয় সংশোধন/অতিরিক্ত খরচ: ${oldTx.productName}")
+                }
+            } else if (isSale) {
+                val paidDiff = round2(newPaidAmount - oldTx.paidAmount)
+                if (paidDiff > 0.0) {
+                    addCashToMainBalance(paidDiff, "বিক্রি সংশোধন/অতিরিক্ত জমা: ${oldTx.productName}")
+                } else if (paidDiff < 0.0) {
+                    withdrawCashFromMainBalance(kotlin.math.abs(paidDiff), "বিক্রি সংশোধন/টাকা ফেরত: ${oldTx.productName}")
+                }
+            }
+
             repository.editSaleTransaction(oldTx, newQuantity, newUnitPrice, newPaidAmount, newCustomerName, newCustomerPhone, newNote)
             triggerInstantDriveBackup("লেনদেন সংশোধন (${oldTx.productName})")
         }
@@ -1427,7 +1451,12 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteSaleAndRestock(tx: TransactionRecord) {
         viewModelScope.launch {
-            if (tx.paidAmount > 0) {
+            val isStockIn = tx.type.equals("STOCK_IN", ignoreCase = true) || tx.type.equals("PURCHASE", ignoreCase = true)
+            val isSale = tx.type.equals("SALE", ignoreCase = true)
+
+            if (isStockIn && tx.totalAmount > 0) {
+                addCashToMainBalance(tx.totalAmount, "পণ্য ক্রয় বাতিল/ক্যাশ ফেরত: ${tx.productName}")
+            } else if (isSale && tx.paidAmount > 0) {
                 withdrawCashFromMainBalance(tx.paidAmount, "বিক্রি বাতিল/টাকা ফেরত: ${tx.productName}")
             }
             repository.deleteTransaction(tx)

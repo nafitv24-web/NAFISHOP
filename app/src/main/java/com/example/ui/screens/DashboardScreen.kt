@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.model.CashLog
+import com.example.data.model.Customer
 import com.example.data.model.Product
 import com.example.data.model.TransactionRecord
 import com.example.ui.components.DueTagadaReminderDialog
@@ -98,6 +99,10 @@ fun DashboardScreen(
     var showCashHistoryDialog by remember { mutableStateOf(false) }
     var showAllMemosDialog by remember { mutableStateOf(false) }
     var showDueSmsReminderDialog by remember { mutableStateOf(false) }
+    var receiptCustomer by remember { mutableStateOf<Customer?>(null) }
+    var receiptAmount by remember { mutableStateOf(0.0) }
+    var receiptPreviousDue by remember { mutableStateOf(0.0) }
+    var showReceiptSmsDialog by remember { mutableStateOf(false) }
     var showCloudBackupInfoDialog by remember { mutableStateOf(false) }
     var showBusinessSummaryDetailDialog by remember { mutableStateOf(false) }
     var showAllServicesDialog by remember { mutableStateOf(false) }
@@ -1967,9 +1972,33 @@ fun DashboardScreen(
             shopName = shopInfo.shopName,
             onDismiss = { showDueSmsReminderDialog = false },
             onCollectPayment = { customer, amount, note ->
+                val prevDue = customer.totalDue
                 viewModel.collectCustomerDue(customer, amount, note)
+                receiptCustomer = customer
+                receiptAmount = amount
+                receiptPreviousDue = prevDue
+                showReceiptSmsDialog = true
             },
             onNavigateToDueKhata = onNavigateToDue
+        )
+    }
+
+    val activeReceiptCustomer = receiptCustomer
+    if (showReceiptSmsDialog && activeReceiptCustomer != null) {
+        com.example.ui.components.PaymentCollectedSmsDialog(
+            customer = activeReceiptCustomer,
+            collectedAmount = receiptAmount,
+            previousDue = receiptPreviousDue,
+            shopName = shopInfo.shopName,
+            shopPhone = shopInfo.phone,
+            currency = currency,
+            language = language,
+            transactionType = "COLLECTED",
+            note = "বাকি আদায়",
+            onDismiss = {
+                showReceiptSmsDialog = false
+                receiptCustomer = null
+            }
         )
     }
 

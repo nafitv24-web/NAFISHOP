@@ -102,6 +102,13 @@ fun CustomerLedgerScreen(
     var showEditCustomerDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
 
+    var receiptCustomer by remember { mutableStateOf<Customer?>(null) }
+    var receiptAmount by remember { mutableStateOf(0.0) }
+    var receiptPreviousDue by remember { mutableStateOf(0.0) }
+    var receiptTransactionType by remember { mutableStateOf("COLLECTED") }
+    var receiptNote by remember { mutableStateOf("") }
+    var showReceiptSmsDialog by remember { mutableStateOf(false) }
+
     LaunchedEffect(currentCustomer.id) {
         viewModel.reconcileCustomerLedgers()
     }
@@ -714,6 +721,7 @@ fun CustomerLedgerScreen(
             shopPhone = shopInfo.phone,
             onDismiss = { showAddTransactionDialog = false },
             onSave = { type, amount, note, timestamp, selectedProducts ->
+                val prevDue = currentCustomer.totalDue
                 if (type == "GIVEN") {
                     viewModel.giveCustomerDue(
                         customer = currentCustomer,
@@ -726,6 +734,32 @@ fun CustomerLedgerScreen(
                     viewModel.collectCustomerDue(currentCustomer, amount, note)
                 }
                 showAddTransactionDialog = false
+                receiptCustomer = currentCustomer
+                receiptAmount = amount
+                receiptPreviousDue = prevDue
+                receiptTransactionType = type
+                receiptNote = note
+                showReceiptSmsDialog = true
+            }
+        )
+    }
+
+    // Payment Collected / Due Given SMS & WhatsApp Receipt Dialog
+    val activeReceiptCustomer = receiptCustomer
+    if (showReceiptSmsDialog && activeReceiptCustomer != null) {
+        com.example.ui.components.PaymentCollectedSmsDialog(
+            customer = activeReceiptCustomer,
+            collectedAmount = receiptAmount,
+            previousDue = receiptPreviousDue,
+            shopName = shopInfo.shopName,
+            shopPhone = shopInfo.phone,
+            currency = currency,
+            language = language,
+            transactionType = receiptTransactionType,
+            note = receiptNote,
+            onDismiss = {
+                showReceiptSmsDialog = false
+                receiptCustomer = null
             }
         )
     }

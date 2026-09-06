@@ -75,6 +75,13 @@ fun DueKhataScreen(
 
     var editingDueLog by remember { mutableStateOf<Pair<DueLog, Customer>?>(null) }
 
+    var receiptCustomer by remember { mutableStateOf<Customer?>(null) }
+    var receiptAmount by remember { mutableStateOf(0.0) }
+    var receiptPreviousDue by remember { mutableStateOf(0.0) }
+    var receiptTransactionType by remember { mutableStateOf("COLLECTED") }
+    var receiptNote by remember { mutableStateOf("") }
+    var showReceiptSmsDialog by remember { mutableStateOf(false) }
+
     val filteredCustomers = remember(customers, searchQuery) {
         customers.filter { c ->
             searchQuery.isBlank() ||
@@ -342,28 +349,64 @@ fun DueKhataScreen(
 
     // Collect Due Dialog
     if (showPaymentDialog && selectedCustomerForPayment != null) {
+        val targetCust = selectedCustomerForPayment!!
         CollectDueDialog(
-            customer = selectedCustomerForPayment!!,
+            customer = targetCust,
             currency = currency,
             language = language,
             onDismiss = { showPaymentDialog = false },
             onConfirm = { amount, note ->
-                viewModel.collectCustomerDue(selectedCustomerForPayment!!, amount, note)
+                val prevDue = targetCust.totalDue
+                viewModel.collectCustomerDue(targetCust, amount, note)
                 showPaymentDialog = false
+                receiptCustomer = targetCust
+                receiptAmount = amount
+                receiptPreviousDue = prevDue
+                receiptTransactionType = "COLLECTED"
+                receiptNote = note
+                showReceiptSmsDialog = true
             }
         )
     }
 
     // Give Additional Due Dialog
     if (showAddDueDialog && selectedCustomerForDue != null) {
+        val targetCust = selectedCustomerForDue!!
         GiveDueDialog(
-            customer = selectedCustomerForDue!!,
+            customer = targetCust,
             currency = currency,
             language = language,
             onDismiss = { showAddDueDialog = false },
             onConfirm = { amount, note ->
-                viewModel.giveCustomerDue(selectedCustomerForDue!!, amount, note)
+                val prevDue = targetCust.totalDue
+                viewModel.giveCustomerDue(targetCust, amount, note)
                 showAddDueDialog = false
+                receiptCustomer = targetCust
+                receiptAmount = amount
+                receiptPreviousDue = prevDue
+                receiptTransactionType = "GIVEN"
+                receiptNote = note
+                showReceiptSmsDialog = true
+            }
+        )
+    }
+
+    // Payment Collected / Due Given SMS & WhatsApp Receipt Dialog
+    val activeReceiptCustomer = receiptCustomer
+    if (showReceiptSmsDialog && activeReceiptCustomer != null) {
+        com.example.ui.components.PaymentCollectedSmsDialog(
+            customer = activeReceiptCustomer,
+            collectedAmount = receiptAmount,
+            previousDue = receiptPreviousDue,
+            shopName = shopInfo.shopName,
+            shopPhone = shopInfo.phone,
+            currency = currency,
+            language = language,
+            transactionType = receiptTransactionType,
+            note = receiptNote,
+            onDismiss = {
+                showReceiptSmsDialog = false
+                receiptCustomer = null
             }
         )
     }
