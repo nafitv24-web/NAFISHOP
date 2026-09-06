@@ -145,8 +145,8 @@ data class ShopInfo(
     val address: String = "নিউ মার্কেট, ঢাকা",
     val currency: String = "৳",
     val mainBalance: Double = 25000.0,
-    val userEmail: String = "",
-    val isGoogleLinked: Boolean = false,
+    val userEmail: String = "nafitv24@gmail.com",
+    val isGoogleLinked: Boolean = true,
     val lastBackupDate: String = "আজ, ৩:৪৫ PM"
 )
 
