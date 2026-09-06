@@ -58,7 +58,7 @@ fun LoginScreen(
     val lastSavedEmail = remember { viewModel.getLastSavedEmail() }
     var email by remember { mutableStateOf(shopInfo.userEmail.ifBlank { lastSavedEmail.ifBlank { "" } }) }
     var password by remember { mutableStateOf("") }
-    var shopName by remember { mutableStateOf(if (shopInfo.shopName != "আমার দোকান") shopInfo.shopName else "NAFI SHOP 24") }
+    var shopName by remember { mutableStateOf(if (shopInfo.shopName != "আমার দোকান") shopInfo.shopName else "NAFI KHATA") }
     var ownerName by remember { mutableStateOf(shopInfo.ownerName.ifBlank { "দোকানদার" }) }
     
     var passwordVisible by remember { mutableStateOf(false) }
@@ -105,14 +105,14 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             Text(
-                text = if (isBn) "NAFI SHOP 24" else "NAFI SHOP 24",
+                text = if (isBn) "NAFI KHATA" else "NAFI KHATA",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.ExtraBold,
                 color = Color.White
             )
 
             Text(
-                text = if (isBn) "নাফি শপ ২৪ • হিসাবের বিশ্বস্ত সঙ্গী" else "Complete Digital Business Khata",
+                text = if (isBn) "নাফি খাতা • ডিজিটাল হিসাব খাতা" else "Complete Digital Business Khata",
                 style = MaterialTheme.typography.bodySmall,
                 color = Color(0xFFFDE68A),
                 fontWeight = FontWeight.Medium
@@ -218,7 +218,7 @@ fun LoginScreen(
                                 value = shopName,
                                 onValueChange = { shopName = it },
                                 label = { Text(if (isBn) "দোকানের নাম (Shop Name)" else "Shop Name") },
-                                placeholder = { Text("e.g. NAFI SHOP 24") },
+                                placeholder = { Text("e.g. NAFI KHATA") },
                                 leadingIcon = {
                                     Icon(Icons.Default.Storefront, contentDescription = null, tint = StockBlue)
                                 },
@@ -586,7 +586,7 @@ fun LoginScreen(
                                     Button(
                                         onClick = {
                                             viewModel.updateShopInfo(
-                                                name = shopName.ifBlank { "NAFI SHOP 24" },
+                                                name = shopName.ifBlank { "NAFI KHATA" },
                                                 owner = ownerName.ifBlank { "মালিক" },
                                                 phone = "",
                                                 address = "",

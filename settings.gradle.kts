@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "NAFI SHOP 24"
+rootProject.name = "NAFI KHATA"
 
 include(":app")

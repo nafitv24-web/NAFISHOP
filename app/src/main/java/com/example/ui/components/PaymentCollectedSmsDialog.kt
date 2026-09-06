@@ -48,7 +48,7 @@ fun PaymentCollectedSmsDialog(
 
     val smsMessage = remember(customer, collectedAmount, previousDue, shopName, shopPhone, note, transactionType) {
         CustomerSmsHelper.buildLedgerTransactionMessage(
-            shopName = shopName.ifBlank { "NAFI SHOP 24" },
+            shopName = shopName.ifBlank { "NAFI KHATA" },
             shopPhone = shopPhone,
             customerName = customer.name,
             type = transactionType,

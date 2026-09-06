@@ -3,7 +3,9 @@ package com.example.ui.screens
 import android.app.DatePickerDialog
 import android.content.Intent
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -23,6 +25,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.Expense
 import com.example.data.model.TransactionRecord
 import com.example.ui.components.EditOrReturnSaleDialog
 import com.example.ui.components.toIntOrNull
@@ -49,6 +52,7 @@ fun ReportsScreen(
     var customTimestamp by remember { mutableStateOf<Long?>(null) }
     var customLabel by remember { mutableStateOf("") }
     var editingTransaction by remember { mutableStateOf<TransactionRecord?>(null) }
+    var showExpenseDetailsList by remember { mutableStateOf(false) }
 
     val dateDisplaySdf = remember(language) {
         SimpleDateFormat("d MMMM yyyy", if (language == "bn") Locale("bn", "BD") else Locale.ENGLISH)
@@ -119,6 +123,16 @@ fun ReportsScreen(
     }
     val totalExpensesSum = remember(periodExpenses) {
         periodExpenses.sumOf { it.amount }
+    }
+    val expensesByCategory = remember(periodExpenses) {
+        periodExpenses
+            .groupBy { it.category.ifBlank { "অন্যান্য" } }
+            .map { (cat, list) ->
+                val sum = list.sumOf { it.amount }
+                val count = list.size
+                Triple(cat, sum, count)
+            }
+            .sortedByDescending { it.second }
     }
     val netProfit = remember(grossProfit, totalExpensesSum) {
         grossProfit - totalExpensesSum
@@ -293,6 +307,13 @@ fun ReportsScreen(
                                         appendLine("বিক্রিত পণ্যের কেনা দাম: $currency$totalSalesCost")
                                         appendLine("গ্রস লাভ: $currency$grossProfit")
                                         appendLine("দোকানের মোট খরচ: $currency$totalExpensesSum")
+                                        if (expensesByCategory.isNotEmpty()) {
+                                            appendLine("--- দোকান খরচ খাতওয়ারী হিসাব ---")
+                                            expensesByCategory.forEach { (cat, amt, count) ->
+                                                val pct = if (totalExpensesSum > 0) ((amt / totalExpensesSum) * 100).toInt() else 0
+                                                appendLine(" • $cat: $currency${amt.toIntOrNull() ?: amt} ($pct% - $count টি)")
+                                            }
+                                        }
                                         appendLine("-----------------------------")
                                         appendLine("✨ নিট লাভ (Net Profit): $currency$netProfit")
                                         appendLine("-----------------------------")
@@ -372,6 +393,46 @@ fun ReportsScreen(
                         value = "- $currency${totalExpensesSum.toIntOrNull() ?: totalExpensesSum}",
                         valueColor = LossRed
                     )
+                    if (expensesByCategory.isNotEmpty()) {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                        ) {
+                            Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                                Text(
+                                    text = if (language == "bn") "দোকান খরচের খাতওয়ারী সংক্ষেপ:" else "Expense Breakdown by Sector:",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                expensesByCategory.take(4).forEach { (cat, amt, count) ->
+                                    val pct = if (totalExpensesSum > 0) ((amt / totalExpensesSum) * 100).toInt() else 0
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = "• $cat ($pct% • $count টি)",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = "-$currency${amt.toIntOrNull() ?: amt}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = LossRed
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                     Divider(modifier = Modifier.padding(vertical = 8.dp))
 
                     ReportLineRow(
@@ -402,6 +463,7 @@ fun ReportsScreen(
                                     purchases = totalPurchases,
                                     dueAmount = allDue,
                                     transactions = periodTransactions,
+                                    expensesList = periodExpenses,
                                     currency = currency
                                 )
                                 if (pdf != null) {
@@ -430,7 +492,14 @@ fun ReportsScreen(
                                     appendLine("মোট বিক্রি: $currency${totalSales.toIntOrNull() ?: totalSales}")
                                     appendLine("ক্রয়মূল্য খরচ: $currency${totalSalesCost.toIntOrNull() ?: totalSalesCost}")
                                     appendLine("বিক্রয় লাভ: $currency${grossProfit.toIntOrNull() ?: grossProfit}")
-                                    appendLine("দোকানের খরচ: $currency${totalExpensesSum.toIntOrNull() ?: totalExpensesSum}")
+                                    appendLine("দোকানের মোট খরচ: $currency${totalExpensesSum.toIntOrNull() ?: totalExpensesSum}")
+                                    if (expensesByCategory.isNotEmpty()) {
+                                        appendLine("--- দোকান খরচ খাতওয়ারী হিসাব ---")
+                                        expensesByCategory.forEach { (cat, amt, count) ->
+                                            val pct = if (totalExpensesSum > 0) ((amt / totalExpensesSum) * 100).toInt() else 0
+                                            appendLine(" • $cat: $currency${amt.toIntOrNull() ?: amt} ($pct%)")
+                                        }
+                                    }
                                     appendLine("-----------------------------")
                                     appendLine("নিট লাভ (Net Profit): $currency${netProfit.toIntOrNull() ?: netProfit}")
                                     appendLine("মোট বাকি পাওনা: $currency${allDue.toIntOrNull() ?: allDue}")
@@ -448,6 +517,266 @@ fun ReportsScreen(
                             Icon(Icons.Default.Share, contentDescription = "Share", modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(if (language == "bn") "শেয়ার" else "Share")
+                        }
+                    }
+                }
+            }
+        }
+
+        // Dedicated Store Expenses by Sector Section (দোকান খরচ কোন খাতে কত টাকা খরচ হলো)
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = CardDefaults.outlinedCardBorder()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .background(Color(0xFFFEF2F2), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.ReceiptLong,
+                                    contentDescription = null,
+                                    tint = LossRed,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = if (language == "bn") "দোকান খরচ খাতওয়ারী বিবরণ" else "Store Expenses by Sector",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = if (language == "bn") "কোন খাতে কত টাকা খরচ হয়েছে (${periodExpenses.size} টি এন্ট্রি)"
+                                    else "Breakdown by sector (${periodExpenses.size} entries)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFFFEF2F2),
+                            border = BorderStroke(1.dp, Color(0xFFFECACA))
+                        ) {
+                            Text(
+                                text = "-$currency${totalExpensesSum.toIntOrNull() ?: totalExpensesSum}",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = LossRed
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    if (periodExpenses.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = EmeraldPrimary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (language == "bn") "নির্বাচিত সময়ে কোনো দোকান খরচ রেকর্ড করা হয়নি" else "No store expenses recorded for this period",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    } else {
+                        // Category Breakdown Cards
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            expensesByCategory.forEach { (cat, catAmt, count) ->
+                                val pct = if (totalExpensesSum > 0) (catAmt / totalExpensesSum) else 0.0
+                                val pctFormatted = String.format(Locale.US, "%.1f", pct * 100)
+
+                                val (catIcon, catColor) = when {
+                                    cat.contains("ভাড়া") -> Icons.Default.Storefront to Color(0xFF2563EB)
+                                    cat.contains("বিদ্যুৎ") || cat.contains("বিল") -> Icons.Default.ElectricBolt to Color(0xFFD97706)
+                                    cat.contains("বেতন") || cat.contains("কর্মচারী") -> Icons.Default.Badge to Color(0xFF0D9488)
+                                    cat.contains("নাস্তা") || cat.contains("চা") || cat.contains("আপ্যায়ন") -> Icons.Default.LocalCafe to Color(0xFFEA580C)
+                                    cat.contains("পরিবহন") || cat.contains("যাতায়াত") || cat.contains("গাড়ি") -> Icons.Default.LocalShipping to Color(0xFF6366F1)
+                                    cat.contains("প্যাকিং") || cat.contains("বক্স") || cat.contains("প্যাকেট") -> Icons.Default.Inventory2 to Color(0xFF9333EA)
+                                    else -> Icons.Default.Category to Color(0xFF64748B)
+                                }
+
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(32.dp)
+                                                        .background(catColor.copy(alpha = 0.15f), CircleShape),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        catIcon,
+                                                        contentDescription = null,
+                                                        tint = catColor,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                }
+                                                Spacer(modifier = Modifier.width(10.dp))
+                                                Column {
+                                                    Text(
+                                                        text = cat,
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.onSurface
+                                                    )
+                                                    Text(
+                                                        text = "$count টি খরচ এন্ট্রি • মোট খরচের $pctFormatted%",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        fontSize = 11.sp
+                                                    )
+                                                }
+                                            }
+
+                                            Text(
+                                                text = "-$currency${catAmt.toIntOrNull() ?: catAmt}",
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = LossRed
+                                            )
+                                        }
+
+                                        Spacer(modifier = Modifier.height(8.dp))
+
+                                        LinearProgressIndicator(
+                                            progress = { pct.toFloat().coerceIn(0f, 1f) },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(6.dp)
+                                                .clip(RoundedCornerShape(3.dp)),
+                                            color = catColor,
+                                            trackColor = catColor.copy(alpha = 0.15f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Toggle button for individual expense entries
+                        OutlinedButton(
+                            onClick = { showExpenseDetailsList = !showExpenseDetailsList },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(
+                                if (showExpenseDetailsList) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (showExpenseDetailsList)
+                                    (if (language == "bn") "খরচের বিস্তারিত তালিকা লুকান" else "Hide Detailed Entries")
+                                else
+                                    (if (language == "bn") "খরচের প্রতিটি এন্ট্রি দেখুন (${periodExpenses.size} টি)" else "View All Expense Entries (${periodExpenses.size})"),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
+                        if (showExpenseDetailsList) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            val expSdf = SimpleDateFormat("dd MMM, hh:mm a", if (language == "bn") Locale("bn", "BD") else Locale.ENGLISH)
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                periodExpenses.sortedByDescending { it.timestamp }.forEach { exp ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
+                                            .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                            .padding(10.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(
+                                                    text = exp.title,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = FontWeight.SemiBold
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Surface(
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    color = MaterialTheme.colorScheme.surfaceVariant
+                                                ) {
+                                                    Text(
+                                                        text = exp.category.ifBlank { "অন্যান্য" },
+                                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                                                        fontSize = 10.sp,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
+                                            if (exp.note.isNotBlank()) {
+                                                Text(
+                                                    text = exp.note,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.outline,
+                                                    fontSize = 11.sp
+                                                )
+                                            }
+                                            Text(
+                                                text = expSdf.format(Date(exp.timestamp)),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.outline,
+                                                fontSize = 10.sp
+                                            )
+                                        }
+                                        Text(
+                                            text = "-$currency${exp.amount.toIntOrNull() ?: exp.amount}",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = LossRed
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }

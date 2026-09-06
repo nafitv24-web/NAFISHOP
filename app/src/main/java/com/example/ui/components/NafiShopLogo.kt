@@ -153,14 +153,14 @@ fun NafiShopFullBrandCard(
 
                 Column {
                     Text(
-                        text = "NAFI SHOP 24",
+                        text = "NAFI KHATA",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Black,
                         color = MaterialTheme.colorScheme.onSurface,
                         letterSpacing = 1.sp
                     )
                     Text(
-                        text = "নাফি শপ ২৪",
+                        text = "নাফি খাতা",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.ExtraBold,
                         color = AmberTertiary

@@ -1181,7 +1181,7 @@ private fun UserAccountCard(
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = user.shopName.ifBlank { "NAFI SHOP 24" },
+                            text = user.shopName.ifBlank { "NAFI KHATA" },
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface

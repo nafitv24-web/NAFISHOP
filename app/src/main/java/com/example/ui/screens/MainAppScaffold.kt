@@ -343,7 +343,8 @@ fun MainAppScaffold(
                         onNavigateToExpenses = { currentScreen = ShopScreen.EXPENSES },
                         onOpenStockInDialog = { showQuickStockInDialog = true },
                         onOpenAddExpenseDialog = { showQuickAddExpenseDialog = true },
-                        onNavigateToAccounts = { currentScreen = ShopScreen.ACCOUNTS }
+                        onNavigateToAccounts = { currentScreen = ShopScreen.ACCOUNTS },
+                        onNavigateToReports = { currentScreen = ShopScreen.REPORTS }
                     )
                 }
                 ShopScreen.POS -> {

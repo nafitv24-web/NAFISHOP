@@ -61,7 +61,7 @@ class FirebaseRealtimeManager {
             val url = "$DATABASE_URL/status.json"
             val bodyObj = JSONObject().apply {
                 put("online", true)
-                put("appName", "NAFI SHOP 24")
+                put("appName", "NAFI KHATA")
                 put("lastPing", System.currentTimeMillis())
             }
             val requestBody = bodyObj.toString().toRequestBody(jsonMediaType)
@@ -111,7 +111,7 @@ class FirebaseRealtimeManager {
             val userObj = JSONObject().apply {
                 put("email", email.trim())
                 put("password", password) // In production can hash
-                put("shopName", shopName.ifBlank { "NAFI SHOP 24" })
+                put("shopName", shopName.ifBlank { "NAFI KHATA" })
                 put("ownerName", ownerName.ifBlank { "দোকানদার" })
                 put("createdAt", System.currentTimeMillis())
                 put("lastLoginAt", System.currentTimeMillis())
@@ -589,7 +589,7 @@ class FirebaseRealtimeManager {
                             FirebaseUserAccount(
                                 email = email,
                                 passwordHash = "",
-                                shopName = userObj.optString("shopName", "NAFI SHOP 24"),
+                                shopName = userObj.optString("shopName", "NAFI KHATA"),
                                 ownerName = userObj.optString("ownerName", "দোকানদার"),
                                 createdAt = userObj.optLong("createdAt", System.currentTimeMillis()),
                                 lastLoginAt = userObj.optLong("lastLoginAt", System.currentTimeMillis())

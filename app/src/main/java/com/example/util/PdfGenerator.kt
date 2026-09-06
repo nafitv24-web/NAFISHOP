@@ -350,6 +350,7 @@ object PdfGenerator {
         purchases: Double,
         dueAmount: Double,
         transactions: List<TransactionRecord>,
+        expensesList: List<Expense> = emptyList(),
         currency: String = "৳"
     ): File? {
         val pdfDocument = PdfDocument()
@@ -423,7 +424,7 @@ object PdfGenerator {
         canvas.drawText("3. Gross Profit (বিক্রয় লাভ):", 50f, y, boldPaint)
         canvas.drawText("$currency${grossProfit.toIntOrNull() ?: grossProfit}", 240f, y, boldPaint)
 
-        canvas.drawText("4. Expenses (দোকানের খরচ):", 320f, y, textPaint)
+        canvas.drawText("4. Expenses (দোকানের মোট খরচ):", 320f, y, textPaint)
         canvas.drawText("- $currency${expenses.toIntOrNull() ?: expenses}", 480f, y, textPaint)
         y += 24f
 
@@ -439,7 +440,50 @@ object PdfGenerator {
         canvas.drawText("Customer Due (মোট বাকি):", 320f, y, textPaint)
         canvas.drawText("$currency${dueAmount.toIntOrNull() ?: dueAmount}", 480f, y, boldPaint)
 
-        y += 45f
+        y += 35f
+
+        // Expense Breakdown by Sector (দোকান খরচ খাতওয়ারী হিসাব)
+        if (expensesList.isNotEmpty()) {
+            val expByCategory = expensesList.groupBy { it.category.ifBlank { "অন্যান্য" } }
+                .mapValues { it.value.sumOf { exp -> exp.amount } }
+                .toList()
+                .sortedByDescending { it.second }
+
+            canvas.drawText("Store Expenses by Sector (দোকান খরচ খাতওয়ারী হিসাব):", 35f, y, boldPaint)
+            y += 14f
+
+            val expHeaderPaint = Paint().apply { color = Color.rgb(254, 242, 242); style = Paint.Style.FILL }
+            canvas.drawRoundRect(RectF(35f, y - 10f, 560f, y + 10f), 4f, 4f, expHeaderPaint)
+            val expHeaderTitlePaint = Paint().apply {
+                isAntiAlias = true
+                textSize = 9.5f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                color = Color.rgb(185, 28, 28)
+            }
+            canvas.drawText("Expense Sector (খরচের খাত)", 45f, y, expHeaderTitlePaint)
+            canvas.drawText("Entries", 260f, y, expHeaderTitlePaint)
+            canvas.drawText("Amount (টাকা)", 380f, y, expHeaderTitlePaint)
+            canvas.drawText("Share (%)", 480f, y, expHeaderTitlePaint)
+            y += 16f
+
+            val totalExp = if (expenses > 0) expenses else expensesList.sumOf { it.amount }
+            val expRowBg = Paint().apply { color = Color.rgb(255, 250, 250); style = Paint.Style.FILL }
+
+            expByCategory.take(5).forEachIndexed { idx, (cat, catAmt) ->
+                if (idx % 2 == 1) {
+                    canvas.drawRect(RectF(35f, y - 10f, 560f, y + 6f), expRowBg)
+                }
+                val entriesCount = expensesList.count { (it.category.ifBlank { "অন্যান্য" }) == cat }
+                val pct = if (totalExp > 0) (catAmt / totalExp * 100).toInt() else 0
+
+                canvas.drawText(cat, 45f, y, textPaint)
+                canvas.drawText("$entriesCount টি", 260f, y, textPaint)
+                canvas.drawText("- $currency${catAmt.toIntOrNull() ?: catAmt}", 380f, y, boldPaint)
+                canvas.drawText("$pct%", 480f, y, textPaint)
+                y += 15f
+            }
+            y += 12f
+        }
 
         // Recent Transactions Table Header
         canvas.drawText("Transaction Log in Period (সাম্প্রতিক লেনদেন):", 35f, y, boldPaint)
@@ -455,7 +499,9 @@ object PdfGenerator {
         y += 18f
 
         val rowBg = Paint().apply { color = Color.rgb(248, 250, 252); style = Paint.Style.FILL }
-        transactions.take(22).forEachIndexed { i, tx ->
+        val maxTxToDraw = if (expensesList.isNotEmpty()) 14 else 22
+        transactions.take(maxTxToDraw).forEachIndexed { i, tx ->
+            if (y + 16f > 780f) return@forEachIndexed
             if (i % 2 == 1) {
                 canvas.drawRect(RectF(35f, y - 10f, 560f, y + 6f), rowBg)
             }
@@ -476,7 +522,7 @@ object PdfGenerator {
         }
 
         // Footer
-        drawSponsorFooter(canvas, 802f, "ShopKhata Report")
+        drawSponsorFooter(canvas, 802f, "NAFI KHATA Report")
 
         pdfDocument.finishPage(page)
         return savePdfToFile(context, pdfDocument, "Report_${periodTitle.replace(" ", "_")}.pdf")

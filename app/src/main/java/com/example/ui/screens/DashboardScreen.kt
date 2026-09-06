@@ -61,7 +61,8 @@ fun DashboardScreen(
     onNavigateToExpenses: () -> Unit,
     onOpenStockInDialog: () -> Unit,
     onOpenAddExpenseDialog: () -> Unit,
-    onNavigateToAccounts: () -> Unit = {}
+    onNavigateToAccounts: () -> Unit = {},
+    onNavigateToReports: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val summary by viewModel.dashboardSummary.collectAsState()
@@ -73,6 +74,7 @@ fun DashboardScreen(
     val shopInfo by viewModel.shopInfo.collectAsState()
     val language by viewModel.language.collectAsState()
     val cashLogs by viewModel.cashLogs.collectAsState()
+    val allExpenses by viewModel.expenses.collectAsState()
     val isOnline by viewModel.isOnline.collectAsState()
     val autoBackupStatus by viewModel.autoBackupStatus.collectAsState()
     val mainBalance = shopInfo.mainBalance
@@ -90,6 +92,9 @@ fun DashboardScreen(
 
     val todayDueSalesList = remember(allTransactions) {
         allTransactions.filter { it.timestamp >= startOfToday && it.type == "SALE" && it.dueAmount > 0 }
+    }
+    val todayExpensesList = remember(allExpenses, startOfToday) {
+        allExpenses.filter { it.timestamp >= startOfToday }
     }
 
     var showAddCashDialog by remember { mutableStateOf(false) }
@@ -2032,10 +2037,15 @@ fun DashboardScreen(
             mainBalance = mainBalance,
             currency = currency,
             language = language,
+            todayExpensesList = todayExpensesList,
             onDismiss = { showBusinessSummaryDetailDialog = false },
             onOpenCashBook = {
                 showBusinessSummaryDetailDialog = false
                 showCashHistoryDialog = true
+            },
+            onNavigateToReports = {
+                showBusinessSummaryDetailDialog = false
+                onNavigateToReports()
             }
         )
     }
@@ -2083,6 +2093,10 @@ fun DashboardScreen(
             onOpenCashIn = {
                 showAllServicesDialog = false
                 showAddCashDialog = true
+            },
+            onNavigateToReports = {
+                showAllServicesDialog = false
+                onNavigateToReports()
             }
         )
     }
@@ -3711,8 +3725,10 @@ fun BusinessSummaryDetailDialog(
     mainBalance: Double,
     currency: String,
     language: String,
+    todayExpensesList: List<com.example.data.model.Expense> = emptyList(),
     onDismiss: () -> Unit,
-    onOpenCashBook: () -> Unit
+    onOpenCashBook: () -> Unit,
+    onNavigateToReports: () -> Unit = {}
 ) {
     Dialog(
         onDismissRequest = onDismiss,
@@ -3840,7 +3856,37 @@ fun BusinessSummaryDetailDialog(
                             Spacer(modifier = Modifier.height(8.dp))
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(if (language == "bn") "আজকের দোকান খরচ:" else "Today's Expenses:", style = MaterialTheme.typography.bodyMedium)
-                                Text("$currency${summary.todayExpenses}", fontWeight = FontWeight.Bold, color = LossRed)
+                                Text("-$currency${summary.todayExpenses.toIntOrNull() ?: summary.todayExpenses}", fontWeight = FontWeight.Bold, color = LossRed)
+                            }
+                            if (todayExpensesList.isNotEmpty()) {
+                                val catMap = todayExpensesList.groupBy { it.category.ifBlank { "অন্যান্য" } }
+                                    .mapValues { it.value.sumOf { e -> e.amount } }
+                                    .toList()
+                                    .sortedByDescending { it.second }
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(8.dp)) {
+                                        Text(
+                                            text = if (language == "bn") "খরচের খাতসমূহ (আজকের):" else "Expense Sectors (Today):",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        catMap.forEach { (cat, amt) ->
+                                            val pct = if (summary.todayExpenses > 0) ((amt / summary.todayExpenses) * 100).toInt() else 0
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text("• $cat ($pct%)", style = MaterialTheme.typography.bodySmall, fontSize = 11.sp)
+                                                Text("-$currency${amt.toIntOrNull() ?: amt}", style = MaterialTheme.typography.bodySmall, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = LossRed)
+                                            }
+                                        }
+                                    }
+                                }
                             }
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(if (language == "bn") "দোকানের মোট স্টক মূল্য:" else "Total Stock Value:", style = MaterialTheme.typography.bodyMedium)
@@ -3851,6 +3897,25 @@ fun BusinessSummaryDetailDialog(
                                 Text("$currency${summary.totalOutstandingDue}", fontWeight = FontWeight.Bold, color = DueOrange)
                             }
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Button(
+                        onClick = {
+                            onDismiss()
+                            onNavigateToReports()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED))
+                    ) {
+                        Icon(Icons.Default.Assessment, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (language == "bn") "লাভ-ক্ষতি ও পূর্ণাঙ্গ রিপোর্ট দেখুন" else "View Profit & Loss / Full Reports",
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
@@ -3871,7 +3936,8 @@ fun AllServicesDialog(
     onOpenMemos: () -> Unit,
     onOpenDueSms: () -> Unit,
     onOpenBackup: () -> Unit,
-    onOpenCashIn: () -> Unit
+    onOpenCashIn: () -> Unit,
+    onNavigateToReports: () -> Unit = {}
 ) {
     Dialog(
         onDismissRequest = onDismiss,
@@ -4003,6 +4069,15 @@ fun AllServicesDialog(
                             modifier = Modifier.weight(1f),
                             onClick = onOpenCashIn
                         )
+                        CoreGridActionCard(
+                            title = if (language == "bn") "পূর্ণাঙ্গ রিপোর্ট" else "Full Reports",
+                            icon = Icons.Default.Assessment,
+                            iconBg = Color(0xFFFAF5FF),
+                            iconTint = Color(0xFF7C3AED),
+                            modifier = Modifier.weight(1f),
+                            onClick = onNavigateToReports
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
                     }
                 }
             }
