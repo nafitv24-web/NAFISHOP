@@ -81,11 +81,18 @@ fun CashBookScreen(
         }
     }
 
+    val systemNavHeightPx = remember(context) {
+        val resId = context.resources.getIdentifier("navigation_bar_height", "dimen", "android")
+        if (resId > 0) context.resources.getDimensionPixelSize(resId) else 0
+    }
+    val systemNavHeightDp = with(density) { systemNavHeightPx.toDp() }
+
     val navBarBottomDp = with(density) { navBarBottomPx.toDp() }
     val effectiveNavBottomPadding = maxOf(
         WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
         WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding(),
-        navBarBottomDp
+        navBarBottomDp,
+        systemNavHeightDp
     )
 
     val statusBarTopDp = with(density) { statusBarTopPx.toDp() }
@@ -514,17 +521,20 @@ fun CashBookScreen(
             )
         },
         bottomBar = {
+            val bottomPadding = if (onBack != null) {
+                maxOf(effectiveNavBottomPadding, 48.dp) + 8.dp
+            } else {
+                6.dp
+            }
             Surface(
                 color = MaterialTheme.colorScheme.surface,
                 shadowElevation = 8.dp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = if (effectiveNavBottomPadding > 0.dp) 2.dp else 6.dp)
+                        .padding(bottom = bottomPadding)
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
