@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Environment
 import android.widget.Toast
 import androidx.core.content.FileProvider
+import com.example.data.model.CashAdditionItem
 import com.example.data.model.CashLog
 import com.example.data.model.Customer
 import com.example.data.model.DueLog
@@ -3413,6 +3414,333 @@ object PdfGenerator {
 
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
         return savePdfToFile(context, pdfDocument, "StockIn_Receipt_${order.orderNumber}_$timestamp.pdf")
+    }
+
+    /**
+     * Generates an authentic shop memo PDF for cash additions made to the shop's master drawer
+     * (নিজের ক্যাশ থেকে জমা অথবা কারো কাছ থেকে এনে যুক্ত করা টাকার খতিয়ান)
+     */
+    fun generateAddedCashHistoryPdf(
+        context: Context,
+        shopName: String,
+        shopPhone: String = "",
+        periodTitle: String = "সকল সময়",
+        entries: List<CashAdditionItem>,
+        currency: String = "৳"
+    ): File? {
+        val pdfDocument = PdfDocument()
+        var pageNumber = 1
+        var pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+        var page = pdfDocument.startPage(pageInfo)
+        var canvas = page.canvas
+
+        val titlePaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 17f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(15, 23, 42)
+            textAlign = Paint.Align.CENTER
+        }
+        val textPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 8.5f
+            color = Color.rgb(30, 41, 59)
+        }
+        val centerTextPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 8.5f
+            color = Color.rgb(30, 41, 59)
+            textAlign = Paint.Align.CENTER
+        }
+        val boldPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 8.5f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(15, 23, 42)
+        }
+        val greenTextPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 9f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(16, 185, 129)
+            textAlign = Paint.Align.RIGHT
+        }
+        val balanceTextPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 8.5f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(15, 23, 42)
+            textAlign = Paint.Align.RIGHT
+        }
+        val linePaint = Paint().apply {
+            color = Color.rgb(226, 232, 240)
+            strokeWidth = 0.8f
+        }
+        val framePaint = Paint().apply {
+            color = Color.rgb(203, 213, 225)
+            style = Paint.Style.STROKE
+            strokeWidth = 1f
+        }
+        val leftHeaderPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 9f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.WHITE
+        }
+        val centerHeaderPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 9f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.WHITE
+            textAlign = Paint.Align.CENTER
+        }
+        val rightHeaderPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 9f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.WHITE
+            textAlign = Paint.Align.RIGHT
+        }
+
+        val totalAdded = entries.sumOf { it.amount }
+        val ownAdded = entries.filter { it.sourceCategory == "OWN" }.sumOf { it.amount }
+        val personAdded = entries.filter { it.sourceCategory == "PERSON" }.sumOf { it.amount }
+        val otherAdded = entries.filter { it.sourceCategory == "OTHER" }.sumOf { it.amount }
+
+        fun drawHeaderAndSummary(drawSummaryBox: Boolean) {
+            // Outer Frame
+            canvas.drawRoundRect(RectF(24f, 16f, 571f, 826f), 6f, 6f, framePaint)
+
+            // Top accent bar (Emerald Green for Master Cash Deposits)
+            val topBarPaint = Paint().apply { color = Color.rgb(5, 150, 105); style = Paint.Style.FILL }
+            canvas.drawRoundRect(RectF(24f, 16f, 571f, 23f), 0f, 0f, topBarPaint)
+
+            var y = 46f
+            canvas.drawText(shopName, 297.5f, y, titlePaint)
+            y += 18f
+
+            val badgeBg = Paint().apply { color = Color.rgb(236, 253, 245); style = Paint.Style.FILL }
+            val badgeBorder = Paint().apply { color = Color.rgb(167, 243, 208); style = Paint.Style.STROKE; strokeWidth = 1f }
+            canvas.drawRoundRect(RectF(125f, y - 13f, 470f, y + 9f), 11f, 11f, badgeBg)
+            canvas.drawRoundRect(RectF(125f, y - 13f, 470f, y + 9f), 11f, 11f, badgeBorder)
+
+            val badgeText = Paint().apply {
+                isAntiAlias = true
+                textSize = 10f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                color = Color.rgb(4, 120, 87)
+                textAlign = Paint.Align.CENTER
+            }
+            canvas.drawText("দোকানের মূল ক্যাশে টাকা যুক্ত করার খতিয়ান মেমো", 297.5f, y + 2f, badgeText)
+            y += 19f
+
+            val metaPaint = Paint().apply {
+                isAntiAlias = true
+                textSize = 8.5f
+                color = Color.rgb(100, 116, 139)
+                textAlign = Paint.Align.CENTER
+            }
+            val metaStr = if (shopPhone.isNotBlank()) "মোবাইল: $shopPhone • সময়কাল: $periodTitle" else "সময়কাল: $periodTitle"
+            canvas.drawText(metaStr, 297.5f, y, metaPaint)
+
+            if (drawSummaryBox) {
+                // 3 or 4 Summary Metric Cards
+                val boxBg = Paint().apply { color = Color.rgb(248, 250, 252); style = Paint.Style.FILL }
+                val boxStroke = Paint().apply { color = Color.rgb(226, 232, 240); style = Paint.Style.STROKE; strokeWidth = 0.8f }
+                val summaryRect = RectF(34f, 88f, 561f, 138f)
+                canvas.drawRoundRect(summaryRect, 6f, 6f, boxBg)
+                canvas.drawRoundRect(summaryRect, 6f, 6f, boxStroke)
+
+                // Dividers
+                canvas.drawLine(165f, 92f, 165f, 134f, linePaint)
+                canvas.drawLine(300f, 92f, 300f, 134f, linePaint)
+                canvas.drawLine(435f, 92f, 435f, 134f, linePaint)
+
+                val labelPaint = Paint().apply {
+                    isAntiAlias = true
+                    textSize = 7.5f
+                    color = Color.rgb(100, 116, 139)
+                    textAlign = Paint.Align.CENTER
+                }
+                val valPaint = Paint().apply {
+                    isAntiAlias = true
+                    textSize = 11f
+                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    color = Color.rgb(5, 150, 105)
+                    textAlign = Paint.Align.CENTER
+                }
+                val blueValPaint = Paint().apply {
+                    isAntiAlias = true
+                    textSize = 10f
+                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    color = Color.rgb(2, 132, 199)
+                    textAlign = Paint.Align.CENTER
+                }
+                val amberValPaint = Paint().apply {
+                    isAntiAlias = true
+                    textSize = 10f
+                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    color = Color.rgb(217, 119, 6)
+                    textAlign = Paint.Align.CENTER
+                }
+                val countValPaint = Paint().apply {
+                    isAntiAlias = true
+                    textSize = 10f
+                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    color = Color.rgb(71, 85, 105)
+                    textAlign = Paint.Align.CENTER
+                }
+
+                // Col 1: সর্বমোট যুক্ত টাকা
+                canvas.drawText("মোট যুক্ত ক্যাশ", 99f, 105f, labelPaint)
+                canvas.drawText("+$currency ${totalAdded.toIntOrNull() ?: totalAdded}", 99f, 125f, valPaint)
+
+                // Col 2: নিজের ক্যাশ থেকে
+                canvas.drawText("নিজের ক্যাশ থেকে", 232f, 105f, labelPaint)
+                canvas.drawText("+$currency ${ownAdded.toIntOrNull() ?: ownAdded}", 232f, 125f, blueValPaint)
+
+                // Col 3: কারো কাছ থেকে ধার / আনা
+                canvas.drawText("কারো কাছ থেকে আনা / ধার", 367f, 105f, labelPaint)
+                canvas.drawText("+$currency ${personAdded.toIntOrNull() ?: personAdded}", 367f, 125f, amberValPaint)
+
+                // Col 4: মোট লেনদেন সংখ্যা
+                canvas.drawText("মোট লেনদেন সংখ্যা", 498f, 105f, labelPaint)
+                canvas.drawText("${entries.size} বার", 498f, 125f, countValPaint)
+            }
+        }
+
+        fun drawTableHeader(startY: Float): Float {
+            val thBg = Paint().apply { color = Color.rgb(30, 41, 59); style = Paint.Style.FILL }
+            canvas.drawRoundRect(RectF(34f, startY - 10f, 561f, startY + 12f), 4f, 4f, thBg)
+            canvas.drawText("#", 45f, startY + 4f, centerHeaderPaint)
+            canvas.drawText("তারিখ ও সময়", 65f, startY + 4f, leftHeaderPaint)
+            canvas.drawText("জমার উৎস", 155f, startY + 4f, leftHeaderPaint)
+            canvas.drawText("যার কাছ থেকে আনা", 240f, startY + 4f, leftHeaderPaint)
+            canvas.drawText("বিবরণ / নোট", 340f, startY + 4f, leftHeaderPaint)
+            canvas.drawText("যুক্ত টাকা ($currency)", 485f, startY + 4f, rightHeaderPaint)
+            canvas.drawText("ব্যালেন্স ($currency)", 555f, startY + 4f, rightHeaderPaint)
+            return startY + 20f
+        }
+
+        drawHeaderAndSummary(drawSummaryBox = true)
+        var y = 146f
+        y = drawTableHeader(y)
+
+        val rowBgAlt = Paint().apply { color = Color.rgb(248, 250, 252); style = Paint.Style.FILL }
+
+        entries.forEachIndexed { index, item ->
+            if (y > 745f) {
+                drawSponsorFooter(canvas, 812f, "মূল ক্যাশে টাকা জমার খতিয়ান মেমো")
+                pdfDocument.finishPage(page)
+                pageNumber++
+                pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+                page = pdfDocument.startPage(pageInfo)
+                canvas = page.canvas
+                drawHeaderAndSummary(drawSummaryBox = false)
+                y = 86f
+                y = drawTableHeader(y)
+            }
+
+            if (index % 2 == 1) {
+                canvas.drawRect(RectF(34f, y - 10f, 561f, y + 6f), rowBgAlt)
+            }
+            canvas.drawLine(34f, y + 6f, 561f, y + 6f, linePaint)
+
+            canvas.drawText("${index + 1}", 45f, y, centerTextPaint)
+            val dateStr = SimpleDateFormat("dd/MM/yy hh:mm a", Locale.getDefault()).format(Date(item.timestamp))
+            canvas.drawText(dateStr, 65f, y, textPaint)
+
+            val sourceText = when (item.sourceCategory) {
+                "OWN" -> "নিজের ক্যাশ"
+                "PERSON" -> "ধার / আনা"
+                else -> "অন্যান্য"
+            }
+            val sourcePaint = Paint().apply {
+                isAntiAlias = true
+                textSize = 8.5f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                color = when (item.sourceCategory) {
+                    "OWN" -> Color.rgb(2, 132, 199)
+                    "PERSON" -> Color.rgb(217, 119, 6)
+                    else -> Color.rgb(100, 116, 139)
+                }
+            }
+            canvas.drawText(sourceText, 155f, y, sourcePaint)
+
+            val personDisplay = if (item.personName.isNotBlank()) {
+                if (item.personName.length > 15) item.personName.take(13) + ".." else item.personName
+            } else if (item.sourceCategory == "OWN") {
+                "ব্যক্তিগত"
+            } else {
+                "-"
+            }
+            canvas.drawText(personDisplay, 240f, y, boldPaint)
+
+            val noteDisplay = if (item.note.isNotBlank()) {
+                if (item.note.length > 20) item.note.take(18) + ".." else item.note
+            } else {
+                "-"
+            }
+            canvas.drawText(noteDisplay, 340f, y, textPaint)
+
+            canvas.drawText("+${item.amount.toIntOrNull() ?: item.amount}", 485f, y, greenTextPaint)
+
+            val balStr = "${item.balanceAfter.toIntOrNull() ?: item.balanceAfter}"
+            canvas.drawText(balStr, 555f, y, balanceTextPaint)
+
+            y += 16f
+        }
+
+        // Table Bottom Summary Row
+        if (y <= 730f) {
+            y += 6f
+            val totalRowBg = Paint().apply { color = Color.rgb(236, 253, 245); style = Paint.Style.FILL }
+            canvas.drawRoundRect(RectF(34f, y - 8f, 561f, y + 14f), 4f, 4f, totalRowBg)
+            val doubleLine = Paint().apply { color = Color.rgb(167, 243, 208); strokeWidth = 1f }
+            canvas.drawLine(34f, y - 8f, 561f, y - 8f, doubleLine)
+            canvas.drawLine(34f, y + 14f, 561f, y + 14f, doubleLine)
+
+            val summaryTotalText = Paint().apply {
+                isAntiAlias = true
+                textSize = 9.5f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                color = Color.rgb(4, 120, 87)
+            }
+            canvas.drawText("সর্বমোট ক্যাশে যুক্ত করা টাকার পরিমাণ:", 65f, y + 6f, summaryTotalText)
+
+            val bigGreenTotal = Paint().apply {
+                isAntiAlias = true
+                textSize = 10f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                color = Color.rgb(4, 120, 87)
+                textAlign = Paint.Align.RIGHT
+            }
+            canvas.drawText("+$currency ${totalAdded.toIntOrNull() ?: totalAdded}", 485f, y + 6f, bigGreenTotal)
+        }
+
+        // Signature Blocks
+        val sigY = 780f
+        val sigLine = Paint().apply { color = Color.rgb(203, 213, 225); strokeWidth = 0.9f }
+        val sigTextPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 8.5f
+            color = Color.rgb(100, 116, 139)
+            textAlign = Paint.Align.CENTER
+        }
+
+        // Left Signature: হিসাবরক্ষক / ক্যাশিয়ার
+        canvas.drawLine(55f, sigY, 175f, sigY, sigLine)
+        canvas.drawText("হিসাবরক্ষক / ক্যাশিয়ারের স্বাক্ষর", 115f, sigY + 13f, sigTextPaint)
+
+        // Right Signature: দোকানদার / স্বত্বাধিকারী
+        canvas.drawLine(415f, sigY, 545f, sigY, sigLine)
+        canvas.drawText("দোকানদার / স্বত্বাধিকারীর স্বাক্ষর", 480f, sigY + 13f, sigTextPaint)
+
+        drawSponsorFooter(canvas, 812f, "দোকানের মূল ক্যাশে টাকা জমার খতিয়ান মেমো")
+        pdfDocument.finishPage(page)
+
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
+        return savePdfToFile(context, pdfDocument, "Added_Cash_History_$timestamp.pdf")
     }
 
     private fun savePdfToFile(context: Context, pdfDocument: PdfDocument, filename: String): File? {

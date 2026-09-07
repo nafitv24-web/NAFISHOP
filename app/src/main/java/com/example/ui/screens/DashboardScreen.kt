@@ -41,6 +41,7 @@ import com.example.data.model.CashLog
 import com.example.data.model.Customer
 import com.example.data.model.Product
 import com.example.data.model.TransactionRecord
+import com.example.ui.components.AddedCashHistoryDialog
 import com.example.ui.components.DueTagadaReminderDialog
 import com.example.ui.components.EditOrReturnSaleDialog
 import com.example.ui.components.NafiShopSmallLogo
@@ -102,6 +103,7 @@ fun DashboardScreen(
     var showSetBalanceDialog by remember { mutableStateOf(false) }
     var showDayEndSettleDialog by remember { mutableStateOf(false) }
     var showCashHistoryDialog by remember { mutableStateOf(false) }
+    var showAddedCashHistoryDialog by remember { mutableStateOf(false) }
     var showAllMemosDialog by remember { mutableStateOf(false) }
     var showDueSmsReminderDialog by remember { mutableStateOf(false) }
     var receiptCustomer by remember { mutableStateOf<Customer?>(null) }
@@ -431,6 +433,35 @@ fun DashboardScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
+                                // Added Cash to Drawer History Button
+                                Surface(
+                                    onClick = { showAddedCashHistoryDialog = true },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFFECFDF5),
+                                    border = BorderStroke(1.dp, Color(0xFFA7F3D0)),
+                                    modifier = Modifier.height(30.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Default.AccountBalanceWallet,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(13.dp),
+                                            tint = Color(0xFF059669)
+                                        )
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text(
+                                            text = if (language == "bn") "এড খতিয়ান" else "Added Logs",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontSize = 10.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF065F46)
+                                        )
+                                    }
+                                }
+
                                 // Cash History Icon
                                 IconButton(
                                     onClick = { showCashHistoryDialog = true },
@@ -2101,6 +2132,24 @@ fun DashboardScreen(
             }
         )
     }
+
+    if (showAddedCashHistoryDialog) {
+        AddedCashHistoryDialog(
+            cashLogs = cashLogs,
+            shopName = shopInfo.shopName,
+            shopPhone = shopInfo.phone,
+            currency = currency,
+            language = language,
+            onDismiss = { showAddedCashHistoryDialog = false },
+            onAddNewCash = {
+                showAddedCashHistoryDialog = false
+                showAddCashDialog = true
+            },
+            onDeleteLog = { logToDelete ->
+                viewModel.deleteCashLog(logToDelete)
+            }
+        )
+    }
 }
 
 @Composable
@@ -2114,6 +2163,8 @@ fun CashInputDialog(
 ) {
     var amountStr by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
+    var depositSource by remember { mutableStateOf("OWN") } // "OWN", "PERSON", "OTHER"
+    var personName by remember { mutableStateOf("") }
 
     val presetAmounts = if (isPositive) listOf("500", "1000", "2000", "5000") else listOf("100", "200", "500", "1000")
     val presetNotes = if (isPositive) listOf("ক্যাশ বিক্রি", "বাকি আদায়", "ব্যক্তিগত জমা", "মহাজন ফেরত") else listOf("দোকান ভাড়া", "বিদ্যুৎ বিল", "চা-নাস্তা", "ব্যক্তিগত খরচ")
@@ -2126,7 +2177,7 @@ fun CashInputDialog(
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             modifier = Modifier
-                .fillMaxWidth(0.90f)
+                .fillMaxWidth(0.92f)
                 .padding(vertical = 12.dp)
         ) {
             Column(
@@ -2140,7 +2191,7 @@ fun CashInputDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = title,
+                        text = if (isPositive && language == "bn") "দোকানের মূল ক্যাশে টাকা এড করুন" else title,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = if (isPositive) ProfitGreen else LossRed
@@ -2151,6 +2202,113 @@ fun CashInputDialog(
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
+
+                // If adding cash, provide dedicated source selection (Own Cash, From Someone, Other)
+                if (isPositive) {
+                    Text(
+                        text = if (language == "bn") "টাকা জমার উৎস নির্বাচন করুন *" else "Select Cash Source *",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF047857)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        // Option 1: Own Cash
+                        Surface(
+                            onClick = { depositSource = "OWN" },
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (depositSource == "OWN") Color(0xFFD1FAE5) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            border = BorderStroke(
+                                if (depositSource == "OWN") 1.5.dp else 1.dp,
+                                if (depositSource == "OWN") Color(0xFF059669) else MaterialTheme.colorScheme.outlineVariant
+                            ),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = if (language == "bn") "👤 নিজের ক্যাশ" else "👤 Own Cash",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = if (depositSource == "OWN") FontWeight.Bold else FontWeight.Normal,
+                                    color = if (depositSource == "OWN") Color(0xFF065F46) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 10.5.sp
+                                )
+                            }
+                        }
+
+                        // Option 2: From Someone (ধার / আনা)
+                        Surface(
+                            onClick = { depositSource = "PERSON" },
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (depositSource == "PERSON") Color(0xFFFEF3C7) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            border = BorderStroke(
+                                if (depositSource == "PERSON") 1.5.dp else 1.dp,
+                                if (depositSource == "PERSON") Color(0xFFD97706) else MaterialTheme.colorScheme.outlineVariant
+                            ),
+                            modifier = Modifier.weight(1.2f)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = if (language == "bn") "🤝 কারো থেকে আনা" else "🤝 From Someone",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = if (depositSource == "PERSON") FontWeight.Bold else FontWeight.Normal,
+                                    color = if (depositSource == "PERSON") Color(0xFF92400E) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 10.5.sp
+                                )
+                            }
+                        }
+
+                        // Option 3: Other
+                        Surface(
+                            onClick = { depositSource = "OTHER" },
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (depositSource == "OTHER") Color(0xFFE0F2FE) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            border = BorderStroke(
+                                if (depositSource == "OTHER") 1.5.dp else 1.dp,
+                                if (depositSource == "OTHER") Color(0xFF0284C7) else MaterialTheme.colorScheme.outlineVariant
+                            ),
+                            modifier = Modifier.weight(0.9f)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = if (language == "bn") "🏷️ অন্যান্য" else "🏷️ Other",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = if (depositSource == "OTHER") FontWeight.Bold else FontWeight.Normal,
+                                    color = if (depositSource == "OTHER") Color(0xFF0369A1) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 10.5.sp
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // If From Someone is chosen, ask for the person's name
+                    if (depositSource == "PERSON") {
+                        OutlinedTextField(
+                            value = personName,
+                            onValueChange = { personName = it },
+                            label = { Text(if (language == "bn") "কার কাছ থেকে আনা হয়েছে? (নাম) *" else "Person's Name *") },
+                            placeholder = { Text(if (language == "bn") "যেমন: আব্দুর রহিম / মহাজন / পার্টনার" else "e.g. Rahim / Partner") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                    }
+                }
 
                 OutlinedTextField(
                     value = amountStr,
@@ -2198,37 +2356,39 @@ fun CashInputDialog(
                 OutlinedTextField(
                     value = note,
                     onValueChange = { note = it },
-                    label = { Text(if (language == "bn") "কারণ / বিবরণ *" else "Note / Reason *") },
-                    placeholder = { Text(if (isPositive) "যেমন: নগদ বিক্রি, ব্যক্তিগত জমা" else "যেমন: দোকান ভাড়া, চা-নাস্তা") },
+                    label = { Text(if (language == "bn") "অতিরিক্ত বিবরণ / নোট (ঐচ্ছিক)" else "Note / Reason *") },
+                    placeholder = { Text(if (isPositive) "যেমন: জরুরি খরচ মেটাতে জমা" else "যেমন: দোকান ভাড়া, চা-নাস্তা") },
                     singleLine = true,
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Spacer(modifier = Modifier.height(6.dp))
+                if (!isPositive) {
+                    Spacer(modifier = Modifier.height(6.dp))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    presetNotes.take(3).forEach { noteSuggestion ->
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(6.dp))
-                                .clickable { note = noteSuggestion }
-                        ) {
-                            Text(
-                                text = noteSuggestion,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                maxLines = 1,
-                                fontSize = 10.sp,
-                                modifier = Modifier.padding(vertical = 4.dp, horizontal = 2.dp)
-                            )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        presetNotes.take(3).forEach { noteSuggestion ->
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable { note = noteSuggestion }
+                            ) {
+                                Text(
+                                    text = noteSuggestion,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    maxLines = 1,
+                                    fontSize = 10.sp,
+                                    modifier = Modifier.padding(vertical = 4.dp, horizontal = 2.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -2247,14 +2407,26 @@ fun CashInputDialog(
                         onClick = {
                             val amount = amountStr.toDoubleOrNull() ?: 0.0
                             if (amount > 0) {
-                                onConfirm(amount, note.ifBlank { if (isPositive) "ক্যাশ জমা" else "ক্যাশ উত্তোলন" })
+                                val formattedNote = if (isPositive) {
+                                    when (depositSource) {
+                                        "OWN" -> "নিজের ক্যাশ থেকে জমা" + if (note.isNotBlank()) " • $note" else ""
+                                        "PERSON" -> {
+                                            val pName = personName.ifBlank { "ব্যক্তি / ধার" }
+                                            "কার কাছ থেকে আনা: $pName" + if (note.isNotBlank()) " • $note" else ""
+                                        }
+                                        else -> note.ifBlank { "ক্যাশ জমা" }
+                                    }
+                                } else {
+                                    note.ifBlank { "ক্যাশ উত্তোলন" }
+                                }
+                                onConfirm(amount, formattedNote)
                             }
                         },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (isPositive) ProfitGreen else LossRed
                         ),
                         shape = RoundedCornerShape(8.dp),
-                        enabled = (amountStr.toDoubleOrNull() ?: 0.0) > 0
+                        enabled = (amountStr.toDoubleOrNull() ?: 0.0) > 0 && (!isPositive || depositSource != "PERSON" || personName.isNotBlank())
                     ) {
                         Text(
                             text = if (isPositive) (if (language == "bn") "ক্যাশ জমা করুন" else "Deposit") else (if (language == "bn") "ক্যাশ উত্তোলন করুন" else "Withdraw"),

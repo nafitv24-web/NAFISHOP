@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import android.app.DatePickerDialog
+import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -34,6 +35,8 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.example.data.model.CashLog
 import com.example.data.model.MasterCashEntry
+import com.example.data.model.parseCashAdditionItem
+import com.example.ui.components.AddedCashHistoryDialog
 import com.example.ui.components.toIntOrNull
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.ShopViewModel
@@ -123,6 +126,7 @@ fun CashBookScreen(
     // Dialog states
     var showIncomeDialog by remember { mutableStateOf(false) }
     var showExpenseDialog by remember { mutableStateOf(false) }
+    var showAddedCashHistoryDialog by remember { mutableStateOf(false) }
     var editingCashLog by remember { mutableStateOf<CashLog?>(null) }
     var deletingCashLog by remember { mutableStateOf<CashLog?>(null) }
     var viewingEntryDetails by remember { mutableStateOf<MasterCashEntry?>(null) }
@@ -495,6 +499,15 @@ fun CashBookScreen(
                         Icon(Icons.Default.PictureAsPdf, contentDescription = "Export PDF", tint = MaterialTheme.colorScheme.primary)
                     }
 
+                    // Cash Addition Ledger Icon
+                    IconButton(onClick = { showAddedCashHistoryDialog = true }) {
+                        Icon(
+                            Icons.Default.AccountBalanceWallet,
+                            contentDescription = if (language == "bn") "ক্যাশ এড খতিয়ান" else "Added Cash History",
+                            tint = ProfitGreen
+                        )
+                    }
+
                     // Cash Balance Adjustment Button
                     IconButton(onClick = { showAdjustBalanceDialog = true }) {
                         Icon(
@@ -680,6 +693,116 @@ fun CashBookScreen(
                 .padding(padding)
                 .background(MaterialTheme.colorScheme.background)
         ) {
+            // Added Cash to Drawer Banner Card
+            val addedCashItems = remember(cashLogs) {
+                cashLogs.filter { log ->
+                    val nl = log.note.trim()
+                    val isAuto = nl.startsWith("খরচ:") || nl.startsWith("খরচ বাতিল") || nl.startsWith("বাকি আদায়") || nl.startsWith("বাকি লগ") || nl.startsWith("পণ্য ক্রয়") || nl.startsWith("স্টক ইন") || nl.startsWith("দিনশেষের বিক্রি") || nl.startsWith("বিক্রি বাতিল")
+                    !isAuto && (log.type == "DEPOSIT" || (log.type == "INCOME" && !log.note.startsWith("বিক্রি")) || (log.type == "MANUAL_ADJUST" && log.amount > 0 && !log.note.contains("ঘাটতি")))
+                }
+            }
+            val totalAddedCashAmount = remember(addedCashItems) {
+                addedCashItems.sumOf { Math.abs(it.amount) }
+            }
+
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xFFECFDF5),
+                border = BorderStroke(1.dp, Color(0xFFA7F3D0)),
+                shadowElevation = 0.5.dp
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { showAddedCashHistoryDialog = true }
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(Color(0xFFD1FAE5), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.AccountBalanceWallet,
+                                contentDescription = null,
+                                tint = Color(0xFF059669),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = if (language == "bn") "মূল ক্যাশে টাকা এড খতিয়ান" else "Added Cash to Drawer",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF065F46)
+                            )
+                            Text(
+                                text = "মোট এড: ${CalculationHelper.formatCurrency(totalAddedCashAmount, currency)} (${addedCashItems.size} বার)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF047857),
+                                fontSize = 11.5.sp
+                            )
+                        }
+                    }
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Quick PDF Download
+                        IconButton(
+                            onClick = {
+                                val parsedList = addedCashItems.map { parseCashAdditionItem(it) }.sortedByDescending { it.timestamp }
+                                if (parsedList.isEmpty()) {
+                                    Toast.makeText(context, if (language == "bn") "কোনো রেকর্ড পাওয়া যায়নি" else "No records found", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    val pdfFile = PdfGenerator.generateAddedCashHistoryPdf(
+                                        context = context,
+                                        shopName = shopInfo.shopName,
+                                        shopPhone = shopInfo.phone,
+                                        periodTitle = "সকল সময়",
+                                        entries = parsedList,
+                                        currency = currency
+                                    )
+                                    if (pdfFile != null) {
+                                        Toast.makeText(context, if (language == "bn") "পিডিএফ তৈরি হয়েছে" else "PDF Generated", Toast.LENGTH_SHORT).show()
+                                        PdfGenerator.openOrSharePdf(context, pdfFile, "দোকানের মূল ক্যাশে টাকা যুক্ত করার খতিয়ান")
+                                    } else {
+                                        Toast.makeText(context, if (language == "bn") "পিডিএফ ব্যর্থ হয়েছে" else "PDF failed", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            },
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(Color.White, RoundedCornerShape(8.dp))
+                        ) {
+                            Icon(Icons.Default.PictureAsPdf, contentDescription = "PDF", tint = Color(0xFF059669), modifier = Modifier.size(16.dp))
+                        }
+
+                        // Open Dialog Button
+                        Button(
+                            onClick = { showAddedCashHistoryDialog = true },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            Text(if (language == "bn") "খতিয়ান" else "View", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
             // Subheader: Transaction Count & Period Filters (Matching screenshot)
             Surface(
                 color = MaterialTheme.colorScheme.surface,
@@ -1192,6 +1315,24 @@ fun CashBookScreen(
             }
         )
     }
+
+    if (showAddedCashHistoryDialog) {
+        AddedCashHistoryDialog(
+            cashLogs = cashLogs,
+            shopName = shopInfo.shopName,
+            shopPhone = shopInfo.phone,
+            currency = currency,
+            language = language,
+            onDismiss = { showAddedCashHistoryDialog = false },
+            onAddNewCash = {
+                showAddedCashHistoryDialog = false
+                showIncomeDialog = true
+            },
+            onDeleteLog = { logToDelete ->
+                viewModel.deleteCashLog(logToDelete)
+            }
+        )
+    }
 }
 
 @Composable
@@ -1226,6 +1367,8 @@ fun MasterCashEntryDialog(
 ) {
     var amountStr by remember { mutableStateOf("") }
     var noteStr by remember { mutableStateOf("") }
+    var selectedSource by remember { mutableStateOf("OWN") } // "OWN", "PERSON", "OTHER"
+    var personName by remember { mutableStateOf("") }
 
     val presetNotes = if (isIncome) {
         listOf("ক্যাশ বিক্রি", "বাকি আদায়", "ব্যক্তিগত জমা", "মহাজন বাকি ফেরত", "অন্যান্য আয়")
@@ -1282,6 +1425,65 @@ fun MasterCashEntryDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
+                // If adding cash to drawer, show Source Selector
+                if (isIncome) {
+                    Text(
+                        text = if (language == "bn") "টাকা কোথা থেকে এড করছেন? *" else "Cash Source *",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val sources = listOf(
+                            Triple("OWN", "👤 নিজের ক্যাশ", Color(0xFF059669)),
+                            Triple("PERSON", "🤝 কারো থেকে আনা", Color(0xFFD97706)),
+                            Triple("OTHER", "🏷️ অন্যান্য", Color(0xFF475569))
+                        )
+                        sources.forEach { (key, label, activeColor) ->
+                            val isSelected = selectedSource == key
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (isSelected) activeColor.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                border = BorderStroke(1.2.dp, if (isSelected) activeColor else Color.Transparent),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable { selectedSource = key }
+                            ) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) activeColor else MaterialTheme.colorScheme.onSurface,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                    fontSize = 10.5.sp,
+                                    modifier = Modifier.padding(vertical = 8.dp, horizontal = 2.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    if (selectedSource == "PERSON") {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = personName,
+                            onValueChange = { personName = it },
+                            label = { Text(if (language == "bn") "কার কাছ থেকে এনেছেন? (নাম) *" else "Person Name *") },
+                            placeholder = { Text("যেমন: রহিম ভাই / মহাজন / চাচা") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+
                 // Amount Field
                 OutlinedTextField(
                     value = amountStr,
@@ -1332,8 +1534,8 @@ fun MasterCashEntryDialog(
                 OutlinedTextField(
                     value = noteStr,
                     onValueChange = { noteStr = it },
-                    label = { Text(if (language == "bn") "বিবরণ / খাত *" else "Description / Purpose *") },
-                    placeholder = { Text(if (isIncome) "যেমন: নগদ বিক্রি / মহাজন পেমেন্ট" else "যেমন: দোকান ভাড়া / ব্যক্তিগত খরচ") },
+                    label = { Text(if (language == "bn") "বিবরণ / নোট (ঐচ্ছিক)" else "Description / Note (Optional)") },
+                    placeholder = { Text(if (isIncome) "যেমন: ব্যবসার প্রয়োজনে এনেছি" else "যেমন: দোকান ভাড়া / ব্যক্তিগত খরচ") },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -1371,11 +1573,30 @@ fun MasterCashEntryDialog(
                 Spacer(modifier = Modifier.height(18.dp))
 
                 // Action Buttons
+                val isButtonEnabled = (amountStr.toDoubleOrNull() ?: 0.0) > 0 &&
+                        (!isIncome || selectedSource != "PERSON" || personName.isNotBlank())
+
                 Button(
                     onClick = {
                         val amount = amountStr.toDoubleOrNull() ?: 0.0
                         if (amount > 0) {
-                            val finalNote = noteStr.ifBlank { if (isIncome) "ক্যাশ আয়" else "ক্যাশ খরচ" }
+                            val finalNote = if (isIncome) {
+                                when (selectedSource) {
+                                    "OWN" -> {
+                                        val base = "নিজের ক্যাশ থেকে জমা"
+                                        if (noteStr.isNotBlank()) "$base • ${noteStr.trim()}" else base
+                                    }
+                                    "PERSON" -> {
+                                        val base = "কার কাছ থেকে আনা: ${personName.trim()}"
+                                        if (noteStr.isNotBlank()) "$base • ${noteStr.trim()}" else base
+                                    }
+                                    else -> {
+                                        noteStr.ifBlank { "ক্যাশ জমা" }
+                                    }
+                                }
+                            } else {
+                                noteStr.ifBlank { "ক্যাশ খরচ" }
+                            }
                             onConfirm(amount, finalNote, System.currentTimeMillis())
                         }
                     },
@@ -1383,7 +1604,7 @@ fun MasterCashEntryDialog(
                         containerColor = if (isIncome) Color(0xFF16A34A) else Color(0xFFDC2626)
                     ),
                     shape = RoundedCornerShape(10.dp),
-                    enabled = (amountStr.toDoubleOrNull() ?: 0.0) > 0,
+                    enabled = isButtonEnabled,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(46.dp)

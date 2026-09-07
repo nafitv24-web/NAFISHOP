@@ -100,6 +100,75 @@ data class MasterCashEntry(
     val originalCashLog: CashLog? = null
 )
 
+data class CashAdditionItem(
+    val id: Long = 0,
+    val timestamp: Long = System.currentTimeMillis(),
+    val amount: Double = 0.0,
+    val sourceCategory: String = "OWN", // "OWN" (নিজের ক্যাশ), "PERSON" (কারো কাছ থেকে আনা), "OTHER" (অন্যান্য)
+    val personName: String = "",
+    val note: String = "",
+    val balanceAfter: Double = 0.0,
+    val originalCashLog: CashLog? = null
+)
+
+fun parseCashAdditionItem(log: CashLog): CashAdditionItem {
+    val rawNote = log.note.trim()
+    val sourceCategory: String
+    val personName: String
+    val cleanNote: String
+
+    when {
+        rawNote.contains("নিজের ক্যাশ") || rawNote.contains("ব্যক্তিগত জমা") || rawNote.contains("নিজের পকেট") -> {
+            sourceCategory = "OWN"
+            personName = ""
+            cleanNote = rawNote
+                .replace("উৎস: নিজের ক্যাশ", "")
+                .replace("নিজের ক্যাশ থেকে জমা", "")
+                .replace("নিজের ক্যাশ", "")
+                .replace("|", "")
+                .replace("নোট:", "")
+                .replace("•", "")
+                .trim()
+        }
+        rawNote.contains("কার কাছ থেকে আনা:") || rawNote.contains("কারো কাছ থেকে আনা") || rawNote.contains("ধার আনা") || rawNote.contains("ধার:") -> {
+            sourceCategory = "PERSON"
+            var pName = ""
+            var rem = rawNote
+            if (rawNote.contains("নাম:")) {
+                val afterName = rawNote.substringAfter("নাম:").trim()
+                pName = afterName.substringBefore("|").substringBefore("•").trim()
+                rem = afterName.substringAfter("|", "").ifBlank { afterName.substringAfter("•", "") }
+            } else if (rawNote.contains("কার কাছ থেকে আনা:")) {
+                val after = rawNote.substringAfter("কার কাছ থেকে আনা:").trim()
+                pName = after.substringBefore("•").substringBefore("|").substringBefore(":").trim()
+                rem = after.substringAfter("•", "").ifBlank { after.substringAfter("|", "") }
+            } else if (rawNote.contains("ধার:")) {
+                val after = rawNote.substringAfter("ধার:").trim()
+                pName = after.substringBefore("•").substringBefore("|").trim()
+                rem = after.substringAfter("•", "")
+            }
+            personName = pName.ifBlank { "অন্যান্য ব্যক্তি" }
+            cleanNote = rem.replace("নোট:", "").trim()
+        }
+        else -> {
+            sourceCategory = "OTHER"
+            personName = ""
+            cleanNote = rawNote.ifBlank { "ক্যাশ জমা" }
+        }
+    }
+
+    return CashAdditionItem(
+        id = log.id,
+        timestamp = log.timestamp,
+        amount = Math.abs(log.amount),
+        sourceCategory = sourceCategory,
+        personName = personName,
+        note = cleanNote,
+        balanceAfter = log.balanceAfter,
+        originalCashLog = log
+    )
+}
+
 data class CartItem(
     val product: Product,
     var quantity: Double = 1.0,
