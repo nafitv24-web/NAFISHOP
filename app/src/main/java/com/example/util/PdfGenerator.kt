@@ -413,19 +413,40 @@ object PdfGenerator {
         }
         canvas.drawRoundRect(RectF(35f, y, 560f, y + 115f), 8f, 8f, borderPaint)
 
+        val rightTextPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 10f
+            color = Color.rgb(30, 41, 59)
+            textAlign = Paint.Align.RIGHT
+        }
+        val rightBoldPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 10f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(15, 23, 42)
+            textAlign = Paint.Align.RIGHT
+        }
+        val rightNetProfitPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 13f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = if (netProfit >= 0) Color.rgb(4, 120, 87) else Color.rgb(220, 38, 38)
+            textAlign = Paint.Align.RIGHT
+        }
+
         y += 22f
         canvas.drawText("1. Total Sales (মোট বিক্রি):", 50f, y, textPaint)
-        canvas.drawText("$currency${totalSales.toIntOrNull() ?: totalSales}", 240f, y, boldPaint)
+        canvas.drawText("$currency${totalSales.toIntOrNull() ?: totalSales}", 280f, y, rightBoldPaint)
 
-        canvas.drawText("2. Cost of Goods (ক্রয়মূল্য):", 320f, y, textPaint)
-        canvas.drawText("- $currency${salesCost.toIntOrNull() ?: salesCost}", 480f, y, textPaint)
+        canvas.drawText("2. Cost of Goods (ক্রয়মূল্য):", 310f, y, textPaint)
+        canvas.drawText("- $currency${salesCost.toIntOrNull() ?: salesCost}", 545f, y, rightTextPaint)
         y += 20f
 
         canvas.drawText("3. Gross Profit (বিক্রয় লাভ):", 50f, y, boldPaint)
-        canvas.drawText("$currency${grossProfit.toIntOrNull() ?: grossProfit}", 240f, y, boldPaint)
+        canvas.drawText("$currency${grossProfit.toIntOrNull() ?: grossProfit}", 280f, y, rightBoldPaint)
 
-        canvas.drawText("4. Expenses (দোকানের মোট খরচ):", 320f, y, textPaint)
-        canvas.drawText("- $currency${expenses.toIntOrNull() ?: expenses}", 480f, y, textPaint)
+        canvas.drawText("4. Expenses (দোকানের মোট খরচ):", 310f, y, textPaint)
+        canvas.drawText("- $currency${expenses.toIntOrNull() ?: expenses}", 545f, y, rightTextPaint)
         y += 24f
 
         val netProfitPaint = Paint().apply {
@@ -435,10 +456,10 @@ object PdfGenerator {
             color = if (netProfit >= 0) Color.rgb(4, 120, 87) else Color.rgb(220, 38, 38)
         }
         canvas.drawText("NET PROFIT (নিট লাভ/মুনাফা):", 50f, y, netProfitPaint)
-        canvas.drawText("$currency${netProfit.toIntOrNull() ?: netProfit}", 240f, y, netProfitPaint)
+        canvas.drawText("$currency${netProfit.toIntOrNull() ?: netProfit}", 280f, y, rightNetProfitPaint)
 
-        canvas.drawText("Customer Due (মোট বাকি):", 320f, y, textPaint)
-        canvas.drawText("$currency${dueAmount.toIntOrNull() ?: dueAmount}", 480f, y, boldPaint)
+        canvas.drawText("Customer Due (মোট বাকি):", 310f, y, textPaint)
+        canvas.drawText("$currency${dueAmount.toIntOrNull() ?: dueAmount}", 545f, y, rightBoldPaint)
 
         y += 35f
 
@@ -530,6 +551,7 @@ object PdfGenerator {
 
     /**
      * Generates a Stock In & Stock Out Valuation & Movement Statement PDF
+     * Styled like an authentic shop memo / voucher (দোকানের মেমোর মতো আকর্ষণীয় ও নির্ভুল ডিজাইন)
      */
     fun generateStockInOutPdf(
         context: Context,
@@ -544,162 +566,323 @@ object PdfGenerator {
         currency: String = "৳"
     ): File? {
         val pdfDocument = PdfDocument()
-        val pageInfo = PdfDocument.PageInfo.Builder(595, 842, 1).create()
-        val page = pdfDocument.startPage(pageInfo)
-        val canvas = page.canvas
+        var pageNumber = 1
+        var pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+        var page = pdfDocument.startPage(pageInfo)
+        var canvas = page.canvas
 
         val titlePaint = Paint().apply {
             isAntiAlias = true
-            textSize = 18f
+            textSize = 20f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             color = Color.rgb(15, 23, 42)
             textAlign = Paint.Align.CENTER
         }
         val subPaint = Paint().apply {
             isAntiAlias = true
-            textSize = 10f
+            textSize = 9.5f
             color = Color.rgb(100, 116, 139)
-            textAlign = Paint.Align.CENTER
         }
         val boldPaint = Paint().apply {
             isAntiAlias = true
-            textSize = 10f
+            textSize = 9.5f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             color = Color.rgb(15, 23, 42)
         }
         val textPaint = Paint().apply {
             isAntiAlias = true
-            textSize = 9.5f
+            textSize = 9f
             color = Color.rgb(30, 41, 59)
         }
-        val stockInColor = Color.rgb(16, 185, 129) // Emerald
-        val stockOutColor = Color.rgb(225, 29, 72) // Rose/Red
-
-        // Top banner
-        val topBarPaint = Paint().apply { color = Color.rgb(37, 99, 235); style = Paint.Style.FILL }
-        canvas.drawRect(0f, 0f, 595f, 12f, topBarPaint)
-
-        var y = 45f
-        canvas.drawText(shopName, 297.5f, y, titlePaint)
-        y += 16f
-        canvas.drawText("Stock In & Out Detailed Movement Report - $periodTitle", 297.5f, y, subPaint)
-        y += 14f
-        val genDate = SimpleDateFormat("dd MMMM yyyy, hh:mm a", Locale.getDefault()).format(Date())
-        canvas.drawText("Generated on: $genDate", 297.5f, y, subPaint)
-        y += 20f
-
-        // Stock Summary Overview Box
-        val boxPaint = Paint().apply {
-            color = Color.rgb(248, 250, 252)
-            style = Paint.Style.FILL
+        val rightTextPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 9f
+            color = Color.rgb(30, 41, 59)
+            textAlign = Paint.Align.RIGHT
         }
-        canvas.drawRoundRect(RectF(35f, y, 560f, y + 90f), 8f, 8f, boxPaint)
-        val borderPaint = Paint().apply {
+        val rightBoldPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 9.5f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(15, 23, 42)
+            textAlign = Paint.Align.RIGHT
+        }
+        val rightHeaderPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 9f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.WHITE
+            textAlign = Paint.Align.RIGHT
+        }
+        val centerHeaderPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 9f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.WHITE
+            textAlign = Paint.Align.CENTER
+        }
+        val leftHeaderPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 9f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.WHITE
+        }
+        val framePaint = Paint().apply {
             color = Color.rgb(203, 213, 225)
             style = Paint.Style.STROKE
             strokeWidth = 1f
         }
-        canvas.drawRoundRect(RectF(35f, y, 560f, y + 90f), 8f, 8f, borderPaint)
-
-        y += 20f
-        val inTitlePaint = Paint().apply {
-            isAntiAlias = true
-            textSize = 10.5f
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            color = stockInColor
+        val linePaint = Paint().apply {
+            color = Color.rgb(226, 232, 240)
+            strokeWidth = 0.8f
         }
-        canvas.drawText("1. Total Stock In (মোট পণ্য ইন):", 50f, y, inTitlePaint)
-        canvas.drawText("$currency${totalStockInAmount.toIntOrNull() ?: totalStockInAmount} (${totalStockInQty.toIntOrNull() ?: totalStockInQty} Qty)", 230f, y, inTitlePaint)
 
-        val outTitlePaint = Paint().apply {
-            isAntiAlias = true
-            textSize = 10.5f
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            color = stockOutColor
+        fun drawMemoDecorations(isFirstPage: Boolean): Float {
+            // Outer neat document border
+            canvas.drawRoundRect(RectF(24f, 16f, 571f, 826f), 6f, 6f, framePaint)
+
+            // Top primary accent bar
+            val topBarPaint = Paint().apply { color = Color.rgb(16, 185, 129); style = Paint.Style.FILL }
+            canvas.drawRoundRect(RectF(24f, 16f, 571f, 24f), 0f, 0f, topBarPaint)
+
+            var y = 48f
+            canvas.drawText(shopName, 297.5f, y, titlePaint)
+            y += 18f
+
+            // Memo Title Badge
+            val badgeBg = Paint().apply { color = Color.rgb(236, 253, 245); style = Paint.Style.FILL }
+            val badgeStroke = Paint().apply { color = Color.rgb(16, 185, 129); style = Paint.Style.STROKE; strokeWidth = 1f }
+            canvas.drawRoundRect(RectF(160f, y - 13f, 435f, y + 9f), 11f, 11f, badgeBg)
+            canvas.drawRoundRect(RectF(160f, y - 13f, 435f, y + 9f), 11f, 11f, badgeStroke)
+
+            val badgeTextPaint = Paint().apply {
+                isAntiAlias = true
+                textSize = 10.5f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                color = Color.rgb(4, 120, 87)
+                textAlign = Paint.Align.CENTER
+            }
+            canvas.drawText("স্টক ইন-আউট মেমো ভাউচার / STOCK MOVEMENT MEMO", 297.5f, y + 2f, badgeTextPaint)
+            y += 20f
+
+            val genDate = SimpleDateFormat("dd MMMM yyyy, hh:mm a", Locale.getDefault()).format(Date())
+            canvas.drawText("মেমো সময়কাল: $periodTitle", 34f, y, boldPaint)
+            val dateRightPaint = Paint().apply {
+                isAntiAlias = true
+                textSize = 9.5f
+                color = Color.rgb(71, 85, 105)
+                textAlign = Paint.Align.RIGHT
+            }
+            canvas.drawText("তারিখ: $genDate | পৃষ্ঠা: $pageNumber", 561f, y, dateRightPaint)
+            y += 10f
+
+            canvas.drawLine(34f, y, 561f, y, linePaint)
+            y += 12f
+
+            if (isFirstPage) {
+                // Two Distinct Summary Voucher Cards (Left: Stock In, Right: Stock Out)
+                val cardWidth = 259f
+                val cardHeight = 60f
+
+                // Left Card (Stock In)
+                val inBg = Paint().apply { color = Color.rgb(240, 253, 244); style = Paint.Style.FILL }
+                val inBorder = Paint().apply { color = Color.rgb(187, 247, 208); style = Paint.Style.STROKE; strokeWidth = 1f }
+                canvas.drawRoundRect(RectF(34f, y, 34f + cardWidth, y + cardHeight), 6f, 6f, inBg)
+                canvas.drawRoundRect(RectF(34f, y, 34f + cardWidth, y + cardHeight), 6f, 6f, inBorder)
+
+                val inLabelPaint = Paint().apply {
+                    isAntiAlias = true
+                    textSize = 10f
+                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    color = Color.rgb(21, 128, 61)
+                }
+                canvas.drawText("📥 মোট পণ্য স্টক ইন (ক্রয় চালান)", 44f, y + 16f, inLabelPaint)
+                val inValPaint = Paint().apply {
+                    isAntiAlias = true
+                    textSize = 15f
+                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    color = Color.rgb(21, 128, 61)
+                }
+                canvas.drawText("$currency${totalStockInAmount.toIntOrNull() ?: totalStockInAmount}", 44f, y + 36f, inValPaint)
+                canvas.drawText("মোট পরিমাণ: ${totalStockInQty.toIntOrNull() ?: totalStockInQty} টি পণ্য", 44f, y + 51f, subPaint)
+
+                // Right Card (Stock Out)
+                val outBg = Paint().apply { color = Color.rgb(254, 242, 242); style = Paint.Style.FILL }
+                val outBorder = Paint().apply { color = Color.rgb(254, 202, 202); style = Paint.Style.STROKE; strokeWidth = 1f }
+                val rightCardX = 302f
+                canvas.drawRoundRect(RectF(rightCardX, y, rightCardX + cardWidth, y + cardHeight), 6f, 6f, outBg)
+                canvas.drawRoundRect(RectF(rightCardX, y, rightCardX + cardWidth, y + cardHeight), 6f, 6f, outBorder)
+
+                val outLabelPaint = Paint().apply {
+                    isAntiAlias = true
+                    textSize = 10f
+                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    color = Color.rgb(190, 18, 60)
+                }
+                canvas.drawText("📤 মোট পণ্য স্টক আউট (বিক্রি)", rightCardX + 10f, y + 16f, outLabelPaint)
+                val outValPaint = Paint().apply {
+                    isAntiAlias = true
+                    textSize = 15f
+                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    color = Color.rgb(190, 18, 60)
+                }
+                canvas.drawText("$currency${totalStockOutSales.toIntOrNull() ?: totalStockOutSales}", rightCardX + 10f, y + 36f, outValPaint)
+                canvas.drawText("কেনা খরচ: $currency${totalStockOutCost.toIntOrNull() ?: totalStockOutCost} • ${totalStockOutQty.toIntOrNull() ?: totalStockOutQty} টি পণ্য", rightCardX + 10f, y + 51f, subPaint)
+
+                y += cardHeight + 8f
+
+                // Net Capital Flow Strip
+                val netFlow = totalStockInAmount - totalStockOutCost
+                val flowBg = Paint().apply { color = Color.rgb(248, 250, 252); style = Paint.Style.FILL }
+                val flowBorder = Paint().apply { color = Color.rgb(226, 232, 240); style = Paint.Style.STROKE; strokeWidth = 1f }
+                canvas.drawRoundRect(RectF(34f, y, 561f, y + 26f), 4f, 4f, flowBg)
+                canvas.drawRoundRect(RectF(34f, y, 561f, y + 26f), 4f, 4f, flowBorder)
+
+                canvas.drawText("স্টক মূলধনের নিট প্রবাহ (ইন মূল্য - আউট খরচ):", 44f, y + 17f, boldPaint)
+                val netFlowPaint = Paint().apply {
+                    isAntiAlias = true
+                    textSize = 11f
+                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    color = if (netFlow >= 0) Color.rgb(2, 132, 199) else Color.rgb(225, 29, 72)
+                    textAlign = Paint.Align.RIGHT
+                }
+                val sign = if (netFlow >= 0) "+" else ""
+                canvas.drawText("$sign$currency${netFlow.toIntOrNull() ?: netFlow}", 551f, y + 17f, netFlowPaint)
+
+                y += 34f
+            }
+
+            return y
         }
-        canvas.drawText("2. Total Stock Out (মোট পণ্য আউট):", 340f, y, outTitlePaint)
-        canvas.drawText("$currency${totalStockOutSales.toIntOrNull() ?: totalStockOutSales} (${totalStockOutQty.toIntOrNull() ?: totalStockOutQty} Qty)", 480f, y, outTitlePaint)
-        y += 22f
 
-        canvas.drawText("Stock Out Cost (ক্রয়মূল্য হিসাব):", 50f, y, textPaint)
-        canvas.drawText("$currency${totalStockOutCost.toIntOrNull() ?: totalStockOutCost}", 230f, y, textPaint)
+        fun drawTableHeader(startY: Float): Float {
+            val thBg = Paint().apply { color = Color.rgb(30, 41, 59); style = Paint.Style.FILL }
+            canvas.drawRoundRect(RectF(34f, startY - 13f, 561f, startY + 11f), 4f, 4f, thBg)
 
-        val netFlow = totalStockInAmount - totalStockOutCost
-        val netFlowPaint = Paint().apply {
-            isAntiAlias = true
-            textSize = 10.5f
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            color = if (netFlow >= 0) Color.rgb(37, 99, 235) else Color.rgb(225, 29, 72)
+            canvas.drawText("নং", 46f, startY, centerHeaderPaint)
+            canvas.drawText("ধরন", 76f, startY, centerHeaderPaint)
+            canvas.drawText("তারিখ ও সময়", 102f, startY, leftHeaderPaint)
+            canvas.drawText("পণ্যের নাম ও বিবরণ", 196f, startY, leftHeaderPaint)
+            canvas.drawText("পরিমাণ", 420f, startY, rightHeaderPaint)
+            canvas.drawText("দর", 480f, startY, rightHeaderPaint)
+            canvas.drawText("মোট টাকা", 553f, startY, rightHeaderPaint)
+
+            return startY + 18f
         }
-        canvas.drawText("3. Net Stock Flow (স্টক মূলধন পরিবর্তন):", 340f, y, textPaint)
-        val sign = if (netFlow >= 0) "+" else ""
-        canvas.drawText("$sign$currency${netFlow.toIntOrNull() ?: netFlow}", 480f, y, netFlowPaint)
-        y += 20f
 
-        val subStatsPaint = Paint().apply {
-            isAntiAlias = true
-            textSize = 9f
-            color = Color.rgb(100, 116, 139)
-        }
-        canvas.drawText("Total Transactions: ${transactions.size} records in selected period", 50f, y, subStatsPaint)
-        y += 35f
+        var y = drawMemoDecorations(isFirstPage = true)
+        y = drawTableHeader(y)
 
-        // Table Header
-        val thBg = Paint().apply { color = Color.rgb(241, 245, 249); style = Paint.Style.FILL }
-        canvas.drawRect(RectF(35f, y - 12f, 560f, y + 8f), thBg)
-        val thPaint = Paint().apply {
-            isAntiAlias = true
-            textSize = 9f
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            color = Color.rgb(71, 85, 105)
-        }
-        canvas.drawText("TYPE", 45f, y, thPaint)
-        canvas.drawText("DATE & TIME", 110f, y, thPaint)
-        canvas.drawText("PRODUCT NAME", 210f, y, thPaint)
-        canvas.drawText("QUANTITY", 380f, y, thPaint)
-        canvas.drawText("RATE", 445f, y, thPaint)
-        canvas.drawText("TOTAL", 510f, y, thPaint)
-        y += 18f
-
-        val rowBg = Paint().apply { color = Color.rgb(248, 250, 252); style = Paint.Style.FILL }
+        val rowBgAlt = Paint().apply { color = Color.rgb(248, 250, 252); style = Paint.Style.FILL }
         val inBadgePaint = Paint().apply {
             isAntiAlias = true
             textSize = 8.5f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            color = stockInColor
+            color = Color.rgb(21, 128, 61)
+            textAlign = Paint.Align.CENTER
         }
         val outBadgePaint = Paint().apply {
             isAntiAlias = true
             textSize = 8.5f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            color = stockOutColor
+            color = Color.rgb(190, 18, 60)
+            textAlign = Paint.Align.CENTER
+        }
+        val inPillBg = Paint().apply { color = Color.rgb(220, 252, 231); style = Paint.Style.FILL }
+        val outPillBg = Paint().apply { color = Color.rgb(254, 226, 226); style = Paint.Style.FILL }
+
+        val centerTextPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 8.5f
+            color = Color.rgb(71, 85, 105)
+            textAlign = Paint.Align.CENTER
         }
 
-        transactions.take(28).forEachIndexed { i, tx ->
-            if (y + 16f > 790f) return@forEachIndexed
-            if (i % 2 == 1) {
-                canvas.drawRect(RectF(35f, y - 10f, 560f, y + 6f), rowBg)
+        transactions.forEachIndexed { index, tx ->
+            if (y > 745f) {
+                // Draw footer before finishing page
+                drawSponsorFooter(canvas, 812f, "NAFI KHATA মেমো ভাউচার • পৃষ্ঠা: $pageNumber")
+                pdfDocument.finishPage(page)
+
+                pageNumber++
+                pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+                page = pdfDocument.startPage(pageInfo)
+                canvas = page.canvas
+
+                y = drawMemoDecorations(isFirstPage = false)
+                y = drawTableHeader(y)
             }
+
+            if (index % 2 == 1) {
+                canvas.drawRect(RectF(34f, y - 11f, 561f, y + 7f), rowBgAlt)
+            }
+            canvas.drawLine(34f, y + 7f, 561f, y + 7f, linePaint)
+
             val isStockIn = tx.type == "STOCK_IN" || tx.type == "PURCHASE"
-            val typeStr = if (isStockIn) "IN" else "OUT"
-            canvas.drawText(typeStr, 45f, y, if (isStockIn) inBadgePaint else outBadgePaint)
 
+            // SL No
+            canvas.drawText("${index + 1}", 46f, y, centerTextPaint)
+
+            // IN / OUT Badge
+            val badgeRect = RectF(62f, y - 10f, 90f, y + 5f)
+            canvas.drawRoundRect(badgeRect, 4f, 4f, if (isStockIn) inPillBg else outPillBg)
+            canvas.drawText(if (isStockIn) "ইন" else "আউট", 76f, y + 1f, if (isStockIn) inBadgePaint else outBadgePaint)
+
+            // Date & Time
             val timeShort = SimpleDateFormat("dd/MM/yy hh:mm a", Locale.getDefault()).format(Date(tx.timestamp))
-            canvas.drawText(timeShort, 110f, y, textPaint)
+            canvas.drawText(timeShort, 102f, y, textPaint)
 
+            // Product Name (truncated if long)
             val title = if (tx.productName.length > 25) tx.productName.take(23) + ".." else tx.productName
-            canvas.drawText(title, 210f, y, textPaint)
+            canvas.drawText(title, 196f, y, textPaint)
 
-            canvas.drawText("${tx.quantity.toIntOrNull() ?: tx.quantity} ${tx.unit}", 380f, y, textPaint)
+            // Quantity (Right-aligned)
+            canvas.drawText("${tx.quantity.toIntOrNull() ?: tx.quantity} ${tx.unit}", 420f, y, rightTextPaint)
+
+            // Rate (Right-aligned)
             val unitP = if (isStockIn) tx.costPrice.takeIf { it > 0 } ?: tx.unitPrice else tx.unitPrice
-            canvas.drawText("$currency${unitP.toIntOrNull() ?: unitP}", 445f, y, textPaint)
-            canvas.drawText("$currency${tx.totalAmount.toIntOrNull() ?: tx.totalAmount}", 510f, y, boldPaint)
+            canvas.drawText("$currency${unitP.toIntOrNull() ?: unitP}", 480f, y, rightTextPaint)
 
-            y += 16f
+            // Total Amount (Right-aligned, bold)
+            canvas.drawText("$currency${tx.totalAmount.toIntOrNull() ?: tx.totalAmount}", 553f, y, rightBoldPaint)
+
+            y += 18f
         }
 
-        // Footer
-        drawSponsorFooter(canvas, 802f, "NAFI KHATA Stock In-Out Report")
+        // Totals Footer Row at bottom of table
+        if (y <= 745f) {
+            val totalRowBg = Paint().apply { color = Color.rgb(241, 245, 249); style = Paint.Style.FILL }
+            canvas.drawRoundRect(RectF(34f, y - 8f, 561f, y + 14f), 4f, 4f, totalRowBg)
+            val doubleLine = Paint().apply { color = Color.rgb(148, 163, 184); strokeWidth = 1f }
+            canvas.drawLine(34f, y - 8f, 561f, y - 8f, doubleLine)
+            canvas.drawLine(34f, y + 14f, 561f, y + 14f, doubleLine)
+
+            canvas.drawText("মোট হিসাব: ${transactions.size} টি লেনদেন", 44f, y + 5f, boldPaint)
+            val sumText = "ইন: $currency${totalStockInAmount.toIntOrNull() ?: totalStockInAmount}  |  আউট: $currency${totalStockOutSales.toIntOrNull() ?: totalStockOutSales}"
+            canvas.drawText(sumText, 553f, y + 5f, rightBoldPaint)
+            y += 24f
+        }
+
+        // Signatures Block (মেমোর মতো স্বাক্ষর)
+        val sigY = 780f
+        val sigLinePaint = Paint().apply {
+            color = Color.rgb(148, 163, 184)
+            strokeWidth = 1f
+        }
+        val sigTextPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 9.5f
+            color = Color.rgb(71, 85, 105)
+            textAlign = Paint.Align.CENTER
+        }
+        canvas.drawLine(44f, sigY, 180f, sigY, sigLinePaint)
+        canvas.drawText("হিসাবরক্ষক / প্রস্তুতকারী", 112f, sigY + 13f, sigTextPaint)
+
+        canvas.drawLine(425f, sigY, 551f, sigY, sigLinePaint)
+        canvas.drawText("স্বত্বাধিকারীর স্বাক্ষর", 488f, sigY + 13f, sigTextPaint)
+
+        // Footer note
+        drawSponsorFooter(canvas, 812f, "NAFI KHATA ডিজিটাল খাতা ও মেমো প্রিন্ট • নির্ভুল হিসাবের বিশ্বস্ত সঙ্গী")
 
         pdfDocument.finishPage(page)
         return savePdfToFile(context, pdfDocument, "Stock_InOut_${periodTitle.replace(" ", "_")}.pdf")
