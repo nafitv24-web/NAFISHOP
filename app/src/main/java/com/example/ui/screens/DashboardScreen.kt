@@ -2094,8 +2094,9 @@ fun DashboardScreen(
                 showAllServicesDialog = false
                 showAddCashDialog = true
             },
-            onNavigateToReports = {
+            onNavigateToReports = { tab ->
                 showAllServicesDialog = false
+                viewModel.setReportsTab(tab)
                 onNavigateToReports()
             }
         )
@@ -3937,7 +3938,7 @@ fun AllServicesDialog(
     onOpenDueSms: () -> Unit,
     onOpenBackup: () -> Unit,
     onOpenCashIn: () -> Unit,
-    onNavigateToReports: () -> Unit = {}
+    onNavigateToReports: (Int) -> Unit = {}
 ) {
     Dialog(
         onDismissRequest = onDismiss,
@@ -4075,9 +4076,20 @@ fun AllServicesDialog(
                             iconBg = Color(0xFFFAF5FF),
                             iconTint = Color(0xFF7C3AED),
                             modifier = Modifier.weight(1f),
-                            onClick = onNavigateToReports
+                            onClick = {
+                                onNavigateToReports(0)
+                            }
                         )
-                        Spacer(modifier = Modifier.weight(1f))
+                        CoreGridActionCard(
+                            title = if (language == "bn") "স্টক ইন-আউট হিসাব" else "Stock In-Out",
+                            icon = Icons.Default.SwapVert,
+                            iconBg = Color(0xFFF0FDF4),
+                            iconTint = Color(0xFF16A34A),
+                            modifier = Modifier.weight(1f),
+                            onClick = {
+                                onNavigateToReports(1)
+                            }
+                        )
                     }
                 }
             }

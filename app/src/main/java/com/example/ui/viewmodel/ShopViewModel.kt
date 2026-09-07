@@ -87,6 +87,14 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     private val _themeMode = MutableStateFlow(prefs.getString("app_theme_mode", "SYSTEM") ?: "SYSTEM")
     val themeMode: StateFlow<String> = _themeMode.asStateFlow()
 
+    // Reports Screen Initial Tab (0: Profit & Loss, 1: Stock In-Out)
+    private val _reportsScreenInitialTab = MutableStateFlow(0)
+    val reportsScreenInitialTab: StateFlow<Int> = _reportsScreenInitialTab.asStateFlow()
+
+    fun setReportsTab(tabIndex: Int) {
+        _reportsScreenInitialTab.value = tabIndex
+    }
+
     // User-Defined Custom Categories (no hardcoded sample categories)
     private val _customCategories = MutableStateFlow<List<String>>(
         prefs.getStringSet("custom_user_categories", emptySet())?.toList()?.filter { it.isNotBlank() && it != "সব" && it != "All" }?.sorted() ?: emptyList()

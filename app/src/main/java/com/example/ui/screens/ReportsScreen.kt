@@ -141,6 +141,52 @@ fun ReportsScreen(
         periodTransactions.filter { it.type == "STOCK_IN" || it.type == "PURCHASE" }.sumOf { it.totalAmount }
     }
 
+    val initialTab by viewModel.reportsScreenInitialTab.collectAsState()
+    var selectedReportTab by remember { mutableStateOf(initialTab) } // 0: লাভ-ক্ষতি রিপোর্ট, 1: স্টক ইন-আউট হিসাব
+    var stockInOutFilter by remember { mutableStateOf("ALL") } // "ALL", "STOCK_IN", "STOCK_OUT"
+
+    LaunchedEffect(initialTab) {
+        selectedReportTab = initialTab
+    }
+
+    // Stock In & Out Specific Calculations
+    val stockInTransactions = remember(periodTransactions) {
+        periodTransactions.filter { it.type == "STOCK_IN" || it.type == "PURCHASE" }
+    }
+    val stockOutTransactions = remember(periodTransactions) {
+        periodTransactions.filter { it.type == "SALE" || it.type == "STOCK_OUT_DAMAGE" || it.type == "DAMAGE" }
+    }
+
+    val totalStockInAmount = remember(stockInTransactions) {
+        stockInTransactions.sumOf { it.totalAmount }
+    }
+    val totalStockInQty = remember(stockInTransactions) {
+        stockInTransactions.sumOf { it.quantity }
+    }
+
+    val totalStockOutSales = remember(stockOutTransactions) {
+        stockOutTransactions.sumOf { it.totalAmount }
+    }
+    val totalStockOutCost = remember(stockOutTransactions) {
+        stockOutTransactions.sumOf {
+            val rate = if (it.costPrice > 0) it.costPrice else it.unitPrice
+            rate * it.quantity
+        }
+    }
+    val totalStockOutQty = remember(stockOutTransactions) {
+        stockOutTransactions.sumOf { it.quantity }
+    }
+
+    val displayedStockTransactions = remember(periodTransactions, stockInOutFilter) {
+        when (stockInOutFilter) {
+            "STOCK_IN" -> stockInTransactions
+            "STOCK_OUT" -> stockOutTransactions
+            else -> periodTransactions.filter {
+                it.type in listOf("STOCK_IN", "PURCHASE", "SALE", "STOCK_OUT_DAMAGE", "DAMAGE")
+            }
+        }.sortedByDescending { it.timestamp }
+    }
+
     val periodTitle = when (selectedPeriod) {
         "TODAY" -> if (language == "bn") "আজকের হিসাব রিপোর্ট (${dateDisplaySdf.format(Date(periodRange.first))})" else "Today's Report (${dateDisplaySdf.format(Date(periodRange.first))})"
         "YESTERDAY" -> if (language == "bn") "গতকালের হিসাব রিপোর্ট (${dateDisplaySdf.format(Date(periodRange.first))})" else "Yesterday's Report (${dateDisplaySdf.format(Date(periodRange.first))})"
@@ -157,6 +203,79 @@ fun ReportsScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Primary Screen Switcher: [ লাভ-ক্ষতি ও পূর্ণাঙ্গ রিপোর্ট | পণ্য স্টক ইন-আউট হিসাব ]
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    val isProfitTab = selectedReportTab == 0
+                    Surface(
+                        onClick = { selectedReportTab = 0 },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (isProfitTab) MaterialTheme.colorScheme.primary else Color.Transparent
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(vertical = 10.dp, horizontal = 6.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Analytics,
+                                contentDescription = null,
+                                tint = if (isProfitTab) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (language == "bn") "লাভ-ক্ষতি রিপোর্ট" else "Profit & Loss",
+                                fontWeight = if (isProfitTab) FontWeight.Bold else FontWeight.Medium,
+                                fontSize = 12.sp,
+                                color = if (isProfitTab) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    val isStockTab = selectedReportTab == 1
+                    Surface(
+                        onClick = { selectedReportTab = 1 },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (isStockTab) EmeraldPrimary else Color.Transparent
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(vertical = 10.dp, horizontal = 6.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.SwapVert,
+                                contentDescription = null,
+                                tint = if (isStockTab) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (language == "bn") "পণ্য স্টক ইন-আউট" else "Stock In-Out",
+                                fontWeight = if (isStockTab) FontWeight.Bold else FontWeight.Medium,
+                                fontSize = 12.sp,
+                                color = if (isStockTab) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         // Period Tabs
         item {
             LazyRow(
@@ -268,8 +387,9 @@ fun ReportsScreen(
             }
         }
 
-        // Highlight Net Profit Card
-        item {
+        if (selectedReportTab == 0) {
+            // Highlight Net Profit Card
+            item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
@@ -868,6 +988,329 @@ fun ReportsScreen(
                 )
             }
         }
+        } else {
+            // STOCK IN & STOCK OUT DETAILED REPORT
+            // 1. Stock In-Out Summary Cards
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(EmeraldPrimary.copy(alpha = 0.12f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.SwapVert,
+                                        contentDescription = null,
+                                        tint = EmeraldPrimary,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = if (language == "bn") "স্টক ইন ও আউট বিবরণী" else "Stock In & Out Statement",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = periodTitle,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // 2 Primary Stat Cards: Stock In & Stock Out
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            // Total Stock In Box
+                            Card(
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4)),
+                                border = BorderStroke(1.dp, Color(0xFFBBF7D0))
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.ArrowDownward,
+                                            contentDescription = null,
+                                            tint = Color(0xFF16A34A),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = if (language == "bn") "মোট স্টক ইন" else "Total Stock In",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF15803D)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(
+                                        text = "$currency${totalStockInAmount.toIntOrNull() ?: totalStockInAmount}",
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color(0xFF14532D)
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "${totalStockInQty.toIntOrNull() ?: totalStockInQty} টি পণ্য • ${stockInTransactions.size} চালান",
+                                        fontSize = 10.sp,
+                                        color = Color(0xFF166534)
+                                    )
+                                }
+                            }
+
+                            // Total Stock Out Box
+                            Card(
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF1F2)),
+                                border = BorderStroke(1.dp, Color(0xFFFECDD3))
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.ArrowUpward,
+                                            contentDescription = null,
+                                            tint = Color(0xFFE11D48),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = if (language == "bn") "মোট স্টক আউট" else "Total Stock Out",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFFBE123C)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(
+                                        text = "$currency${totalStockOutSales.toIntOrNull() ?: totalStockOutSales}",
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color(0xFF881337)
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "কেনা খরচ: $currency${totalStockOutCost.toIntOrNull() ?: totalStockOutCost} • ${totalStockOutQty.toIntOrNull() ?: totalStockOutQty} টি",
+                                        fontSize = 10.sp,
+                                        color = Color(0xFF9F1239)
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Net Movement Strip
+                        val netFlow = totalStockInAmount - totalStockOutCost
+                        val isNetPositive = netFlow >= 0
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isNetPositive) Color(0xFFEFF6FF) else Color(0xFFFFFBEB),
+                            border = BorderStroke(1.dp, if (isNetPositive) Color(0xFFBFDBFE) else Color(0xFFFDE68A)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = if (isNetPositive) Icons.Default.TrendingUp else Icons.Default.TrendingDown,
+                                        contentDescription = null,
+                                        tint = if (isNetPositive) Color(0xFF2563EB) else Color(0xFFD97706),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (language == "bn") "স্টক মূলধনের নিট পরিবর্তন:" else "Net Stock Capital Flow:",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = if (isNetPositive) Color(0xFF1E40AF) else Color(0xFF92400E)
+                                    )
+                                }
+                                Text(
+                                    text = "${if (isNetPositive) "+" else ""}$currency${netFlow.toIntOrNull() ?: netFlow}",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isNetPositive) Color(0xFF1E40AF) else Color(0xFF92400E)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Download PDF & Share Buttons
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    val pdf = PdfGenerator.generateStockInOutPdf(
+                                        context = context,
+                                        shopName = shopInfo.shopName,
+                                        periodTitle = periodTitle,
+                                        totalStockInAmount = totalStockInAmount,
+                                        totalStockInQty = totalStockInQty,
+                                        totalStockOutSales = totalStockOutSales,
+                                        totalStockOutCost = totalStockOutCost,
+                                        totalStockOutQty = totalStockOutQty,
+                                        transactions = displayedStockTransactions,
+                                        currency = currency
+                                    )
+                                    if (pdf != null) {
+                                        PdfGenerator.openOrSharePdf(
+                                            context,
+                                            pdf,
+                                            if (language == "bn") "স্টক ইন-আউট রিপোর্ট পিডিএফ" else "Stock In-Out Report PDF"
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.weight(1.3f),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
+                            ) {
+                                Icon(Icons.Default.PictureAsPdf, contentDescription = "PDF", modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (language == "bn") "স্টক ইন-আউট পিডিএফ" else "Download Stock PDF",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    val shareText = buildString {
+                                        append("📦 ${shopInfo.shopName} - স্টক ইন-আউট হিসাব\n")
+                                        append("📅 সময়কাল: $periodTitle\n")
+                                        append("━━━━━━━━━━━━━━━━━━━\n")
+                                        append("📥 মোট স্টক ইন: $currency${totalStockInAmount.toIntOrNull() ?: totalStockInAmount} (${totalStockInQty.toIntOrNull() ?: totalStockInQty} টি পণ্য)\n")
+                                        append("📤 মোট স্টক আউট (বিক্রি): $currency${totalStockOutSales.toIntOrNull() ?: totalStockOutSales} (${totalStockOutQty.toIntOrNull() ?: totalStockOutQty} টি পণ্য)\n")
+                                        append("💰 স্টক আউট ক্রয়মূল্য: $currency${totalStockOutCost.toIntOrNull() ?: totalStockOutCost}\n")
+                                        append("📊 নিট স্টক মূলধন পরিবর্তন: ${if (isNetPositive) "+" else ""}$currency${netFlow.toIntOrNull() ?: netFlow}\n")
+                                        append("━━━━━━━━━━━━━━━━━━━\n")
+                                        append("মোট লেনদেন: ${displayedStockTransactions.size} টি এন্ট্রি\n")
+                                        append("হিসাব রাখা হয়েছে NAFI KHATA অ্যাপে।")
+                                    }
+                                    val sendIntent = Intent().apply {
+                                        action = Intent.ACTION_SEND
+                                        putExtra(Intent.EXTRA_TEXT, shareText)
+                                        type = "text/plain"
+                                    }
+                                    context.startActivity(Intent.createChooser(sendIntent, if (language == "bn") "স্টক রিপোর্ট শেয়ার করুন" else "Share Stock Report"))
+                                },
+                                modifier = Modifier.weight(0.7f),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.Share, contentDescription = "Share", modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(if (language == "bn") "শেয়ার" else "Share", fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2. Section Title and Filter Chips
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (language == "bn") "পণ্যভিত্তিক বিবরণ (${displayedStockTransactions.size})" else "Movement Records (${displayedStockTransactions.size})",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        FilterChip(
+                            selected = stockInOutFilter == "ALL",
+                            onClick = { stockInOutFilter = "ALL" },
+                            label = { Text(if (language == "bn") "সব" else "All", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        FilterChip(
+                            selected = stockInOutFilter == "STOCK_IN",
+                            onClick = { stockInOutFilter = "STOCK_IN" },
+                            label = { Text("📥 ইন (${stockInTransactions.size})", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        FilterChip(
+                            selected = stockInOutFilter == "STOCK_OUT",
+                            onClick = { stockInOutFilter = "STOCK_OUT" },
+                            label = { Text("📤 আউট (${stockOutTransactions.size})", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
+                }
+            }
+
+            // 3. Transactions List
+            if (displayedStockTransactions.isEmpty()) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .padding(28.dp)
+                                .fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (language == "bn") "এই সময়ে কোনো পণ্য স্টক ইন বা আউট করা হয়নি" else "No stock in or out transactions in this period",
+                                color = MaterialTheme.colorScheme.outline,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+                }
+            } else {
+                items(displayedStockTransactions) { tx ->
+                    StockMovementCard(
+                        tx = tx,
+                        currency = currency,
+                        language = language,
+                        onClick = {
+                            if (tx.type == "SALE") {
+                                editingTransaction = tx
+                            }
+                        }
+                    )
+                }
+            }
+        }
     }
 
     if (editingTransaction != null) {
@@ -918,5 +1361,188 @@ private fun ReportLineRow(
             fontWeight = if (isBold) FontWeight.ExtraBold else FontWeight.SemiBold,
             color = valueColor
         )
+    }
+}
+
+@Composable
+private fun StockMovementCard(
+    tx: TransactionRecord,
+    currency: String,
+    language: String,
+    onClick: () -> Unit
+) {
+    val isStockIn = tx.type == "STOCK_IN" || tx.type == "PURCHASE"
+    val isDamage = tx.type == "STOCK_OUT_DAMAGE" || tx.type == "DAMAGE"
+    val timeFormatted = SimpleDateFormat("d MMMM yyyy, hh:mm a", if (language == "bn") Locale("bn", "BD") else Locale.ENGLISH).format(Date(tx.timestamp))
+
+    val badgeBg = when {
+        isStockIn -> Color(0xFFECFDF5)
+        isDamage -> Color(0xFFFEF2F2)
+        else -> Color(0xFFEFF6FF)
+    }
+    val badgeTextColor = when {
+        isStockIn -> Color(0xFF059669)
+        isDamage -> Color(0xFFDC2626)
+        else -> Color(0xFF2563EB)
+    }
+    val badgeIcon = when {
+        isStockIn -> Icons.Default.ArrowDownward
+        isDamage -> Icons.Default.Warning
+        else -> Icons.Default.ArrowUpward
+    }
+    val badgeText = when {
+        isStockIn -> if (language == "bn") "স্টক ইন (ক্রয়)" else "STOCK IN"
+        isDamage -> if (language == "bn") "স্টক আউট (ড্যামেজ)" else "STOCK OUT (DMG)"
+        else -> if (language == "bn") "স্টক আউট (বিক্রি)" else "STOCK OUT (SALE)"
+    }
+
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // In / Out Badge
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = badgeBg,
+                    border = BorderStroke(0.5.dp, badgeTextColor.copy(alpha = 0.3f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(badgeIcon, contentDescription = null, tint = badgeTextColor, modifier = Modifier.size(12.dp))
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(badgeText, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = badgeTextColor)
+                    }
+                }
+
+                // Date & Time
+                Text(
+                    text = timeFormatted,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Product Name & Memo/Customer
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isStockIn) Color(0xFFF0FDF4) else Color(0xFFF8FAFC)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Inventory2,
+                            contentDescription = null,
+                            tint = if (isStockIn) Color(0xFF16A34A) else Color(0xFF64748B),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            text = tx.productName,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        val extraInfo = listOfNotNull(
+                            tx.invoiceNumber.takeIf { it.isNotBlank() }?.let { "মেমো: $it" },
+                            tx.customerName.takeIf { it.isNotBlank() }?.let { "গ্রাহক: $it" }
+                        ).joinToString(" • ")
+                        if (extraInfo.isNotBlank()) {
+                            Text(
+                                text = extraInfo,
+                                fontSize = 10.5.sp,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
+                    }
+                }
+
+                // Total Price
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = "$currency${tx.totalAmount.toIntOrNull() ?: tx.totalAmount}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (isStockIn) Color(0xFF15803D) else Color(0xFF0F172A)
+                    )
+                    Text(
+                        text = if (isStockIn) "মোট ক্রয়মূল্য" else "মোট বিক্রয়মূল্য",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f), thickness = 0.8.dp)
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Quantity & Unit
+                Text(
+                    text = "পরিমাণ: ${tx.quantity.toIntOrNull() ?: tx.quantity} ${tx.unit}",
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                // Rate / Unit Price
+                val unitPrice = if (isStockIn) {
+                    tx.costPrice.takeIf { it > 0 } ?: tx.unitPrice
+                } else {
+                    tx.unitPrice
+                }
+                Text(
+                    text = "দর: $currency${unitPrice.toIntOrNull() ?: unitPrice}/${tx.unit}",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                // Profit or Note
+                if (!isStockIn && tx.profitAmount != 0.0) {
+                    Text(
+                        text = "লাভ: $currency${tx.profitAmount.toIntOrNull() ?: tx.profitAmount}",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ProfitGreen
+                    )
+                } else if (tx.note.isNotBlank()) {
+                    Text(
+                        text = "নোট: ${tx.note}",
+                        fontSize = 10.5.sp,
+                        color = MaterialTheme.colorScheme.outline,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
     }
 }
