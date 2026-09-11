@@ -129,6 +129,7 @@ fun CashBookScreen(
     var showExpenseDialog by remember { mutableStateOf(false) }
     var showAddedCashHistoryDialog by remember { mutableStateOf(false) }
     var showDayEndSettleDialog by remember { mutableStateOf(false) }
+    var showAllSalesMemosDialog by remember { mutableStateOf(false) }
     var editingCashLog by remember { mutableStateOf<CashLog?>(null) }
     var deletingCashLog by remember { mutableStateOf<CashLog?>(null) }
     var viewingEntryDetails by remember { mutableStateOf<MasterCashEntry?>(null) }
@@ -488,6 +489,15 @@ fun CashBookScreen(
                         )
                     }
 
+                    // All Sales Memos History Icon
+                    IconButton(onClick = { showAllSalesMemosDialog = true }) {
+                        Icon(
+                            Icons.Default.ReceiptLong,
+                            contentDescription = if (language == "bn") "সকল বিক্রয় মেমো হিস্টোরি" else "Sales Memos History",
+                            tint = Color(0xFF0284C7)
+                        )
+                    }
+
                     // Cash Balance Adjustment Button
                     IconButton(onClick = { showAdjustBalanceDialog = true }) {
                         Icon(
@@ -844,21 +854,42 @@ fun CashBookScreen(
                         }
                     }
 
-                    Button(
-                        onClick = { showDayEndSettleDialog = true },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (summary.todayUnclosedCash > 0) Color(0xFFD97706) else Color(0xFF16A34A)
-                        ),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                        modifier = Modifier.height(32.dp)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = if (language == "bn") "ক্যাশ ক্লোজিং" else "Close Cash",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
+                        OutlinedButton(
+                            onClick = { showAllSalesMemosDialog = true },
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            Icon(Icons.Default.Receipt, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF0284C7))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (language == "bn") "বিক্রি হিস্টরি" else "Sales",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF0284C7)
+                            )
+                        }
+
+                        Button(
+                            onClick = { showDayEndSettleDialog = true },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (summary.todayUnclosedCash > 0) Color(0xFFD97706) else Color(0xFF16A34A)
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            Text(
+                                text = if (language == "bn") "ক্যাশ ক্লোজিং" else "Close Cash",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
                     }
                 }
             }
@@ -1404,6 +1435,19 @@ fun CashBookScreen(
             onConfirm = { settledAmount, note ->
                 viewModel.settleDayEndCashToMainBalance(settledAmount, note)
                 showDayEndSettleDialog = false
+            }
+        )
+    }
+
+    if (showAllSalesMemosDialog) {
+        AllMemosDialog(
+            transactions = allTransactions.filter { it.type == "SALE" },
+            currency = currency,
+            language = language,
+            shopName = shopInfo.shopName,
+            onDismiss = { showAllSalesMemosDialog = false },
+            onSelectTx = { tx ->
+                showAllSalesMemosDialog = false
             }
         )
     }

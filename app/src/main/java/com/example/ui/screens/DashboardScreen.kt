@@ -117,8 +117,8 @@ fun DashboardScreen(
     var bannerPageIndex by remember { mutableIntStateOf(0) }
     var editingTransaction by remember { mutableStateOf<TransactionRecord?>(null) }
 
-    // Date Filter State for All Transactions: "TODAY", "YESTERDAY", "WEEK", "MONTH", "CUSTOM", "ALL"
-    var selectedDateFilter by remember { mutableStateOf("TODAY") }
+    // Date Filter State for All Transactions: "ALL", "TODAY", "YESTERDAY", "WEEK", "MONTH", "CUSTOM"
+    var selectedDateFilter by remember { mutableStateOf("ALL") }
     var customDateTimestamp by remember { mutableStateOf<Long?>(null) }
     var customDateLabel by remember { mutableStateOf("") }
     var selectedTypeFilter by remember { mutableStateOf("ALL") } // "ALL", "SALE", "DUE", "STOCK_IN"
@@ -132,7 +132,6 @@ fun DashboardScreen(
     // Calculate time ranges for date filtering
     val (dateRangeStart, dateRangeEnd, dateFilterDisplayName) = remember(selectedDateFilter, customDateTimestamp, language) {
         val cal = Calendar.getInstance()
-        val nowTime = System.currentTimeMillis()
         val dateDisplaySdf = SimpleDateFormat("d MMMM yyyy", if (language == "bn") Locale("bn", "BD") else Locale.ENGLISH)
 
         when (selectedDateFilter) {
@@ -160,9 +159,9 @@ fun DashboardScreen(
                 cal.set(Calendar.MINUTE, 0)
                 cal.set(Calendar.SECOND, 0)
                 cal.set(Calendar.MILLISECOND, 0)
-                cal.add(Calendar.DAY_OF_YEAR, -6)
+                cal.add(Calendar.DAY_OF_YEAR, -7)
                 val start = cal.timeInMillis
-                Triple(start, nowTime, if (language == "bn") "গত ৭ দিন" else "Last 7 Days")
+                Triple(start, Long.MAX_VALUE, if (language == "bn") "গত ৭ দিন" else "Last 7 Days")
             }
             "MONTH" -> {
                 cal.set(Calendar.DAY_OF_MONTH, 1)
@@ -171,7 +170,7 @@ fun DashboardScreen(
                 cal.set(Calendar.SECOND, 0)
                 cal.set(Calendar.MILLISECOND, 0)
                 val start = cal.timeInMillis
-                Triple(start, nowTime, if (language == "bn") "চলতি মাস" else "This Month")
+                Triple(start, Long.MAX_VALUE, if (language == "bn") "চলতি মাস" else "This Month")
             }
             "CUSTOM" -> {
                 val target = customDateTimestamp ?: startOfToday
@@ -1470,52 +1469,93 @@ fun DashboardScreen(
                             }
                         }
 
-                        if (filteredTransactions.isNotEmpty()) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            // Quick View All Memos Button
                             FilledTonalButton(
-                                onClick = {
-                                    val pdfFile = PdfGenerator.generateTransactionsListPdf(
-                                        context = context,
-                                        shopName = shopInfo.shopName,
-                                        title = if (language == "bn") "লেনদেন রিপোর্ট - $dateFilterDisplayName" else "Transactions Record - $dateFilterDisplayName",
-                                        transactions = filteredTransactions,
-                                        currency = currency
-                                    )
-                                    if (pdfFile != null) {
-                                        PdfGenerator.openOrSharePdf(
-                                            context = context,
-                                            file = pdfFile,
-                                            chooserTitle = if (language == "bn") "লেনদেন PDF ডাউনলোড / শেয়ার" else "Download / Share Transactions PDF"
-                                        )
-                                    }
-                                },
+                                onClick = { showAllMemosDialog = true },
                                 shape = RoundedCornerShape(8.dp),
                                 colors = ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                    containerColor = Color(0xFFE0F2FE),
+                                    contentColor = Color(0xFF0369A1)
                                 ),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                                 modifier = Modifier.height(32.dp)
                             ) {
-                                Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Icon(Icons.Default.Receipt, contentDescription = null, modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = if (language == "bn") "PDF" else "PDF",
+                                    text = if (language == "bn") "সব মেমো (${allTransactions.count { it.type == "SALE" }})" else "Memos (${allTransactions.count { it.type == "SALE" }})",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold
                                 )
+                            }
+
+                            if (filteredTransactions.isNotEmpty()) {
+                                FilledTonalButton(
+                                    onClick = {
+                                        val pdfFile = PdfGenerator.generateTransactionsListPdf(
+                                            context = context,
+                                            shopName = shopInfo.shopName,
+                                            title = if (language == "bn") "লেনদেন রিপোর্ট - $dateFilterDisplayName" else "Transactions Record - $dateFilterDisplayName",
+                                            transactions = filteredTransactions,
+                                            currency = currency
+                                        )
+                                        if (pdfFile != null) {
+                                            PdfGenerator.openOrSharePdf(
+                                                context = context,
+                                                file = pdfFile,
+                                                chooserTitle = if (language == "bn") "লেনদেন PDF ডাউনলোড / শেয়ার" else "Download / Share Transactions PDF"
+                                            )
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.filledTonalButtonColors(
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                    ),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(32.dp)
+                                ) {
+                                    Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (language == "bn") "PDF" else "PDF",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                         }
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Date Filter Chips Row
+                    // Date Filter Chips Row - "সব সময়" placed first for instant visibility of all history
                     LazyRow(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // 1. Today
+                        // 1. All Time (সব সময়) - Placed first so old sales/transactions are never hidden
+                        item {
+                            FilterChip(
+                                selected = selectedDateFilter == "ALL",
+                                onClick = {
+                                    selectedDateFilter = "ALL"
+                                    customDateTimestamp = null
+                                },
+                                label = { Text(if (language == "bn") "সব সময়" else "All Time", fontSize = 12.sp, fontWeight = FontWeight.Bold) },
+                                leadingIcon = if (selectedDateFilter == "ALL") {
+                                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                                } else null,
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                        }
+
+                        // 2. Today
                         item {
                             FilterChip(
                                 selected = selectedDateFilter == "TODAY",
@@ -1531,7 +1571,7 @@ fun DashboardScreen(
                             )
                         }
 
-                        // 2. Yesterday
+                        // 3. Yesterday
                         item {
                             FilterChip(
                                 selected = selectedDateFilter == "YESTERDAY",
@@ -1547,7 +1587,7 @@ fun DashboardScreen(
                             )
                         }
 
-                        // 3. Last 7 Days
+                        // 4. Last 7 Days
                         item {
                             FilterChip(
                                 selected = selectedDateFilter == "WEEK",
@@ -1563,7 +1603,7 @@ fun DashboardScreen(
                             )
                         }
 
-                        // 4. This Month
+                        // 5. This Month
                         item {
                             FilterChip(
                                 selected = selectedDateFilter == "MONTH",
@@ -1579,7 +1619,7 @@ fun DashboardScreen(
                             )
                         }
 
-                        // 5. Custom Date Picker Button (Interactive Calendar Dialog)
+                        // 6. Custom Date Picker Button (Interactive Calendar Dialog)
                         item {
                             Button(
                                 onClick = {
@@ -1626,22 +1666,6 @@ fun DashboardScreen(
                                     fontWeight = FontWeight.SemiBold
                                 )
                             }
-                        }
-
-                        // 6. All Time
-                        item {
-                            FilterChip(
-                                selected = selectedDateFilter == "ALL",
-                                onClick = {
-                                    selectedDateFilter = "ALL"
-                                    customDateTimestamp = null
-                                },
-                                label = { Text(if (language == "bn") "সব সময়" else "All Time", fontSize = 12.sp) },
-                                leadingIcon = if (selectedDateFilter == "ALL") {
-                                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
-                                } else null,
-                                shape = RoundedCornerShape(8.dp)
-                            )
                         }
                     }
 
@@ -1834,6 +1858,49 @@ fun DashboardScreen(
                                 color = MaterialTheme.colorScheme.outline,
                                 textAlign = TextAlign.Center
                             )
+                            if (allTransactions.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(14.dp))
+                                Text(
+                                    text = if (language == "bn") "দোকানে মোট ${allTransactions.size} টি পূর্বের লেনদেন সংরক্ষিত আছে" else "Your shop has ${allTransactions.size} past transactions saved",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = EmeraldPrimary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Button(
+                                        onClick = {
+                                            selectedDateFilter = "ALL"
+                                            selectedTypeFilter = "ALL"
+                                            txSearchQuery = ""
+                                        },
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
+                                    ) {
+                                        Icon(Icons.Default.History, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = if (language == "bn") "সব সময়ের লেনদেন দেখুন" else "View All Transactions",
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = { showAllMemosDialog = true },
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Icon(Icons.Default.Receipt, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = if (language == "bn") "সকল মেমো" else "All Memos",
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
