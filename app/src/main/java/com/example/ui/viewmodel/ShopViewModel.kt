@@ -520,7 +520,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         val todayNewDueGiven = round2(dues.filter { it.timestamp >= startOfToday && it.type == "DUE_GIVEN" }.sumOf { it.amount })
 
         val todayClosedCash = round2(cLogs.filter { it.timestamp >= startOfToday && it.type == "DAY_END_CLOSING" }.sumOf { it.amount })
-        val todayUnclosedCash = round2(((todayCashSales + todayCollectedDue) - todayClosedCash).coerceAtLeast(0.0))
+        val todayUnclosedCash = round2((todayCashSales - todayClosedCash).coerceAtLeast(0.0))
 
         val todayPurchases = round2(todayTxs.filter { it.type == "STOCK_IN" || it.type == "PURCHASE" }.sumOf { it.totalAmount })
         // 1. Pure Product Sales Profit (লাভ শুধুমাত্র পণ্য বিক্রি থেকে)
@@ -1444,12 +1444,8 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                     withdrawCashFromMainBalance(kotlin.math.abs(costDiff), "স্টক ক্রয় সংশোধন/অতিরিক্ত খরচ: ${oldTx.productName}")
                 }
             } else if (isSale) {
-                val paidDiff = round2(newPaidAmount - oldTx.paidAmount)
-                if (paidDiff > 0.0) {
-                    addCashToMainBalance(paidDiff, "বিক্রি সংশোধন/অতিরিক্ত জমা: ${oldTx.productName}")
-                } else if (paidDiff < 0.0) {
-                    withdrawCashFromMainBalance(kotlin.math.abs(paidDiff), "বিক্রি সংশোধন/টাকা ফেরত: ${oldTx.productName}")
-                }
+                // Do not modify mainBalance directly for sales.
+                // Sales remain in the daily drawer until settled via Cash Closing.
             }
 
             repository.editSaleTransaction(oldTx, newQuantity, newUnitPrice, newPaidAmount, newCustomerName, newCustomerPhone, newNote)
@@ -1464,9 +1460,8 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
 
             if (isStockIn && tx.totalAmount > 0) {
                 addCashToMainBalance(tx.totalAmount, "পণ্য ক্রয় বাতিল/ক্যাশ ফেরত: ${tx.productName}")
-            } else if (isSale && tx.paidAmount > 0) {
-                withdrawCashFromMainBalance(tx.paidAmount, "বিক্রি বাতিল/টাকা ফেরত: ${tx.productName}")
             }
+            // For sales: Do NOT withdraw from mainBalance. Unsettled sales are not added to main balance.
             repository.deleteTransaction(tx)
             triggerInstantDriveBackup("ট্রানজেকশন বাতিল ও রিস্টক")
         }
@@ -1483,9 +1478,8 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             if ((tx.type == "STOCK_IN" || tx.type == "PURCHASE") && tx.totalAmount > 0) {
                 addCashToMainBalance(tx.totalAmount, "পণ্য ক্রয় বাতিল/ক্যাশ ফেরত: ${tx.productName}")
-            } else if (tx.type == "SALE" && tx.paidAmount > 0) {
-                withdrawCashFromMainBalance(tx.paidAmount, "বিক্রি বাতিল/টাকা ফেরত: ${tx.productName}")
             }
+            // For sales: Do NOT withdraw from mainBalance. Unsettled sales are not added to main balance.
             repository.deleteTransaction(tx)
             triggerInstantDriveBackup("ট্রানজেকশন মুছে ফেলা")
         }

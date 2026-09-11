@@ -109,6 +109,7 @@ fun CashBookScreen(
     val dueLogs by viewModel.dueLogs.collectAsState()
     val expenses by viewModel.expenses.collectAsState()
     val shopInfo by viewModel.shopInfo.collectAsState()
+    val summary by viewModel.dashboardSummary.collectAsState()
     val language by viewModel.language.collectAsState()
     val currency = shopInfo.currency
 
@@ -127,6 +128,7 @@ fun CashBookScreen(
     var showIncomeDialog by remember { mutableStateOf(false) }
     var showExpenseDialog by remember { mutableStateOf(false) }
     var showAddedCashHistoryDialog by remember { mutableStateOf(false) }
+    var showDayEndSettleDialog by remember { mutableStateOf(false) }
     var editingCashLog by remember { mutableStateOf<CashLog?>(null) }
     var deletingCashLog by remember { mutableStateOf<CashLog?>(null) }
     var viewingEntryDetails by remember { mutableStateOf<MasterCashEntry?>(null) }
@@ -193,37 +195,9 @@ fun CashBookScreen(
     val masterEntries = remember(cashLogs, allTransactions, dueLogs, expenses, shopInfo.mainBalance, language) {
         val list = mutableListOf<MasterCashEntry>()
 
-        // A. Sales Cash Inflow (Grouped by Invoice or Transaction)
-        val salesTxs = allTransactions.filter { it.type == "SALE" && it.paidAmount > 0 }
-        val groupedSales = salesTxs.groupBy {
-            if (it.invoiceNumber.isNotBlank()) it.invoiceNumber else "TX_${it.id}"
-        }
-
-        for ((invoiceKey, txGroup) in groupedSales) {
-            val totalPaid = txGroup.sumOf { it.paidAmount }
-            if (totalPaid > 0) {
-                val firstTx = txGroup.first()
-                val custName = firstTx.customerName.ifBlank {
-                    if (language == "bn") "ক্যাশ কাস্টমার" else "Cash Customer"
-                }
-                val itemsSummary = txGroup.joinToString(", ") { "${it.productName} (${formatQuantity(it.quantity)} ${it.unit})" }
-                val invNum = firstTx.invoiceNumber.ifBlank { "INV-${firstTx.id}" }
-                list.add(
-                    MasterCashEntry(
-                        id = "SALE_$invoiceKey",
-                        source = "SALE",
-                        timestamp = firstTx.timestamp,
-                        title = if (language == "bn") "নগদ বিক্রি (মেমো #$invNum)" else "Cash Sale (#$invNum)",
-                        note = "$custName • $itemsSummary",
-                        categoryOrCustomer = custName,
-                        amount = CalculationHelper.round2(totalPaid),
-                        isAddition = true,
-                        paymentMethod = firstTx.paymentMethod,
-                        invoiceNumber = invNum
-                    )
-                )
-            }
-        }
+        // NOTE: Individual sale transactions stay in the daily register and are NOT added directly to
+        // the master cash ledger until settled via Cash Closing. Cash from sales enters the master ledger
+        // solely through confirmed DAY_END_CLOSING entries.
 
         // B. Due Collected Inflow
         val collectedDues = dueLogs.filter { it.type == "DUE_COLLECTED" && it.amount > 0 }
@@ -282,14 +256,13 @@ fun CashBookScreen(
             )
         }
 
-        // E. Manual Cash Logs (Direct Incomes, Deposits, Withdrawals, Adjustments)
+        // E. Manual & System Cash Logs (Direct Incomes, Deposits, Withdrawals, Cash Closings, Adjustments)
         // Skip auto-generated duplicate notes to avoid double-counting!
         for (log in cashLogs) {
             val noteLower = log.note.trim()
             val isAutoExpenseDuplicate = noteLower.startsWith("খরচ:") || noteLower.startsWith("খরচ বাতিল")
             val isAutoDueDuplicate = noteLower.startsWith("বাকি আদায়") || noteLower.startsWith("বাকি লগ")
             val isAutoPurchaseDuplicate = noteLower.startsWith("পণ্য ক্রয়") || noteLower.startsWith("স্টক ইন")
-            val isAutoDayEndDuplicate = noteLower.startsWith("দিনশেষের বিক্রি")
             val isAutoSaleDuplicate = noteLower.startsWith("বিক্রি বাতিল") || noteLower.startsWith("ট্রানজেকশন")
 
             if (!isAutoExpenseDuplicate && !isAutoDueDuplicate && !isAutoPurchaseDuplicate && !isAutoSaleDuplicate) {
@@ -314,14 +287,21 @@ fun CashBookScreen(
                     "MANUAL_ADJUST" -> if (language == "bn") "ব্যালেন্স সমন্বয়" else "Balance Adjustment"
                     else -> log.type
                 }
+                val itemTitle = if (log.type == "DAY_END_CLOSING") {
+                    if (log.note.isNotBlank()) "ক্যাশ ক্লোজিং: ${log.note}" else "ক্যাশ ক্লোজিং: দিনের নগদ বিক্রি ও আদায়"
+                } else if (log.note.isNotBlank()) {
+                    "$typeLabel: ${log.note}"
+                } else {
+                    typeLabel
+                }
                 list.add(
                     MasterCashEntry(
                         id = "LOG_${log.id}",
                         source = log.type,
                         timestamp = log.timestamp,
-                        title = if (log.note.isNotBlank()) "$typeLabel: ${log.note}" else typeLabel,
+                        title = itemTitle,
                         note = if (log.note.isNotBlank()) log.note else typeLabel,
-                        categoryOrCustomer = typeLabel,
+                        categoryOrCustomer = if (log.type == "DAY_END_CLOSING") (if (language == "bn") "ক্যাশ ক্লোজিং" else "Day-End Closing") else typeLabel,
                         amount = CalculationHelper.round2(Math.abs(log.amount)),
                         isAddition = isAdd,
                         paymentMethod = "CASH",
@@ -799,6 +779,86 @@ fun CashBookScreen(
                         ) {
                             Text(if (language == "bn") "খতিয়ান" else "View", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
+                    }
+                }
+            }
+
+            // Cash Closing Status & Daily Register Cash Banner
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 4.dp),
+                shape = RoundedCornerShape(10.dp),
+                color = if (summary.todayUnclosedCash > 0) Color(0xFFFFFBEB) else Color(0xFFF0FDF4),
+                border = BorderStroke(1.dp, if (summary.todayUnclosedCash > 0) Color(0xFFFDE68A) else Color(0xFFBBF7D0))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .background(
+                                    if (summary.todayUnclosedCash > 0) Color(0xFFFEF3C7) else Color(0xFFDCFCE7),
+                                    CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                if (summary.todayUnclosedCash > 0) Icons.Default.Savings else Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = if (summary.todayUnclosedCash > 0) Color(0xFFD97706) else Color(0xFF16A34A),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = if (summary.todayUnclosedCash > 0) {
+                                    if (language == "bn") "চলতি নগদ বিক্রি: $currency${summary.todayUnclosedCash.toIntOrNull() ?: summary.todayUnclosedCash}" else "Unclosed Cash: $currency${summary.todayUnclosedCash}"
+                                } else {
+                                    if (language == "bn") "আজকের ক্যাশ ক্লোজিং সম্পন্ন" else "Today's Cash Settled"
+                                },
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (summary.todayUnclosedCash > 0) Color(0xFF92400E) else Color(0xFF166534)
+                            )
+                            Text(
+                                text = if (summary.todayUnclosedCash > 0) {
+                                    if (language == "bn") "ড্রয়ারে জমা আছে, ক্লোজ করলে মূল খাতায় যুক্ত হবে" else "In drawer, will add to ledger upon closing"
+                                } else {
+                                    if (language == "bn") "মোট ক্লোজিং জমা: $currency${summary.todayClosedCash.toIntOrNull() ?: summary.todayClosedCash}" else "Total settled: $currency${summary.todayClosedCash}"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (summary.todayUnclosedCash > 0) Color(0xFFB45309) else Color(0xFF15803D),
+                                fontSize = 11.5.sp
+                            )
+                        }
+                    }
+
+                    Button(
+                        onClick = { showDayEndSettleDialog = true },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (summary.todayUnclosedCash > 0) Color(0xFFD97706) else Color(0xFF16A34A)
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Text(
+                            text = if (language == "bn") "ক্যাশ ক্লোজিং" else "Close Cash",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
                     }
                 }
             }
@@ -1330,6 +1390,20 @@ fun CashBookScreen(
             },
             onDeleteLog = { logToDelete ->
                 viewModel.deleteCashLog(logToDelete)
+            }
+        )
+    }
+
+    if (showDayEndSettleDialog) {
+        DayEndSettlementDialog(
+            summary = summary,
+            currentMainBalance = shopInfo.mainBalance,
+            currency = currency,
+            language = language,
+            onDismiss = { showDayEndSettleDialog = false },
+            onConfirm = { settledAmount, note ->
+                viewModel.settleDayEndCashToMainBalance(settledAmount, note)
+                showDayEndSettleDialog = false
             }
         )
     }

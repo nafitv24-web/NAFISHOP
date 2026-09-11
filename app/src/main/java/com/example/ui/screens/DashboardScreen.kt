@@ -2819,7 +2819,7 @@ fun DayEndSettlementDialog(
                                 )
                             }
 
-                            // Row 3: আজকের বাকি আদায় (যদি থাকে)
+                            // Row 3: আজকের বাকি আদায় (যদি থাকে - এটি আদায়ের সময়ই সরাসরি মূল ক্যাশে জমা হয়েছে)
                             if (summary.todayCollectedDue > 0) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -2827,13 +2827,13 @@ fun DayEndSettlementDialog(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = if (language == "bn") "আজকের বাকি আদায় (+):" else "Due Collected (+):",
+                                        text = if (language == "bn") "আজকের বাকি আদায় (সরাসরি যুক্ত):" else "Due Collected (Direct):",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = EmeraldPrimary,
                                         fontWeight = FontWeight.Medium
                                     )
                                     Text(
-                                        text = "+$currency${summary.todayCollectedDue.toIntOrNull() ?: summary.todayCollectedDue}",
+                                        text = "$currency${summary.todayCollectedDue.toIntOrNull() ?: summary.todayCollectedDue}",
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = EmeraldPrimary
