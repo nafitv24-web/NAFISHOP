@@ -20,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -470,7 +471,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             val savedEmail = prefs.getString("user_email", "") ?: ""
             val emailToUse = if (savedEmail.isNotBlank()) savedEmail else _shopInfo.value.userEmail
             if ((isDbEmpty || txCount == 0) && emailToUse.isNotBlank()) {
-                autoRestoreOnLogin(emailToUse, forceOverwrite = true)
+                executeCloudRestoreOnLogin(emailToUse, forceOverwrite = true)
             } else if (!isDbEmpty && _hasPendingSync.value) {
                 syncPendingOfflineDataToCloud()
             }
@@ -644,81 +645,107 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
      * cash logs and shop info immediately upon login from Google Drive / Cloud storage.
      * If local database already has offline data and not forced, it preserves local data and syncs to cloud!
      */
-    fun autoRestoreOnLogin(accountId: String, forceOverwrite: Boolean = false, onRestored: ((Boolean) -> Unit)? = null) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                // If local database already has items and transactions, and this is not a forced user action, don't overwrite offline work!
-                val isDbEmpty = repository.isDatabaseEmpty()
-                val txCount = repository.getTransactionCount()
-                if (!isDbEmpty && txCount > 0 && !forceOverwrite) {
-                    syncPendingOfflineDataToCloud { success ->
-                        onRestored?.invoke(success)
-                    }
-                    return@launch
-                }
-
-                _autoBackupStatus.value = "⏳ ক্লাউড থেকে পূর্বের খাতা লোড হচ্ছে..."
-                val cleanAccountId = accountId.trim().lowercase().ifBlank { getAccountIdentifier() }
-
-                var backupJson: String? = null
-
-                // 1. Query Firebase Realtime DB Cloud under this account ID or email first
-                val cloudRes = firebaseRealtime.restoreShopData(cleanAccountId)
-                if (cloudRes.success && !cloudRes.data.isNullOrBlank()) {
-                    backupJson = cloudRes.data
-                }
-
-                // If user email differs from cleanAccountId, also query with user email
-                val userEmail = _shopInfo.value.userEmail.trim().lowercase()
-                if (backupJson.isNullOrBlank() && userEmail.isNotBlank() && userEmail != cleanAccountId) {
-                    val cloudRes2 = firebaseRealtime.restoreShopData(userEmail)
-                    if (cloudRes2.success && !cloudRes2.data.isNullOrBlank()) {
-                        backupJson = cloudRes2.data
-                    }
-                }
-
-                // 2. Try local isolated cloud store for this user
-                if (backupJson.isNullOrBlank()) {
-                    val localUserJson = prefs.getString("cloud_backup_json_${cleanAccountId}", null)
-                    if (!localUserJson.isNullOrBlank()) {
-                        backupJson = localUserJson
-                    }
-                }
-
-                // 3. Fallback to latest local cache if available
-                if (backupJson.isNullOrBlank()) {
-                    val latestBackup = prefs.getString("cloud_backup_json_latest", null)
-                    if (!latestBackup.isNullOrBlank()) {
-                        backupJson = latestBackup
-                    }
-                }
-
-                if (!backupJson.isNullOrBlank()) {
-                    val result = repository.importDataFromJson(backupJson, cleanSlate = true)
-                    if (result.success) {
-                        if (result.restoredShopInfo != null) {
-                            val s = result.restoredShopInfo
-                            updateShopInfo(
-                                name = s.shopName,
-                                owner = s.ownerName,
-                                phone = s.phone,
-                                address = s.address,
-                                currency = s.currency,
-                                email = if (_shopInfo.value.userEmail.isNotBlank()) _shopInfo.value.userEmail else s.userEmail,
-                                mainBalance = s.mainBalance
-                            )
-                        }
-                        _autoBackupStatus.value = "🟢 ক্লাউড থেকে পূর্বের সকল লেনদেন ও খাতা রিস্টোর হয়েছে"
-                        onRestored?.invoke(true)
-                        return@launch
-                    }
-                }
-                _autoBackupStatus.value = if (NetworkMonitor.isOnline(getApplication())) "🟢 ড্রাইভে অটো ব্যাকআপ সক্রিয়" else "🟠 অফলাইন (ইন্টারনেট পেলে ব্যাকআপ হবে)"
-                onRestored?.invoke(false)
-            } catch (e: Exception) {
-                _autoBackupStatus.value = if (NetworkMonitor.isOnline(getApplication())) "🟢 ড্রাইভে ব্যাকআপ সক্রিয়" else "🟠 অফলাইন (ইন্টারনেট পেলে ব্যাকআপ হবে)"
-                onRestored?.invoke(false)
+    /**
+     * Automatic restore of previous transactions, digital cash memos, products, customers,
+     * cash logs and shop info immediately upon login from Google Drive / Cloud storage.
+     * Executes synchronously (suspend) so newly logged-in mobile phones have all past data loaded instantly!
+     */
+    suspend fun executeCloudRestoreOnLogin(accountId: String, forceOverwrite: Boolean = false): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val isDbEmpty = repository.isDatabaseEmpty()
+            val txCount = repository.getTransactionCount()
+            if (!isDbEmpty && txCount > 0 && !forceOverwrite) {
+                syncPendingOfflineDataToCloud()
+                return@withContext false
             }
+
+            _autoBackupStatus.value = "⏳ গুগল ড্রাইভ থেকে পূর্বের খাতা লোড হচ্ছে..."
+            val cleanAccountId = accountId.trim().lowercase().ifBlank { getAccountIdentifier() }
+
+            var backupJson: String? = null
+
+            // 1. Query Firebase Realtime DB Cloud under this account ID or email first
+            val cloudRes = firebaseRealtime.restoreShopData(cleanAccountId)
+            if (cloudRes.success && !cloudRes.data.isNullOrBlank()) {
+                backupJson = cloudRes.data
+            }
+
+            // If user email differs from cleanAccountId, also query with user email
+            val userEmail = _shopInfo.value.userEmail.trim().lowercase()
+            if (backupJson.isNullOrBlank() && userEmail.isNotBlank() && userEmail != cleanAccountId) {
+                val cloudRes2 = firebaseRealtime.restoreShopData(userEmail)
+                if (cloudRes2.success && !cloudRes2.data.isNullOrBlank()) {
+                    backupJson = cloudRes2.data
+                }
+            }
+
+            // Fallback: Check latest_backup endpoint in Firebase
+            if (backupJson.isNullOrBlank()) {
+                val cloudRes3 = firebaseRealtime.restoreShopData("latest_backup")
+                if (cloudRes3.success && !cloudRes3.data.isNullOrBlank()) {
+                    backupJson = cloudRes3.data
+                }
+            }
+
+            // 2. Try local isolated cloud store for this user
+            if (backupJson.isNullOrBlank()) {
+                val localUserJson = prefs.getString("cloud_backup_json_${cleanAccountId}", null)
+                if (!localUserJson.isNullOrBlank()) {
+                    backupJson = localUserJson
+                }
+            }
+
+            // 3. Fallback to latest local cache if available
+            if (backupJson.isNullOrBlank()) {
+                val latestBackup = prefs.getString("cloud_backup_json_latest", null)
+                if (!latestBackup.isNullOrBlank()) {
+                    backupJson = latestBackup
+                }
+            }
+
+            // 4. Try local backup file from external / internal storage
+            if (backupJson.isNullOrBlank()) {
+                val dir = getApplication<Application>().getExternalFilesDir(null) ?: getApplication<Application>().filesDir
+                val files = dir.listFiles { _, name -> name.startsWith("nafishop_backup_") && name.endsWith(".json") }
+                val newest = files?.maxByOrNull { it.lastModified() }
+                if (newest != null && newest.exists()) {
+                    try {
+                        backupJson = newest.readText()
+                    } catch (e: Exception) {}
+                }
+            }
+
+            if (!backupJson.isNullOrBlank()) {
+                val result = repository.importDataFromJson(backupJson, cleanSlate = true)
+                if (result.success) {
+                    if (result.restoredShopInfo != null) {
+                        val s = result.restoredShopInfo
+                        updateShopInfo(
+                            name = s.shopName,
+                            owner = s.ownerName,
+                            phone = s.phone,
+                            address = s.address,
+                            currency = s.currency,
+                            email = if (_shopInfo.value.userEmail.isNotBlank()) _shopInfo.value.userEmail else s.userEmail,
+                            mainBalance = s.mainBalance
+                        )
+                    }
+                    _autoBackupStatus.value = "🟢 গুগল ড্রাইভ থেকে পূর্বের সকল লেনদেন ও খাতা রিস্টোর হয়েছে"
+                    return@withContext true
+                }
+            }
+            _autoBackupStatus.value = if (NetworkMonitor.isOnline(getApplication())) "🟢 ড্রাইভে অটো ব্যাকআপ সক্রিয়" else "🟠 অফলাইন (ইন্টারনেট পেলে ব্যাকআপ হবে)"
+            return@withContext false
+        } catch (e: Exception) {
+            _autoBackupStatus.value = if (NetworkMonitor.isOnline(getApplication())) "🟢 ড্রাইভে ব্যাকআপ সক্রিয়" else "🟠 অফলাইন (ইন্টারনেট পেলে ব্যাকআপ হবে)"
+            return@withContext false
+        }
+    }
+
+    fun autoRestoreOnLogin(accountId: String, forceOverwrite: Boolean = false, onRestored: ((Boolean) -> Unit)? = null) {
+        viewModelScope.launch {
+            val success = executeCloudRestoreOnLogin(accountId, forceOverwrite)
+            onRestored?.invoke(success)
         }
     }
 
@@ -755,7 +782,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
 
                 // Also create entry in Firebase Realtime DB
                 firebaseRealtime.registerAccount(email, pass, sName, oName)
-                autoRestoreOnLogin(email)
+                executeCloudRestoreOnLogin(email, forceOverwrite = true)
                 onResult(authResult)
                 return@launch
             }
@@ -779,7 +806,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                     .putBoolean("is_logged_in", true)
                     .apply()
 
-                autoRestoreOnLogin(email)
+                executeCloudRestoreOnLogin(email, forceOverwrite = true)
                 onResult(AuthResult.Success(null, "অ্যাকাউন্ট সফলভাবে তৈরি হয়েছে"))
             } else {
                 onResult(AuthResult.Error(rtResult.message))
@@ -814,7 +841,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                 prefs.edit()
                     .putBoolean("is_logged_in", true)
                     .apply()
-                autoRestoreOnLogin(savedEmail)
+                executeCloudRestoreOnLogin(savedEmail, forceOverwrite = false)
                 onResult(AuthResult.Success(null, "সফলভাবে লগইন হয়েছে"))
                 return@launch
             }
@@ -840,8 +867,8 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                     .putBoolean("is_logged_in", true)
                     .apply()
 
-                // Auto-restore previous transactions and shop database on login
-                autoRestoreOnLogin(cleanEmail, forceOverwrite = true)
+                // Auto-restore previous transactions and shop database on login from Google Drive / Cloud
+                executeCloudRestoreOnLogin(cleanEmail, forceOverwrite = true)
                 onResult(authResult)
                 return@launch
             }
@@ -879,8 +906,8 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                     .putBoolean("is_logged_in", true)
                     .apply()
 
-                // Auto-restore previous transactions and shop database on login
-                autoRestoreOnLogin(cleanEmail, forceOverwrite = true)
+                // Auto-restore previous transactions and shop database on login from Google Drive / Cloud
+                executeCloudRestoreOnLogin(cleanEmail, forceOverwrite = true)
                 onResult(AuthResult.Success(null, "সফলভাবে লগইন হয়েছে"))
                 return@launch
             }
@@ -1001,30 +1028,39 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun loginUser(email: String, password: String, customShopName: String = "") {
-        val sName = if (customShopName.isNotBlank()) customShopName else _shopInfo.value.shopName
-        _shopInfo.value = _shopInfo.value.copy(
-            userEmail = email,
-            shopName = sName,
-            isGoogleLinked = true
-        )
-        _isLoggedIn.value = true
-        prefs.edit()
-            .putString("user_email", email)
-            .putString("user_password", password)
-            .putString("shop_name", sName)
-            .putBoolean("is_google_linked", true)
-            .putBoolean("is_logged_in", true)
-            .apply()
-        autoRestoreOnLogin(email, forceOverwrite = true)
+    fun loginUser(email: String, password: String, customShopName: String = "", onDone: (() -> Unit)? = null) {
+        viewModelScope.launch {
+            val sName = if (customShopName.isNotBlank()) customShopName else _shopInfo.value.shopName
+            _shopInfo.value = _shopInfo.value.copy(
+                userEmail = email,
+                shopName = sName,
+                isGoogleLinked = true
+            )
+            _isLoggedIn.value = true
+            prefs.edit()
+                .putString("user_email", email)
+                .putString("user_password", password)
+                .putString("shop_name", sName)
+                .putBoolean("is_google_linked", true)
+                .putBoolean("is_logged_in", true)
+                .apply()
+            executeCloudRestoreOnLogin(email, forceOverwrite = true)
+            onDone?.invoke()
+        }
     }
 
-    fun loginAsGuest() {
-        _isLoggedIn.value = true
-        prefs.edit()
-            .putBoolean("is_logged_in", true)
-            .apply()
-        autoRestoreOnLogin(getAccountIdentifier())
+    fun loginAsGuest(customEmail: String = "", onDone: (() -> Unit)? = null) {
+        viewModelScope.launch {
+            _isLoggedIn.value = true
+            prefs.edit()
+                .putBoolean("is_logged_in", true)
+                .apply()
+            val emailToUse = customEmail.trim().lowercase().ifBlank {
+                _shopInfo.value.userEmail.ifBlank { prefs.getString("user_email", "") ?: "" }
+            }.ifBlank { getAccountIdentifier() }
+            executeCloudRestoreOnLogin(emailToUse, forceOverwrite = true)
+            onDone?.invoke()
+        }
     }
 
     fun logoutUser() {

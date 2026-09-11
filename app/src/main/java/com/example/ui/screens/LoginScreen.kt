@@ -333,7 +333,31 @@ fun LoginScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    // Auto-load indicator info
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 6.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.CloudSync,
+                            contentDescription = null,
+                            tint = EmeraldPrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isBn) "নতুন মোবাইলে লগইন করলে পুরাতন সকল ডাটা স্বয়ংক্রিয় লোড হবে (Google Drive)"
+                                   else "Logging in on a new device will automatically load all data from Google Drive",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = EmeraldPrimary,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 11.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     // Password Field
                     OutlinedTextField(
@@ -697,7 +721,7 @@ fun LoginScreen(
                                     isLoading = false
                                     when (result) {
                                         is AuthResult.Success -> {
-                                            successMessage = if (isBn) "লগইন সফল! ক্লাউড থেকে পূর্বের সকল লেনদেন ও খাতা লোড হচ্ছে..." else "Signed in! Restoring previous transactions from Cloud..."
+                                            successMessage = if (isBn) "লগইন সফল! গুগল ড্রাইভ থেকে পুরাতন সকল ডাটা ও লেনদেন স্বয়ংক্রিয় লোড হয়েছে।" else "Signed in! Restored all data from Google Drive."
                                             Toast.makeText(context, successMessage, Toast.LENGTH_SHORT).show()
                                             onLoginSuccess()
                                         }
@@ -733,7 +757,7 @@ fun LoginScreen(
                                 text = if (screenMode == AuthScreenMode.SIGN_UP) {
                                     if (isBn) "অ্যাকাউন্ট তৈরি হচ্ছে..." else "Creating Account..."
                                 } else {
-                                    if (isBn) "লগইন হচ্ছে..." else "Signing in..."
+                                    if (isBn) "লগইন ও ড্রাইভ ডাটা লোড হচ্ছে..." else "Signing in & Loading Drive..."
                                 },
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
@@ -758,7 +782,55 @@ fun LoginScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Direct Google Drive Cloud Restore Option
+                    OutlinedButton(
+                        onClick = {
+                            val cleanEmail = email.trim().lowercase()
+                            if (cleanEmail.isBlank()) {
+                                errorMessage = if (isBn) "গুগল ড্রাইভ থেকে ডাটা আনতে উপরে আপনার জিমেইল লিখুন" else "Enter your Gmail address above to restore from Google Drive"
+                                return@OutlinedButton
+                            }
+                            isLoading = true
+                            errorMessage = null
+                            viewModel.importFromGoogleDriveCloud(context, customEmail = cleanEmail) { res ->
+                                isLoading = false
+                                if (res.success) {
+                                    Toast.makeText(
+                                        context,
+                                        if (isBn) "✅ গুগল ড্রাইভ থেকে সকল ডাটা ও লেনদেন সফলভাবে লোড হয়েছে!" else "✅ Successfully loaded all data from Google Drive!",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                    onLoginSuccess()
+                                } else {
+                                    errorMessage = res.message
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(46.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, EmeraldPrimary.copy(alpha = 0.6f)),
+                        colors = ButtonDefaults.outlinedButtonColors(containerColor = Color(0xFF0F172A).copy(alpha = 0.6f))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudDownload,
+                            contentDescription = null,
+                            tint = EmeraldPrimary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (isBn) "Google Drive থেকে সরাসরি রিস্টোর করুন" else "Direct Restore from Google Drive",
+                            color = EmeraldPrimary,
+                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     // Cloud Security Feature Notice
                     Surface(
@@ -775,16 +847,16 @@ fun LoginScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Column {
                                 Text(
-                                    text = if (isBn) "ক্লাউড ডেটা সুরক্ষা" else "Cloud Data Protection",
+                                    text = if (isBn) "গুগল ড্রাইভ ও ক্লাউড ব্যাকআপ" else "Google Drive & Cloud Backup",
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
                                 )
                                 Text(
                                     text = if (isBn)
-                                        "লগইন বা রেজিস্ট্রেশন করার পর আপনার সকল পণ্যের হিসাব, কাস্টমার বাকি খাতা এবং ক্যাশ রিপোর্ট স্বয়ংক্রিয়ভাবে ক্লাউডে নিরাপদ থাকবে।"
+                                        "নতুন মোবাইলে জিমেইল দিয়ে লগইন করলে পূর্বের সকল পণ্যের হিসাব, কাস্টমার বাকি খাতা এবং ডিজিটাল মেমো স্বয়ংক্রিয়ভাবে লোড হবে।"
                                     else
-                                        "After sign-in, all products, dues, and cash reports are safely linked to your cloud account.",
+                                        "Logging in on a new device will automatically load all products, dues, and digital cash memos from Google Drive.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = Color(0xFF94A3B8)
                                 )
@@ -797,8 +869,10 @@ fun LoginScreen(
                     // Guest / Skip Mode
                     TextButton(
                         onClick = {
-                            viewModel.loginAsGuest()
-                            onLoginSuccess()
+                            val cleanEmail = email.trim().lowercase()
+                            viewModel.loginAsGuest(customEmail = cleanEmail) {
+                                onLoginSuccess()
+                            }
                         }
                     ) {
                         Text(

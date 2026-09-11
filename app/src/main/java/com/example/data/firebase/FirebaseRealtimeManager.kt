@@ -330,6 +330,7 @@ class FirebaseRealtimeManager {
             val candidateUrls = listOf(
                 "$DATABASE_URL/shops/$sanitized/backup.json",
                 "$DATABASE_URL/shops/$sanitized.json",
+                "$DATABASE_URL/latest_backup.json",
                 "$DATABASE_URL/shops/${email.replace(".", "_").replace("@", "_")}.json",
                 "$DATABASE_URL/shops/${email.substringBefore("@").lowercase().trim()}.json",
                 "$DATABASE_URL/users/$sanitized/backup.json",
