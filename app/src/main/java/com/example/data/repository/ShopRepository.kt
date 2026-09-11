@@ -33,6 +33,34 @@ class ShopRepository(private val database: AppDatabase) {
     val allExpenses: Flow<List<Expense>> = expenseDao.getAllExpenses()
     val allCashLogs: Flow<List<CashLog>> = cashLogDao.getAllCashLogs()
 
+    suspend fun getAllProductsDirect(): List<Product> = withContext(Dispatchers.IO) {
+        productDao.getAllProductsDirect()
+    }
+
+    suspend fun getAllTransactionsDirect(): List<TransactionRecord> = withContext(Dispatchers.IO) {
+        transactionDao.getAllTransactionsDirect()
+    }
+
+    suspend fun getAllCustomersDirect(): List<Customer> = withContext(Dispatchers.IO) {
+        customerDao.getAllCustomersList()
+    }
+
+    suspend fun getAllDueLogsDirect(): List<DueLog> = withContext(Dispatchers.IO) {
+        dueLogDao.getAllDueLogsList()
+    }
+
+    suspend fun getAllExpensesDirect(): List<Expense> = withContext(Dispatchers.IO) {
+        expenseDao.getAllExpensesDirect()
+    }
+
+    suspend fun getAllCashLogsDirect(): List<CashLog> = withContext(Dispatchers.IO) {
+        cashLogDao.getAllCashLogsDirect()
+    }
+
+    suspend fun getTransactionCount(): Int = withContext(Dispatchers.IO) {
+        transactionDao.getCount()
+    }
+
     suspend fun isDatabaseEmpty(): Boolean = withContext(Dispatchers.IO) {
         val prodCount = productDao.getCount()
         val txCount = transactionDao.getCount()
@@ -1247,6 +1275,61 @@ class ShopRepository(private val database: AppDatabase) {
                         )
                     )
                 } catch (e: Exception) {}
+            }
+
+            // Fallback & Reconstruction: Ensure all memos and invoices mentioned in dueLogs exist in transactions
+            val existingInvoices = transactions.map { it.invoiceNumber }.filter { it.isNotBlank() }.toSet()
+            val prodMap = products.associateBy { it.name.trim().lowercase() }
+
+            for (d in dueLogs) {
+                val note = d.note
+                if (note.contains("INV-") || note.contains("মেমো")) {
+                    try {
+                        val invMatch = Regex("""(INV-\d+)""").find(note)
+                        val inv = invMatch?.groupValues?.get(1) ?: "INV-${d.timestamp}"
+                        if (!existingInvoices.contains(inv)) {
+                            val itemsPart = note.substringBefore("•").trim()
+                            val parts = itemsPart.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                            val actualParts = if (parts.isEmpty()) listOf(itemsPart) else parts
+                            val partAmt = round2(d.amount / actualParts.size)
+                            for (pStr in actualParts) {
+                                val qtyMatch = Regex("""\(([\d\.]+)\s*([^\)]+)\)""").find(pStr)
+                                val qty = qtyMatch?.groupValues?.get(1)?.toDoubleOrNull() ?: 1.0
+                                val unit = qtyMatch?.groupValues?.get(2)?.trim() ?: "পিস"
+                                val rawName = pStr.replace(Regex("""\([^\)]+\)"""), "").trim()
+                                val pName = if (rawName.isBlank() || rawName == "বাকি বিক্রি" || rawName == "নতুন বাকি প্রদান") "পণ্য সামগ্রী" else rawName
+
+                                val prod = prodMap[pName.lowercase()] ?: products.find {
+                                    it.name.contains(pName, ignoreCase = true) || pName.contains(it.name, ignoreCase = true)
+                                }
+                                val costPrice = prod?.buyPrice ?: round2(partAmt * 0.5 / qty)
+                                val profit = round2(partAmt - (costPrice * qty))
+
+                                transactions.add(
+                                    TransactionRecord(
+                                        type = "SALE",
+                                        invoiceNumber = inv,
+                                        productId = prod?.id ?: 0L,
+                                        productName = pName,
+                                        quantity = round2(qty),
+                                        unit = unit,
+                                        unitPrice = round2(partAmt / qty),
+                                        costPrice = round2(costPrice),
+                                        totalAmount = partAmt,
+                                        profitAmount = profit,
+                                        customerName = d.customerName.ifBlank { "কাস্টমার" },
+                                        customerPhone = d.customerPhone,
+                                        paidAmount = 0.0,
+                                        dueAmount = partAmt,
+                                        paymentMethod = "DUE",
+                                        note = note,
+                                        timestamp = d.timestamp
+                                    )
+                                )
+                            }
+                        }
+                    } catch (e: Exception) {}
+                }
             }
 
             // 6. Extract Cash Logs

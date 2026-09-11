@@ -464,11 +464,12 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         checkForUpdates(manualCheck = false)
         viewModelScope.launch {
             repository.deduplicateAndMergeCustomers()
-            // Check if local database is empty; only restore if local db is empty!
+            // Check if local database is empty or missing transactions; restore if needed!
             val isDbEmpty = repository.isDatabaseEmpty()
+            val txCount = repository.getTransactionCount()
             val savedEmail = prefs.getString("user_email", "") ?: ""
             val emailToUse = if (savedEmail.isNotBlank()) savedEmail else _shopInfo.value.userEmail
-            if (isDbEmpty && emailToUse.isNotBlank()) {
+            if ((isDbEmpty || txCount == 0) && emailToUse.isNotBlank()) {
                 autoRestoreOnLogin(emailToUse, forceOverwrite = true)
             } else if (!isDbEmpty && _hasPendingSync.value) {
                 syncPendingOfflineDataToCloud()
@@ -646,9 +647,10 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     fun autoRestoreOnLogin(accountId: String, forceOverwrite: Boolean = false, onRestored: ((Boolean) -> Unit)? = null) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // If local database already has items and this is not a forced user action, don't overwrite offline work!
+                // If local database already has items and transactions, and this is not a forced user action, don't overwrite offline work!
                 val isDbEmpty = repository.isDatabaseEmpty()
-                if (!isDbEmpty && !forceOverwrite) {
+                val txCount = repository.getTransactionCount()
+                if (!isDbEmpty && txCount > 0 && !forceOverwrite) {
                     syncPendingOfflineDataToCloud { success ->
                         onRestored?.invoke(success)
                     }
@@ -839,7 +841,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                     .apply()
 
                 // Auto-restore previous transactions and shop database on login
-                autoRestoreOnLogin(cleanEmail)
+                autoRestoreOnLogin(cleanEmail, forceOverwrite = true)
                 onResult(authResult)
                 return@launch
             }
@@ -878,7 +880,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                     .apply()
 
                 // Auto-restore previous transactions and shop database on login
-                autoRestoreOnLogin(cleanEmail)
+                autoRestoreOnLogin(cleanEmail, forceOverwrite = true)
                 onResult(AuthResult.Success(null, "সফলভাবে লগইন হয়েছে"))
                 return@launch
             }
@@ -1014,7 +1016,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             .putBoolean("is_google_linked", true)
             .putBoolean("is_logged_in", true)
             .apply()
-        autoRestoreOnLogin(email)
+        autoRestoreOnLogin(email, forceOverwrite = true)
     }
 
     fun loginAsGuest() {
@@ -1716,13 +1718,19 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     suspend fun getExportJsonString(): String {
+        val prods = repository.getAllProductsDirect().ifEmpty { products.value }
+        val custs = repository.getAllCustomersDirect().ifEmpty { customers.value }
+        val txs = repository.getAllTransactionsDirect().ifEmpty { allTransactions.value }
+        val exps = repository.getAllExpensesDirect().ifEmpty { expenses.value }
+        val dues = repository.getAllDueLogsDirect().ifEmpty { dueLogs.value }
+        val cashes = repository.getAllCashLogsDirect().ifEmpty { cashLogs.value }
         return repository.exportDataAsJson(
-            productsList = products.value,
-            customersList = customers.value,
-            expensesList = expenses.value,
-            transactionsList = allTransactions.value,
-            dueLogsList = dueLogs.value,
-            cashLogsList = cashLogs.value,
+            productsList = prods,
+            customersList = custs,
+            expensesList = exps,
+            transactionsList = txs,
+            dueLogsList = dues,
+            cashLogsList = cashes,
             shopInfo = _shopInfo.value
         )
     }

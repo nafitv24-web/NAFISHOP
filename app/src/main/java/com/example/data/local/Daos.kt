@@ -9,6 +9,9 @@ interface ProductDao {
     @Query("SELECT * FROM products ORDER BY name ASC")
     fun getAllProducts(): Flow<List<Product>>
 
+    @Query("SELECT * FROM products ORDER BY name ASC")
+    suspend fun getAllProductsDirect(): List<Product>
+
     @Query("SELECT * FROM products WHERE stockQuantity <= minStockAlert ORDER BY stockQuantity ASC")
     fun getLowStockProducts(): Flow<List<Product>>
 
@@ -56,6 +59,9 @@ interface TransactionDao {
 
     @Query("SELECT * FROM transactions ORDER BY timestamp DESC")
     fun getAllTransactions(): Flow<List<TransactionRecord>>
+
+    @Query("SELECT * FROM transactions ORDER BY timestamp DESC")
+    suspend fun getAllTransactionsDirect(): List<TransactionRecord>
 
     @Query("SELECT * FROM transactions ORDER BY timestamp DESC LIMIT :limit")
     fun getRecentTransactions(limit: Int = 25): Flow<List<TransactionRecord>>
@@ -189,6 +195,9 @@ interface ExpenseDao {
     @Query("SELECT * FROM expenses ORDER BY timestamp DESC")
     fun getAllExpenses(): Flow<List<Expense>>
 
+    @Query("SELECT * FROM expenses ORDER BY timestamp DESC")
+    suspend fun getAllExpensesDirect(): List<Expense>
+
     @Query("SELECT * FROM expenses WHERE timestamp >= :startTime AND timestamp <= :endTime ORDER BY timestamp DESC")
     fun getExpensesBetween(startTime: Long, endTime: Long): Flow<List<Expense>>
 
@@ -212,6 +221,9 @@ interface ExpenseDao {
 interface CashLogDao {
     @Query("SELECT * FROM cash_logs ORDER BY timestamp DESC")
     fun getAllCashLogs(): Flow<List<CashLog>>
+
+    @Query("SELECT * FROM cash_logs ORDER BY timestamp DESC")
+    suspend fun getAllCashLogsDirect(): List<CashLog>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCashLog(cashLog: CashLog): Long
