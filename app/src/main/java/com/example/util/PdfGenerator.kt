@@ -32,17 +32,17 @@ object PdfGenerator {
     /**
      * Draws standard sponsor branding & clickable URL footer on PDF pages
      */
-    fun drawSponsorFooter(canvas: Canvas, yStart: Float = 800f, extraNote: String? = null) {
+    fun drawSponsorFooter(canvas: Canvas, yStart: Float = 775f, extraNote: String? = null) {
         val sponsorPaint = Paint().apply {
             isAntiAlias = true
-            textSize = 10f
+            textSize = 9.5f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             color = Color.rgb(30, 41, 59)
             textAlign = Paint.Align.CENTER
         }
         val linkPaint = Paint().apply {
             isAntiAlias = true
-            textSize = 9.5f
+            textSize = 9f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
             color = Color.rgb(37, 99, 235) // Hyperlink blue
             textAlign = Paint.Align.CENTER
@@ -50,7 +50,7 @@ object PdfGenerator {
         }
         val notePaint = Paint().apply {
             isAntiAlias = true
-            textSize = 9f
+            textSize = 8.5f
             color = Color.rgb(100, 116, 139)
             textAlign = Paint.Align.CENTER
         }
@@ -163,13 +163,17 @@ object PdfGenerator {
         // Store Header
         var y = 48f
         canvas.drawText(invoice.shopName, 297.5f, y, titlePaint)
-        y += 16f
+        y += 17f
         if (invoice.shopAddress.isNotBlank()) {
             canvas.drawText(invoice.shopAddress, 297.5f, y, subPaint)
             y += 14f
         }
-        canvas.drawText("মোবাইল: ${invoice.shopPhone}", 297.5f, y, subPaint)
-        y += 18f
+        if (invoice.shopPhone.isNotBlank()) {
+            canvas.drawText("মোবাইল: ${invoice.shopPhone}", 297.5f, y, subPaint)
+            y += 16f
+        } else {
+            y += 4f
+        }
 
         // Document Title Badge
         val memoBadgePaint = Paint().apply {
@@ -181,8 +185,8 @@ object PdfGenerator {
             style = Paint.Style.STROKE
             strokeWidth = 1f
         }
-        canvas.drawRoundRect(RectF(185f, y - 13f, 410f, y + 9f), 11f, 11f, memoBadgePaint)
-        canvas.drawRoundRect(RectF(185f, y - 13f, 410f, y + 9f), 11f, 11f, memoBorder)
+        canvas.drawRoundRect(RectF(180f, y - 13f, 415f, y + 10f), 11f, 11f, memoBadgePaint)
+        canvas.drawRoundRect(RectF(180f, y - 13f, 415f, y + 10f), 11f, 11f, memoBorder)
 
         val memoTextPaint = Paint().apply {
             isAntiAlias = true
@@ -196,39 +200,39 @@ object PdfGenerator {
 
         // Customer & Invoice Details Box
         val custBoxBg = Paint().apply { color = Color.rgb(248, 250, 252); style = Paint.Style.FILL }
-        canvas.drawRoundRect(RectF(34f, y - 6f, 561f, y + 36f), 5f, 5f, custBoxBg)
-        canvas.drawRoundRect(RectF(34f, y - 6f, 561f, y + 36f), 5f, 5f, linePaint)
+        canvas.drawRoundRect(RectF(34f, y - 6f, 561f, y + 38f), 5f, 5f, custBoxBg)
+        canvas.drawRoundRect(RectF(34f, y - 6f, 561f, y + 38f), 5f, 5f, linePaint)
 
         val dateStr = SimpleDateFormat("dd/MM/yyyy hh:mm a", Locale.getDefault()).format(Date(invoice.timestamp))
         canvas.drawText("মেমো নং: #${invoice.invoiceNumber}", 44f, y + 12f, boldPaint)
         canvas.drawText("কাস্টমার: ${invoice.customerName}", 320f, y + 12f, boldPaint)
-        canvas.drawText("তারিখ: $dateStr", 44f, y + 26f, textPaint)
+        canvas.drawText("তারিখ: $dateStr", 44f, y + 28f, textPaint)
         if (invoice.customerPhone.isNotBlank()) {
-            canvas.drawText("মোবাইল: ${invoice.customerPhone}", 320f, y + 26f, textPaint)
+            canvas.drawText("মোবাইল: ${invoice.customerPhone}", 320f, y + 28f, textPaint)
         }
-        y += 48f
+        y += 52f
 
         // Table Header
         val tableHeaderPaint = Paint().apply {
             color = Color.rgb(30, 41, 59)
             style = Paint.Style.FILL
         }
-        canvas.drawRoundRect(RectF(34f, y - 13f, 561f, y + 11f), 4f, 4f, tableHeaderPaint)
+        canvas.drawRoundRect(RectF(34f, y - 13f, 561f, y + 10f), 4f, 4f, tableHeaderPaint)
 
         canvas.drawText("নং", 46f, y, centerHeaderPaint)
         canvas.drawText("পণ্যের বিবরণ (Item Name)", 70f, y, leftHeaderPaint)
         canvas.drawText("পরিমাণ", 330f, y, rightHeaderPaint)
         canvas.drawText("দর (Rate)", 425f, y, rightHeaderPaint)
         canvas.drawText("মোট ($currency)", 553f, y, rightHeaderPaint)
-        y += 18f
+        y += 24f
 
         // Items List
         val rowBgAlt = Paint().apply { color = Color.rgb(248, 250, 252); style = Paint.Style.FILL }
         invoice.items.forEachIndexed { index, item ->
             if (index % 2 == 1) {
-                canvas.drawRect(RectF(34f, y - 11f, 561f, y + 7f), rowBgAlt)
+                canvas.drawRect(RectF(34f, y - 13f, 561f, y + 9f), rowBgAlt)
             }
-            canvas.drawLine(34f, y + 7f, 561f, y + 7f, linePaint)
+            canvas.drawLine(34f, y + 9f, 561f, y + 9f, linePaint)
 
             canvas.drawText("${index + 1}", 46f, y, centerTextPaint)
             val prodTitle = if (item.product.name.length > 32) item.product.name.take(30) + ".." else item.product.name
@@ -237,13 +241,13 @@ object PdfGenerator {
             canvas.drawText("$currency${item.customPrice.toIntOrNull() ?: item.customPrice}", 425f, y, rightTextPaint)
             canvas.drawText("$currency${item.total.toIntOrNull() ?: item.total}", 553f, y, rightBoldPaint)
 
-            y += 18f
+            y += 22f
         }
 
-        y += 12f
+        y += 14f
 
-        // Financial Summary on Right Side
-        val summaryX = 310f
+        // Financial Summary on Right Side (Generous width to avoid any text overlap)
+        val summaryX = 265f
         val valX = 553f
 
         val greenRightPaint = Paint().apply {
@@ -271,21 +275,21 @@ object PdfGenerator {
         // Sub Total
         canvas.drawText("মোট মূল্য (Subtotal):", summaryX, y, textPaint)
         canvas.drawText("$currency${invoice.subTotal.toIntOrNull() ?: invoice.subTotal}", valX, y, rightTextPaint)
-        y += 16f
+        y += 18f
 
         if (invoice.discount > 0) {
             canvas.drawText("ডিসকাউন্ট / ছাড় (Discount):", summaryX, y, textPaint)
             canvas.drawText("- $currency${invoice.discount.toIntOrNull() ?: invoice.discount}", valX, y, greenRightPaint)
-            y += 16f
+            y += 18f
         }
 
         canvas.drawText("সর্বমোট প্রদেয় (Grand Total):", summaryX, y, boldPaint)
         canvas.drawText("$currency${invoice.grandTotal.toIntOrNull() ?: invoice.grandTotal}", valX, y, rightBoldPaint)
-        y += 16f
+        y += 18f
 
         canvas.drawText("জমা / পরিশোধিত (Paid):", summaryX, y, textPaint)
         canvas.drawText("$currency${invoice.paidAmount.toIntOrNull() ?: invoice.paidAmount}", valX, y, greenRightPaint)
-        y += 16f
+        y += 18f
 
         if (invoice.dueAmount > 0 || invoice.totalCurrentDue > 0) {
             val dueOrangeLabel = Paint().apply {
@@ -296,7 +300,7 @@ object PdfGenerator {
             }
             canvas.drawText("আজকের নতুন বাকি (Today Due):", summaryX, y, dueOrangeLabel)
             canvas.drawText("$currency${invoice.dueAmount.toIntOrNull() ?: invoice.dueAmount}", valX, y, dueOrangeRightPaint)
-            y += 16f
+            y += 18f
 
             if (invoice.previousDue > 0) {
                 val prevDueLabel = Paint().apply {
@@ -306,7 +310,7 @@ object PdfGenerator {
                 }
                 canvas.drawText("পূর্বের বাকি ছিল (Previous Due):", summaryX, y, prevDueLabel)
                 canvas.drawText("$currency${invoice.previousDue.toIntOrNull() ?: invoice.previousDue}", valX, y, rightTextPaint)
-                y += 16f
+                y += 18f
             }
 
             // Total Due Box / Highlight
@@ -319,8 +323,8 @@ object PdfGenerator {
                 style = Paint.Style.STROKE
                 strokeWidth = 1f
             }
-            canvas.drawRoundRect(RectF(summaryX - 6f, y - 12f, valX + 6f, y + 6f), 4f, 4f, totalDueBg)
-            canvas.drawRoundRect(RectF(summaryX - 6f, y - 12f, valX + 6f, y + 6f), 4f, 4f, totalDueBorder)
+            canvas.drawRoundRect(RectF(summaryX - 6f, y - 13f, valX + 6f, y + 7f), 4f, 4f, totalDueBg)
+            canvas.drawRoundRect(RectF(summaryX - 6f, y - 13f, valX + 6f, y + 7f), 4f, 4f, totalDueBorder)
 
             val totalDueRedLabel = Paint().apply {
                 isAntiAlias = true
@@ -330,7 +334,7 @@ object PdfGenerator {
             }
             canvas.drawText("সর্বমোট বর্তমান বকেয়া (Total Due):", summaryX, y, totalDueRedLabel)
             canvas.drawText("$currency${invoice.totalCurrentDue.toIntOrNull() ?: invoice.totalCurrentDue}", valX, y, totalDueRedRightPaint)
-            y += 20f
+            y += 22f
         }
 
         val pmDisplay = when (invoice.paymentMethod) {
@@ -343,8 +347,8 @@ object PdfGenerator {
         canvas.drawText("পেমেন্ট মাধ্যম (Payment Mode):", summaryX, y, textPaint)
         canvas.drawText(pmDisplay, valX, y, rightBoldPaint)
 
-        // Signatures Block
-        val sigY = 755f
+        // Signatures Block (Positioned cleanly above footer)
+        val sigY = 720f
         val sigLinePaint = Paint().apply { color = Color.rgb(148, 163, 184); strokeWidth = 1f }
         val sigTextPaint = Paint().apply {
             isAntiAlias = true
@@ -353,20 +357,20 @@ object PdfGenerator {
             textAlign = Paint.Align.CENTER
         }
         canvas.drawLine(44f, sigY, 180f, sigY, sigLinePaint)
-        canvas.drawText("কাস্টমারের স্বাক্ষর", 112f, sigY + 13f, sigTextPaint)
+        canvas.drawText("কাস্টমারের স্বাক্ষর", 112f, sigY + 14f, sigTextPaint)
 
-        canvas.drawLine(425f, sigY, 551f, sigY, sigLinePaint)
-        canvas.drawText("বিক্রেতার স্বাক্ষর", 488f, sigY + 13f, sigTextPaint)
+        canvas.drawLine(415f, sigY, 551f, sigY, sigLinePaint)
+        canvas.drawText("বিক্রেতার স্বাক্ষর", 483f, sigY + 14f, sigTextPaint)
 
         val footerTextPaint = Paint().apply {
             isAntiAlias = true
-            textSize = 10f
+            textSize = 9.5f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
             color = Color.rgb(5, 150, 105)
             textAlign = Paint.Align.CENTER
         }
-        canvas.drawText("Thank you for your business! ধন্যবাদ, আবার আসবেন।", 297.5f, 788f, footerTextPaint)
-        drawSponsorFooter(canvas, 812f, "NAFI KHATA ডিজিটাল ক্যাশ মেমো")
+        canvas.drawText("Thank you for your business! ধন্যবাদ, আবার আসবেন।", 297.5f, 755f, footerTextPaint)
+        drawSponsorFooter(canvas, 775f, "NAFI KHATA ডিজিটাল ক্যাশ মেমো")
 
         pdfDocument.finishPage(page)
 
@@ -557,22 +561,22 @@ object PdfGenerator {
             y += 12f
 
             val expHeaderPaint = Paint().apply { color = Color.rgb(30, 41, 59); style = Paint.Style.FILL }
-            canvas.drawRoundRect(RectF(34f, y - 11f, 561f, y + 9f), 4f, 4f, expHeaderPaint)
+            canvas.drawRoundRect(RectF(34f, y - 13f, 561f, y + 10f), 4f, 4f, expHeaderPaint)
 
             canvas.drawText("খরচের খাত / শিরোনাম", 44f, y, leftHeaderPaint)
             canvas.drawText("মোট এন্ট্রি", 260f, y, leftHeaderPaint)
             canvas.drawText("পরিমাণ ($currency)", 410f, y, rightHeaderPaint)
             canvas.drawText("অংশ (%)", 553f, y, rightHeaderPaint)
-            y += 16f
+            y += 24f
 
             val totalExp = if (expenses > 0) expenses else expensesList.sumOf { it.amount }
             val expRowBg = Paint().apply { color = Color.rgb(255, 250, 250); style = Paint.Style.FILL }
 
             expByCategory.take(4).forEachIndexed { idx, (cat, catAmt) ->
                 if (idx % 2 == 1) {
-                    canvas.drawRect(RectF(34f, y - 10f, 561f, y + 6f), expRowBg)
+                    canvas.drawRect(RectF(34f, y - 13f, 561f, y + 9f), expRowBg)
                 }
-                canvas.drawLine(34f, y + 6f, 561f, y + 6f, linePaint)
+                canvas.drawLine(34f, y + 9f, 561f, y + 9f, linePaint)
 
                 val entriesCount = expensesList.count { (it.category.ifBlank { "অন্যান্য" }) == cat }
                 val pct = if (totalExp > 0) (catAmt / totalExp * 100).toInt() else 0
@@ -582,32 +586,32 @@ object PdfGenerator {
                 val redRight = Paint().apply { isAntiAlias = true; textSize = 9f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); color = Color.rgb(220, 38, 38); textAlign = Paint.Align.RIGHT }
                 canvas.drawText("- $currency${catAmt.toIntOrNull() ?: catAmt}", 410f, y, redRight)
                 canvas.drawText("$pct%", 553f, y, rightTextPaint)
-                y += 16f
+                y += 22f
             }
-            y += 10f
+            y += 12f
         }
 
         // Recent Transactions Table Header
         canvas.drawText("রিপোর্টকালীন লেনদেন বিবরণী (Transaction Log):", 34f, y, boldPaint)
-        y += 12f
+        y += 14f
 
         val tableHeaderPaint = Paint().apply { color = Color.rgb(30, 41, 59); style = Paint.Style.FILL }
-        canvas.drawRoundRect(RectF(34f, y - 11f, 561f, y + 9f), 4f, 4f, tableHeaderPaint)
+        canvas.drawRoundRect(RectF(34f, y - 13f, 561f, y + 10f), 4f, 4f, tableHeaderPaint)
         canvas.drawText("ধরন", 44f, y, leftHeaderPaint)
         canvas.drawText("পণ্যের নাম ও বিবরণ", 120f, y, leftHeaderPaint)
         canvas.drawText("পরিমাণ", 330f, y, rightHeaderPaint)
         canvas.drawText("মোট টাকা ($currency)", 430f, y, rightHeaderPaint)
         canvas.drawText("সময়", 553f, y, rightHeaderPaint)
-        y += 16f
+        y += 24f
 
         val rowBg = Paint().apply { color = Color.rgb(248, 250, 252); style = Paint.Style.FILL }
-        val maxTxToDraw = if (expensesList.isNotEmpty()) 10 else 18
+        val maxTxToDraw = if (expensesList.isNotEmpty()) 8 else 15
         transactions.take(maxTxToDraw).forEachIndexed { i, tx ->
-            if (y > 730f) return@forEachIndexed
+            if (y > 700f) return@forEachIndexed
             if (i % 2 == 1) {
-                canvas.drawRect(RectF(34f, y - 10f, 561f, y + 6f), rowBg)
+                canvas.drawRect(RectF(34f, y - 13f, 561f, y + 9f), rowBg)
             }
-            canvas.drawLine(34f, y + 6f, 561f, y + 6f, linePaint)
+            canvas.drawLine(34f, y + 9f, 561f, y + 9f, linePaint)
 
             val typeStr = when(tx.type) {
                 "SALE" -> "বিক্রয়"
@@ -622,11 +626,11 @@ object PdfGenerator {
             val timeShort = SimpleDateFormat("dd/MM hh:mm a", Locale.getDefault()).format(Date(tx.timestamp))
             canvas.drawText(timeShort, 553f, y, rightTextPaint)
 
-            y += 16f
+            y += 22f
         }
 
         // Signatures Block
-        val sigY = 760f
+        val sigY = 720f
         val sigLinePaint = Paint().apply { color = Color.rgb(148, 163, 184); strokeWidth = 1f }
         val sigTextPaint = Paint().apply {
             isAntiAlias = true
@@ -635,13 +639,13 @@ object PdfGenerator {
             textAlign = Paint.Align.CENTER
         }
         canvas.drawLine(44f, sigY, 180f, sigY, sigLinePaint)
-        canvas.drawText("হিসাব প্রস্তুতকারী", 112f, sigY + 13f, sigTextPaint)
+        canvas.drawText("হিসাব প্রস্তুতকারী", 112f, sigY + 14f, sigTextPaint)
 
-        canvas.drawLine(425f, sigY, 551f, sigY, sigLinePaint)
-        canvas.drawText("স্বত্বাধিকারীর স্বাক্ষর", 488f, sigY + 13f, sigTextPaint)
+        canvas.drawLine(415f, sigY, 551f, sigY, sigLinePaint)
+        canvas.drawText("স্বত্বাধিকারীর স্বাক্ষর", 483f, sigY + 14f, sigTextPaint)
 
         // Footer
-        drawSponsorFooter(canvas, 812f, "NAFI KHATA লাভ-ক্ষতি স্টেটমেন্ট প্রিন্ট")
+        drawSponsorFooter(canvas, 775f, "NAFI KHATA লাভ-ক্ষতি স্টেটমেন্ট প্রিন্ট")
 
         pdfDocument.finishPage(page)
         return savePdfToFile(context, pdfDocument, "Report_${periodTitle.replace(" ", "_")}.pdf")
@@ -855,7 +859,7 @@ object PdfGenerator {
 
         fun drawTableHeader(startY: Float): Float {
             val thBg = Paint().apply { color = Color.rgb(30, 41, 59); style = Paint.Style.FILL }
-            canvas.drawRoundRect(RectF(34f, startY - 13f, 561f, startY + 11f), 4f, 4f, thBg)
+            canvas.drawRoundRect(RectF(34f, startY - 13f, 561f, startY + 10f), 4f, 4f, thBg)
 
             canvas.drawText("নং", 46f, startY, centerHeaderPaint)
             canvas.drawText("ধরন", 76f, startY, centerHeaderPaint)
@@ -865,7 +869,7 @@ object PdfGenerator {
             canvas.drawText("দর", 480f, startY, rightHeaderPaint)
             canvas.drawText("মোট টাকা", 553f, startY, rightHeaderPaint)
 
-            return startY + 18f
+            return startY + 24f
         }
 
         var y = drawMemoDecorations(isFirstPage = true)
@@ -897,9 +901,9 @@ object PdfGenerator {
         }
 
         transactions.forEachIndexed { index, tx ->
-            if (y > 745f) {
+            if (y > 690f) {
                 // Draw footer before finishing page
-                drawSponsorFooter(canvas, 812f, "NAFI KHATA মেমো ভাউচার • পৃষ্ঠা: $pageNumber")
+                drawSponsorFooter(canvas, 775f, "NAFI KHATA মেমো ভাউচার • পৃষ্ঠা: $pageNumber")
                 pdfDocument.finishPage(page)
 
                 pageNumber++
@@ -912,9 +916,9 @@ object PdfGenerator {
             }
 
             if (index % 2 == 1) {
-                canvas.drawRect(RectF(34f, y - 11f, 561f, y + 7f), rowBgAlt)
+                canvas.drawRect(RectF(34f, y - 13f, 561f, y + 9f), rowBgAlt)
             }
-            canvas.drawLine(34f, y + 7f, 561f, y + 7f, linePaint)
+            canvas.drawLine(34f, y + 9f, 561f, y + 9f, linePaint)
 
             val isStockIn = tx.type == "STOCK_IN" || tx.type == "PURCHASE"
 
@@ -944,11 +948,11 @@ object PdfGenerator {
             // Total Amount (Right-aligned, bold)
             canvas.drawText("$currency${tx.totalAmount.toIntOrNull() ?: tx.totalAmount}", 553f, y, rightBoldPaint)
 
-            y += 18f
+            y += 22f
         }
 
         // Totals Footer Row at bottom of table
-        if (y <= 745f) {
+        if (y <= 695f) {
             val totalRowBg = Paint().apply { color = Color.rgb(241, 245, 249); style = Paint.Style.FILL }
             canvas.drawRoundRect(RectF(34f, y - 8f, 561f, y + 14f), 4f, 4f, totalRowBg)
             val doubleLine = Paint().apply { color = Color.rgb(148, 163, 184); strokeWidth = 1f }
@@ -962,7 +966,7 @@ object PdfGenerator {
         }
 
         // Signatures Block (মেমোর মতো স্বাক্ষর)
-        val sigY = 780f
+        val sigY = 720f
         val sigLinePaint = Paint().apply {
             color = Color.rgb(148, 163, 184)
             strokeWidth = 1f
@@ -974,13 +978,13 @@ object PdfGenerator {
             textAlign = Paint.Align.CENTER
         }
         canvas.drawLine(44f, sigY, 180f, sigY, sigLinePaint)
-        canvas.drawText("হিসাবরক্ষক / প্রস্তুতকারী", 112f, sigY + 13f, sigTextPaint)
+        canvas.drawText("হিসাবরক্ষক / প্রস্তুতকারী", 112f, sigY + 14f, sigTextPaint)
 
-        canvas.drawLine(425f, sigY, 551f, sigY, sigLinePaint)
-        canvas.drawText("স্বত্বাধিকারীর স্বাক্ষর", 488f, sigY + 13f, sigTextPaint)
+        canvas.drawLine(415f, sigY, 551f, sigY, sigLinePaint)
+        canvas.drawText("স্বত্বাধিকারীর স্বাক্ষর", 483f, sigY + 14f, sigTextPaint)
 
         // Footer note
-        drawSponsorFooter(canvas, 812f, "NAFI KHATA ডিজিটাল খাতা ও মেমো প্রিন্ট • নির্ভুল হিসাবের বিশ্বস্ত সঙ্গী")
+        drawSponsorFooter(canvas, 775f, "NAFI KHATA ডিজিটাল খাতা ও মেমো প্রিন্ট • নির্ভুল হিসাবের বিশ্বস্ত সঙ্গী")
 
         pdfDocument.finishPage(page)
         return savePdfToFile(context, pdfDocument, "Stock_InOut_${periodTitle.replace(" ", "_")}.pdf")
@@ -1185,7 +1189,7 @@ object PdfGenerator {
 
         fun drawTableHeader(startY: Float): Float {
             val thBg = Paint().apply { color = Color.rgb(30, 41, 59); style = Paint.Style.FILL }
-            canvas.drawRoundRect(RectF(34f, startY - 13f, 561f, startY + 11f), 4f, 4f, thBg)
+            canvas.drawRoundRect(RectF(34f, startY - 13f, 561f, startY + 10f), 4f, 4f, thBg)
 
             canvas.drawText("নং", 46f, startY, centerHeaderPaint)
             canvas.drawText("তারিখ ও সময়", 68f, startY, leftHeaderPaint)
@@ -1194,7 +1198,7 @@ object PdfGenerator {
             canvas.drawText("জমা আদায় (-)", 485f, startY, rightHeaderPaint)
             canvas.drawText("চলতি বাকি", 553f, startY, rightHeaderPaint)
 
-            return startY + 18f
+            return startY + 24f
         }
 
         var y = drawHeaderAndCustomerCard(isFirstPage = true)
@@ -1205,8 +1209,8 @@ object PdfGenerator {
 
         val sortedHistory = history.sortedBy { it.timestamp }
         sortedHistory.forEachIndexed { index, log ->
-            if (y > 745f) {
-                drawSponsorFooter(canvas, 812f, "NAFI KHATA বাকি খাতা ভাউচার • পৃষ্ঠা: $pageNumber")
+            if (y > 690f) {
+                drawSponsorFooter(canvas, 775f, "NAFI KHATA বাকি খাতা ভাউচার • পৃষ্ঠা: $pageNumber")
                 pdfDocument.finishPage(page)
 
                 pageNumber++
@@ -1219,9 +1223,9 @@ object PdfGenerator {
             }
 
             if (index % 2 == 1) {
-                canvas.drawRect(RectF(34f, y - 11f, 561f, y + 7f), rowBgAlt)
+                canvas.drawRect(RectF(34f, y - 13f, 561f, y + 9f), rowBgAlt)
             }
-            canvas.drawLine(34f, y + 7f, 561f, y + 7f, linePaint)
+            canvas.drawLine(34f, y + 9f, 561f, y + 9f, linePaint)
 
             val isGiven = log.type == "DUE_GIVEN"
             if (isGiven) {
@@ -1253,11 +1257,11 @@ object PdfGenerator {
 
             canvas.drawText("$currency${runningBal.toIntOrNull() ?: runningBal}", 553f, y, rightBoldPaint)
 
-            y += 18f
+            y += 22f
         }
 
         // Table Bottom Summary Row
-        if (y <= 745f) {
+        if (y <= 695f) {
             val totalRowBg = Paint().apply { color = Color.rgb(255, 247, 237); style = Paint.Style.FILL }
             canvas.drawRoundRect(RectF(34f, y - 8f, 561f, y + 14f), 4f, 4f, totalRowBg)
             val doubleLine = Paint().apply { color = Color.rgb(254, 215, 170); strokeWidth = 1f }
@@ -1272,7 +1276,7 @@ object PdfGenerator {
         }
 
         // Signatures Block
-        val sigY = 780f
+        val sigY = 720f
         val sigLinePaint = Paint().apply { color = Color.rgb(148, 163, 184); strokeWidth = 1f }
         val sigTextPaint = Paint().apply {
             isAntiAlias = true
@@ -1281,12 +1285,12 @@ object PdfGenerator {
             textAlign = Paint.Align.CENTER
         }
         canvas.drawLine(44f, sigY, 180f, sigY, sigLinePaint)
-        canvas.drawText("কাস্টমারের স্বাক্ষর", 112f, sigY + 13f, sigTextPaint)
+        canvas.drawText("কাস্টমারের স্বাক্ষর", 112f, sigY + 14f, sigTextPaint)
 
-        canvas.drawLine(425f, sigY, 551f, sigY, sigLinePaint)
-        canvas.drawText("দোকানদারের স্বাক্ষর", 488f, sigY + 13f, sigTextPaint)
+        canvas.drawLine(415f, sigY, 551f, sigY, sigLinePaint)
+        canvas.drawText("দোকানদারের স্বাক্ষর", 483f, sigY + 14f, sigTextPaint)
 
-        drawSponsorFooter(canvas, 812f, "NAFI KHATA ডিজিটাল বাকি খাতা ও মেমো প্রিন্ট • নির্ভুল হিসাবের বিশ্বস্ত সঙ্গী")
+        drawSponsorFooter(canvas, 775f, "NAFI KHATA ডিজিটাল বাকি খাতা ও মেমো প্রিন্ট • নির্ভুল হিসাবের বিশ্বস্ত সঙ্গী")
 
         pdfDocument.finishPage(page)
         return savePdfToFile(context, pdfDocument, "Due_${customer.name.replace(" ", "_")}.pdf")
@@ -1467,7 +1471,7 @@ object PdfGenerator {
 
         fun drawTableHeader(startY: Float): Float {
             val thBg = Paint().apply { color = Color.rgb(30, 41, 59); style = Paint.Style.FILL }
-            canvas.drawRoundRect(RectF(34f, startY - 13f, 561f, startY + 11f), 4f, 4f, thBg)
+            canvas.drawRoundRect(RectF(34f, startY - 13f, 561f, startY + 10f), 4f, 4f, thBg)
 
             canvas.drawText("নং", 46f, startY, centerHeaderPaint)
             canvas.drawText("পণ্যের নাম (Product Name)", 68f, startY, leftHeaderPaint)
@@ -1477,7 +1481,7 @@ object PdfGenerator {
             canvas.drawText("স্টক পরিমাণ", 475f, startY, rightHeaderPaint)
             canvas.drawText("মোট মূল্য ($currency)", 553f, startY, rightHeaderPaint)
 
-            return startY + 18f
+            return startY + 24f
         }
 
         var y = drawHeaderAndSummary(drawSummaryBox = true)
@@ -1486,8 +1490,8 @@ object PdfGenerator {
         val rowBgAlt = Paint().apply { color = Color.rgb(248, 250, 252); style = Paint.Style.FILL }
 
         products.forEachIndexed { index, p ->
-            if (y > 745f) {
-                drawSponsorFooter(canvas, 812f, "NAFI KHATA পণ্য ইনভেন্টরি স্টেটমেন্ট • পৃষ্ঠা: $pageNumber")
+            if (y > 690f) {
+                drawSponsorFooter(canvas, 775f, "NAFI KHATA পণ্য ইনভেন্টরি স্টেটমেন্ট • পৃষ্ঠা: $pageNumber")
                 pdfDocument.finishPage(page)
 
                 pageNumber++
@@ -1500,9 +1504,9 @@ object PdfGenerator {
             }
 
             if (index % 2 == 1) {
-                canvas.drawRect(RectF(34f, y - 11f, 561f, y + 7f), rowBgAlt)
+                canvas.drawRect(RectF(34f, y - 13f, 561f, y + 9f), rowBgAlt)
             }
-            canvas.drawLine(34f, y + 7f, 561f, y + 7f, linePaint)
+            canvas.drawLine(34f, y + 9f, 561f, y + 9f, linePaint)
 
             val itemTotal = p.stockQuantity * p.sellPrice
 
@@ -1529,11 +1533,11 @@ object PdfGenerator {
             // Total Value (sellPrice * qty)
             canvas.drawText("${itemTotal.toIntOrNull() ?: itemTotal}", 553f, y, rightBoldPaint)
 
-            y += 18f
+            y += 22f
         }
 
         // Table Bottom Summary Row
-        if (y <= 745f) {
+        if (y <= 695f) {
             val totalRowBg = Paint().apply { color = Color.rgb(240, 253, 244); style = Paint.Style.FILL }
             canvas.drawRoundRect(RectF(34f, y - 8f, 561f, y + 14f), 4f, 4f, totalRowBg)
             val doubleLine = Paint().apply { color = Color.rgb(187, 247, 208); strokeWidth = 1f }
@@ -1562,7 +1566,7 @@ object PdfGenerator {
         }
 
         // Signatures Block
-        val sigY = 780f
+        val sigY = 720f
         val sigLinePaint = Paint().apply { color = Color.rgb(148, 163, 184); strokeWidth = 1f }
         val sigTextPaint = Paint().apply {
             isAntiAlias = true
@@ -1571,12 +1575,12 @@ object PdfGenerator {
             textAlign = Paint.Align.CENTER
         }
         canvas.drawLine(44f, sigY, 180f, sigY, sigLinePaint)
-        canvas.drawText("স্টক ইনচার্জের স্বাক্ষর", 112f, sigY + 13f, sigTextPaint)
+        canvas.drawText("স্টক ইনচার্জের স্বাক্ষর", 112f, sigY + 14f, sigTextPaint)
 
-        canvas.drawLine(425f, sigY, 551f, sigY, sigLinePaint)
-        canvas.drawText("স্বত্বাধিকারীর স্বাক্ষর", 488f, sigY + 13f, sigTextPaint)
+        canvas.drawLine(415f, sigY, 551f, sigY, sigLinePaint)
+        canvas.drawText("স্বত্বাধিকারীর স্বাক্ষর", 483f, sigY + 14f, sigTextPaint)
 
-        drawSponsorFooter(canvas, 812f, "NAFI KHATA ডিজিটাল ইনভেন্টরি ও মেমো প্রিন্ট • নির্ভুল হিসাবের বিশ্বস্ত সঙ্গী")
+        drawSponsorFooter(canvas, 775f, "NAFI KHATA ডিজিটাল ইনভেন্টরি ও মেমো প্রিন্ট • নির্ভুল হিসাবের বিশ্বস্ত সঙ্গী")
         pdfDocument.finishPage(page)
 
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
@@ -1743,7 +1747,7 @@ object PdfGenerator {
 
         fun drawTableHeader(startY: Float): Float {
             val thBg = Paint().apply { color = Color.rgb(30, 41, 59); style = Paint.Style.FILL }
-            canvas.drawRoundRect(RectF(34f, startY - 13f, 561f, startY + 11f), 4f, 4f, thBg)
+            canvas.drawRoundRect(RectF(34f, startY - 13f, 561f, startY + 10f), 4f, 4f, thBg)
 
             canvas.drawText("নং", 46f, startY, centerHeaderPaint)
             canvas.drawText("কাস্টমারের নাম", 70f, startY, leftHeaderPaint)
@@ -1751,7 +1755,7 @@ object PdfGenerator {
             canvas.drawText("ঠিকানা", 355f, startY, leftHeaderPaint)
             canvas.drawText("বাকি পরিমাণ ($currency)", 553f, startY, rightHeaderPaint)
 
-            return startY + 18f
+            return startY + 24f
         }
 
         var y = drawHeaderAndSummary(drawSummaryBox = true)
@@ -1760,8 +1764,8 @@ object PdfGenerator {
         val rowBgAlt = Paint().apply { color = Color.rgb(255, 251, 235); style = Paint.Style.FILL }
 
         debtors.forEachIndexed { index, c ->
-            if (y > 745f) {
-                drawSponsorFooter(canvas, 812f, "NAFI KHATA সার্বিক বাকি খাতা • পৃষ্ঠা: $pageNumber")
+            if (y > 690f) {
+                drawSponsorFooter(canvas, 775f, "NAFI KHATA সার্বিক বাকি খাতা • পৃষ্ঠা: $pageNumber")
                 pdfDocument.finishPage(page)
 
                 pageNumber++
@@ -1774,9 +1778,9 @@ object PdfGenerator {
             }
 
             if (index % 2 == 1) {
-                canvas.drawRect(RectF(34f, y - 11f, 561f, y + 7f), rowBgAlt)
+                canvas.drawRect(RectF(34f, y - 13f, 561f, y + 9f), rowBgAlt)
             }
-            canvas.drawLine(34f, y + 7f, 561f, y + 7f, linePaint)
+            canvas.drawLine(34f, y + 9f, 561f, y + 9f, linePaint)
 
             // SL No
             canvas.drawText("${index + 1}", 46f, y, centerTextPaint)
@@ -1795,11 +1799,11 @@ object PdfGenerator {
             // Due Amount (Right-aligned)
             canvas.drawText("$currency${c.totalDue.toIntOrNull() ?: c.totalDue}", 553f, y, rightDuePaint)
 
-            y += 18f
+            y += 22f
         }
 
         // Table Bottom Summary Row
-        if (y <= 745f) {
+        if (y <= 695f) {
             val totalRowBg = Paint().apply { color = Color.rgb(255, 247, 237); style = Paint.Style.FILL }
             canvas.drawRoundRect(RectF(34f, y - 8f, 561f, y + 14f), 4f, 4f, totalRowBg)
             val doubleLine = Paint().apply { color = Color.rgb(254, 215, 170); strokeWidth = 1f }
@@ -1819,7 +1823,7 @@ object PdfGenerator {
         }
 
         // Signatures Block
-        val sigY = 780f
+        val sigY = 720f
         val sigLinePaint = Paint().apply { color = Color.rgb(148, 163, 184); strokeWidth = 1f }
         val sigTextPaint = Paint().apply {
             isAntiAlias = true
@@ -1828,12 +1832,12 @@ object PdfGenerator {
             textAlign = Paint.Align.CENTER
         }
         canvas.drawLine(44f, sigY, 180f, sigY, sigLinePaint)
-        canvas.drawText("হিসাবরক্ষক / প্রস্তুতকারী", 112f, sigY + 13f, sigTextPaint)
+        canvas.drawText("হিসাবরক্ষক / প্রস্তুতকারী", 112f, sigY + 14f, sigTextPaint)
 
-        canvas.drawLine(425f, sigY, 551f, sigY, sigLinePaint)
-        canvas.drawText("স্বত্বাধিকারীর স্বাক্ষর", 488f, sigY + 13f, sigTextPaint)
+        canvas.drawLine(415f, sigY, 551f, sigY, sigLinePaint)
+        canvas.drawText("স্বত্বাধিকারীর স্বাক্ষর", 483f, sigY + 14f, sigTextPaint)
 
-        drawSponsorFooter(canvas, 812f, "NAFI KHATA ডিজিটাল বাকি খাতা ও মেমো প্রিন্ট • নির্ভুল হিসাবের বিশ্বস্ত সঙ্গী")
+        drawSponsorFooter(canvas, 775f, "NAFI KHATA ডিজিটাল বাকি খাতা ও মেমো প্রিন্ট • নির্ভুল হিসাবের বিশ্বস্ত সঙ্গী")
         pdfDocument.finishPage(page)
 
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
@@ -2020,7 +2024,7 @@ object PdfGenerator {
 
         fun drawTableHeader(startY: Float): Float {
             val headerBg = Paint().apply { color = Color.rgb(30, 41, 59); style = Paint.Style.FILL }
-            canvas.drawRoundRect(RectF(34f, startY - 11f, 561f, startY + 9f), 4f, 4f, headerBg)
+            canvas.drawRoundRect(RectF(34f, startY - 13f, 561f, startY + 10f), 4f, 4f, headerBg)
             canvas.drawText("#", 45f, startY, centerHeaderPaint)
             canvas.drawText("সময়", 58f, startY, leftHeaderPaint)
             canvas.drawText("ক্রেতা ও মেমো", 112f, startY, leftHeaderPaint)
@@ -2029,7 +2033,7 @@ object PdfGenerator {
             canvas.drawText("মূল্য ($currency)", 435f, startY, rightHeaderPaint)
             canvas.drawText("জমা", 495f, startY, rightHeaderPaint)
             canvas.drawText("বাকি", 553f, startY, rightHeaderPaint)
-            return startY + 16f
+            return startY + 24f
         }
 
         drawHeaderAndSummary(drawSummaryBox = true)
@@ -2039,8 +2043,8 @@ object PdfGenerator {
         val rowBgAlt = Paint().apply { color = Color.rgb(248, 250, 252); style = Paint.Style.FILL }
 
         transactions.forEachIndexed { index, tx ->
-            if (y > 745f) {
-                drawSponsorFooter(canvas, 812f, "লেনদেন বিবরণী খতিয়ান")
+            if (y > 690f) {
+                drawSponsorFooter(canvas, 775f, "লেনদেন বিবরণী খতিয়ান")
                 pdfDocument.finishPage(page)
                 pageNumber++
                 pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
@@ -2052,9 +2056,9 @@ object PdfGenerator {
             }
 
             if (index % 2 == 1) {
-                canvas.drawRect(RectF(34f, y - 10f, 561f, y + 6f), rowBgAlt)
+                canvas.drawRect(RectF(34f, y - 13f, 561f, y + 9f), rowBgAlt)
             }
-            canvas.drawLine(34f, y + 6f, 561f, y + 6f, linePaint)
+            canvas.drawLine(34f, y + 9f, 561f, y + 9f, linePaint)
 
             val timeStr = SimpleDateFormat("dd/MM hh:mm a", Locale.getDefault()).format(Date(tx.timestamp))
             canvas.drawText("${index + 1}", 45f, y, centerTextPaint)
@@ -2095,11 +2099,11 @@ object PdfGenerator {
                 canvas.drawText("-", 553f, y, rightTextPaint)
             }
 
-            y += 16f
+            y += 22f
         }
 
         // Table Bottom Summary Row
-        if (y <= 730f) {
+        if (y <= 695f) {
             y += 6f
             val totalRowBg = Paint().apply { color = Color.rgb(239, 246, 255); style = Paint.Style.FILL }
             canvas.drawRoundRect(RectF(34f, y - 8f, 561f, y + 14f), 4f, 4f, totalRowBg)
@@ -2115,7 +2119,7 @@ object PdfGenerator {
         }
 
         // Signatures Block
-        val sigY = 780f
+        val sigY = 720f
         val sigLinePaint = Paint().apply { color = Color.rgb(148, 163, 184); strokeWidth = 1f }
         val sigTextPaint = Paint().apply {
             isAntiAlias = true
@@ -2124,12 +2128,12 @@ object PdfGenerator {
             textAlign = Paint.Align.CENTER
         }
         canvas.drawLine(44f, sigY, 180f, sigY, sigLinePaint)
-        canvas.drawText("হিসাবরক্ষক / প্রস্তুতকারী", 112f, sigY + 13f, sigTextPaint)
+        canvas.drawText("হিসাবরক্ষক / প্রস্তুতকারী", 112f, sigY + 14f, sigTextPaint)
 
-        canvas.drawLine(425f, sigY, 551f, sigY, sigLinePaint)
-        canvas.drawText("স্বত্বাধিকারীর স্বাক্ষর", 488f, sigY + 13f, sigTextPaint)
+        canvas.drawLine(415f, sigY, 551f, sigY, sigLinePaint)
+        canvas.drawText("স্বত্বাধিকারীর স্বাক্ষর", 483f, sigY + 14f, sigTextPaint)
 
-        drawSponsorFooter(canvas, 812f, "NAFI KHATA লেনদেন বিবরণী খতিয়ান • ক্যাশ মেমো প্রিন্ট")
+        drawSponsorFooter(canvas, 775f, "NAFI KHATA লেনদেন বিবরণী খতিয়ান • ক্যাশ মেমো প্রিন্ট")
         pdfDocument.finishPage(page)
 
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
@@ -2292,14 +2296,14 @@ object PdfGenerator {
 
         fun drawTableHeader(startY: Float): Float {
             val headerBg = Paint().apply { color = Color.rgb(30, 41, 59); style = Paint.Style.FILL }
-            canvas.drawRoundRect(RectF(34f, startY - 11f, 561f, startY + 9f), 4f, 4f, headerBg)
+            canvas.drawRoundRect(RectF(34f, startY - 13f, 561f, startY + 10f), 4f, 4f, headerBg)
             canvas.drawText("#", 45f, startY, centerHeaderPaint)
             canvas.drawText("পণ্যের বিবরণ (Item Name)", 68f, startY, leftHeaderPaint)
             canvas.drawText("স্টক পরিমাণ", 260f, startY, rightHeaderPaint)
             canvas.drawText("মেয়াদ শেষ তারিখ", 365f, startY, centerHeaderPaint)
             canvas.drawText("বর্তমান অবস্থা", 455f, startY, leftHeaderPaint)
             canvas.drawText("ক্রয়মূল্য ($currency)", 553f, startY, rightHeaderPaint)
-            return startY + 16f
+            return startY + 24f
         }
 
         drawHeaderAndSummary(drawSummaryBox = true)
@@ -2311,8 +2315,8 @@ object PdfGenerator {
         val orangeTextPaint = Paint().apply { isAntiAlias = true; textSize = 9f; color = Color.rgb(217, 119, 6); typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD) }
 
         products.forEachIndexed { index, p ->
-            if (y > 745f) {
-                drawSponsorFooter(canvas, 812f, "মহাজন বা সরবরাহকারীকে ফেরত/বদল বাবদ মেমো")
+            if (y > 690f) {
+                drawSponsorFooter(canvas, 775f, "মহাজন বা সরবরাহকারীকে ফেরত/বদল বাবদ মেমো")
                 pdfDocument.finishPage(page)
                 pageNumber++
                 pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
@@ -2324,9 +2328,9 @@ object PdfGenerator {
             }
 
             if (index % 2 == 1) {
-                canvas.drawRect(RectF(34f, y - 10f, 561f, y + 6f), rowBgAlt)
+                canvas.drawRect(RectF(34f, y - 13f, 561f, y + 9f), rowBgAlt)
             }
-            canvas.drawLine(34f, y + 6f, 561f, y + 6f, linePaint)
+            canvas.drawLine(34f, y + 9f, 561f, y + 9f, linePaint)
 
             canvas.drawText("${index + 1}", 45f, y, centerTextPaint)
             val nameStr = if (p.name.length > 26) p.name.take(24) + ".." else p.name
@@ -2352,11 +2356,11 @@ object PdfGenerator {
             val costTotal = p.stockQuantity * p.buyPrice
             canvas.drawText("$currency${costTotal.toIntOrNull() ?: costTotal}", 553f, y, rightBoldPaint)
 
-            y += 16f
+            y += 22f
         }
 
         // Table Bottom Summary Row
-        if (y <= 730f) {
+        if (y <= 695f) {
             y += 6f
             val totalRowBg = Paint().apply { color = Color.rgb(254, 242, 242); style = Paint.Style.FILL }
             canvas.drawRoundRect(RectF(34f, y - 8f, 561f, y + 14f), 4f, 4f, totalRowBg)
@@ -2370,7 +2374,7 @@ object PdfGenerator {
         }
 
         // Signatures Block
-        val sigY = 780f
+        val sigY = 720f
         val sigLinePaint = Paint().apply { color = Color.rgb(148, 163, 184); strokeWidth = 1f }
         val sigTextPaint = Paint().apply {
             isAntiAlias = true
@@ -2379,12 +2383,12 @@ object PdfGenerator {
             textAlign = Paint.Align.CENTER
         }
         canvas.drawLine(44f, sigY, 180f, sigY, sigLinePaint)
-        canvas.drawText("দোকান প্রতিনিধি", 112f, sigY + 13f, sigTextPaint)
+        canvas.drawText("দোকান প্রতিনিধি", 112f, sigY + 14f, sigTextPaint)
 
-        canvas.drawLine(425f, sigY, 551f, sigY, sigLinePaint)
-        canvas.drawText("সরবরাহকারী / মহাজন স্বাক্ষর", 488f, sigY + 13f, sigTextPaint)
+        canvas.drawLine(415f, sigY, 551f, sigY, sigLinePaint)
+        canvas.drawText("সরবরাহকারী / মহাজন স্বাক্ষর", 483f, sigY + 14f, sigTextPaint)
 
-        drawSponsorFooter(canvas, 812f, "NAFI KHATA মেয়াদোত্তীর্ণ পণ্য বিবরণী • সরবরাহকারী ফেরত মেমো")
+        drawSponsorFooter(canvas, 775f, "NAFI KHATA মেয়াদোত্তীর্ণ পণ্য বিবরণী • সরবরাহকারী ফেরত মেমো")
         pdfDocument.finishPage(page)
 
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
@@ -2530,13 +2534,13 @@ object PdfGenerator {
 
         fun drawTableHeader(startY: Float): Float {
             val headerBg = Paint().apply { color = Color.rgb(30, 41, 59); style = Paint.Style.FILL }
-            canvas.drawRoundRect(RectF(34f, startY - 11f, 561f, startY + 9f), 4f, 4f, headerBg)
+            canvas.drawRoundRect(RectF(34f, startY - 13f, 561f, startY + 10f), 4f, 4f, headerBg)
             canvas.drawText("#", 45f, startY, centerHeaderPaint)
             canvas.drawText("তারিখ ও সময়", 68f, startY, leftHeaderPaint)
             canvas.drawText("খরচের খাত / বিবরণ", 185f, startY, leftHeaderPaint)
             canvas.drawText("ক্যাটাগরি", 365f, startY, leftHeaderPaint)
             canvas.drawText("পরিমাণ ($currency)", 553f, startY, rightHeaderPaint)
-            return startY + 16f
+            return startY + 24f
         }
 
         drawHeaderAndSummary(drawSummaryBox = true)
@@ -2546,8 +2550,8 @@ object PdfGenerator {
         val rowBgAlt = Paint().apply { color = Color.rgb(255, 250, 250); style = Paint.Style.FILL }
 
         expenses.forEachIndexed { index, exp ->
-            if (y > 745f) {
-                drawSponsorFooter(canvas, 812f, "দোকানের খরচ হিসাব ও ভাউচার খতিয়ান")
+            if (y > 690f) {
+                drawSponsorFooter(canvas, 775f, "দোকানের খরচ হিসাব ও ভাউচার খতিয়ান")
                 pdfDocument.finishPage(page)
                 pageNumber++
                 pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
@@ -2559,9 +2563,9 @@ object PdfGenerator {
             }
 
             if (index % 2 == 1) {
-                canvas.drawRect(RectF(34f, y - 10f, 561f, y + 6f), rowBgAlt)
+                canvas.drawRect(RectF(34f, y - 13f, 561f, y + 9f), rowBgAlt)
             }
-            canvas.drawLine(34f, y + 6f, 561f, y + 6f, linePaint)
+            canvas.drawLine(34f, y + 9f, 561f, y + 9f, linePaint)
 
             canvas.drawText("${index + 1}", 45f, y, centerTextPaint)
             val dateStr = SimpleDateFormat("dd/MM/yyyy hh:mm a", Locale.getDefault()).format(Date(exp.timestamp))
@@ -2572,11 +2576,11 @@ object PdfGenerator {
             canvas.drawText(catStr, 365f, y, textPaint)
             canvas.drawText("- $currency${exp.amount.toIntOrNull() ?: exp.amount}", 553f, y, redRightPaint)
 
-            y += 16f
+            y += 22f
         }
 
         // Table Bottom Summary Row
-        if (y <= 730f) {
+        if (y <= 695f) {
             y += 6f
             val totalRowBg = Paint().apply { color = Color.rgb(254, 242, 242); style = Paint.Style.FILL }
             canvas.drawRoundRect(RectF(34f, y - 8f, 561f, y + 14f), 4f, 4f, totalRowBg)
@@ -2590,7 +2594,7 @@ object PdfGenerator {
         }
 
         // Signatures Block
-        val sigY = 780f
+        val sigY = 720f
         val sigLinePaint = Paint().apply { color = Color.rgb(148, 163, 184); strokeWidth = 1f }
         val sigTextPaint = Paint().apply {
             isAntiAlias = true
@@ -2599,12 +2603,12 @@ object PdfGenerator {
             textAlign = Paint.Align.CENTER
         }
         canvas.drawLine(44f, sigY, 180f, sigY, sigLinePaint)
-        canvas.drawText("হিসাবরক্ষক / প্রস্তুতকারী", 112f, sigY + 13f, sigTextPaint)
+        canvas.drawText("হিসাবরক্ষক / প্রস্তুতকারী", 112f, sigY + 14f, sigTextPaint)
 
-        canvas.drawLine(425f, sigY, 551f, sigY, sigLinePaint)
-        canvas.drawText("স্বত্বাধিকারীর স্বাক্ষর", 488f, sigY + 13f, sigTextPaint)
+        canvas.drawLine(415f, sigY, 551f, sigY, sigLinePaint)
+        canvas.drawText("স্বত্বাধিকারীর স্বাক্ষর", 483f, sigY + 14f, sigTextPaint)
 
-        drawSponsorFooter(canvas, 812f, "NAFI KHATA দোকান খরচ খতিয়ান • ডিজিটাল ক্যাশ মেমো")
+        drawSponsorFooter(canvas, 775f, "NAFI KHATA দোকান খরচ খতিয়ান • ডিজিটাল ক্যাশ মেমো")
         pdfDocument.finishPage(page)
 
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
@@ -2775,14 +2779,14 @@ object PdfGenerator {
 
         fun drawTableHeader(startY: Float): Float {
             val headerBg = Paint().apply { color = Color.rgb(30, 41, 59); style = Paint.Style.FILL }
-            canvas.drawRoundRect(RectF(34f, startY - 11f, 561f, startY + 9f), 4f, 4f, headerBg)
+            canvas.drawRoundRect(RectF(34f, startY - 13f, 561f, startY + 10f), 4f, 4f, headerBg)
             canvas.drawText("#", 45f, startY, centerHeaderPaint)
             canvas.drawText("তারিখ ও সময়", 65f, startY, leftHeaderPaint)
             canvas.drawText("বিবরণ ও খাত / ব্যক্তি", 175f, startY, leftHeaderPaint)
             canvas.drawText("জমা ($currency)", 375f, startY, rightHeaderPaint)
             canvas.drawText("প্রদত্ত ($currency)", 465f, startY, rightHeaderPaint)
             canvas.drawText("ব্যালেন্স ($currency)", 553f, startY, rightHeaderPaint)
-            return startY + 16f
+            return startY + 24f
         }
 
         drawHeaderAndSummary(drawSummaryBox = true)
@@ -2792,8 +2796,8 @@ object PdfGenerator {
         val rowBgAlt = Paint().apply { color = Color.rgb(248, 250, 252); style = Paint.Style.FILL }
 
         entries.forEachIndexed { index, item ->
-            if (y > 745f) {
-                drawSponsorFooter(canvas, 812f, "দোকানের মূল ক্যাশ খাতা স্টেটমেন্ট")
+            if (y > 690f) {
+                drawSponsorFooter(canvas, 775f, "দোকানের মূল ক্যাশ খাতা স্টেটমেন্ট")
                 pdfDocument.finishPage(page)
                 pageNumber++
                 pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
@@ -2805,9 +2809,9 @@ object PdfGenerator {
             }
 
             if (index % 2 == 1) {
-                canvas.drawRect(RectF(34f, y - 10f, 561f, y + 6f), rowBgAlt)
+                canvas.drawRect(RectF(34f, y - 13f, 561f, y + 9f), rowBgAlt)
             }
-            canvas.drawLine(34f, y + 6f, 561f, y + 6f, linePaint)
+            canvas.drawLine(34f, y + 9f, 561f, y + 9f, linePaint)
 
             canvas.drawText("${index + 1}", 45f, y, centerTextPaint)
             val dateStr = SimpleDateFormat("dd/MM/yy hh:mm a", Locale.getDefault()).format(Date(item.timestamp))
@@ -2827,11 +2831,11 @@ object PdfGenerator {
             val balStr = "${if (item.runningBalance < 0) "-" else ""}${Math.abs(item.runningBalance).toIntOrNull() ?: Math.abs(item.runningBalance)}"
             canvas.drawText(balStr, 553f, y, balanceTextPaint)
 
-            y += 16f
+            y += 22f
         }
 
         // Table Bottom Summary Row
-        if (y <= 730f) {
+        if (y <= 695f) {
             y += 6f
             val totalRowBg = Paint().apply { color = Color.rgb(240, 253, 250); style = Paint.Style.FILL }
             canvas.drawRoundRect(RectF(34f, y - 8f, 561f, y + 14f), 4f, 4f, totalRowBg)
@@ -2847,7 +2851,7 @@ object PdfGenerator {
         }
 
         // Signatures Block
-        val sigY = 780f
+        val sigY = 720f
         val sigLinePaint = Paint().apply { color = Color.rgb(148, 163, 184); strokeWidth = 1f }
         val sigTextPaint = Paint().apply {
             isAntiAlias = true
@@ -2856,12 +2860,12 @@ object PdfGenerator {
             textAlign = Paint.Align.CENTER
         }
         canvas.drawLine(44f, sigY, 180f, sigY, sigLinePaint)
-        canvas.drawText("হিসাবরক্ষক / ক্যাশিয়ার", 112f, sigY + 13f, sigTextPaint)
+        canvas.drawText("হিসাবরক্ষক / ক্যাশিয়ার", 112f, sigY + 14f, sigTextPaint)
 
-        canvas.drawLine(425f, sigY, 551f, sigY, sigLinePaint)
-        canvas.drawText("স্বত্বাধিকারীর স্বাক্ষর", 488f, sigY + 13f, sigTextPaint)
+        canvas.drawLine(415f, sigY, 551f, sigY, sigLinePaint)
+        canvas.drawText("স্বত্বাধিকারীর স্বাক্ষর", 483f, sigY + 14f, sigTextPaint)
 
-        drawSponsorFooter(canvas, 812f, "NAFI KHATA মাস্টার ক্যাশ খাতা • নির্ভুল হিসাবের বিশ্বস্ত সঙ্গী")
+        drawSponsorFooter(canvas, 775f, "NAFI KHATA মাস্টার ক্যাশ খাতা • নির্ভুল হিসাবের বিশ্বস্ত সঙ্গী")
         pdfDocument.finishPage(page)
 
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
@@ -3031,7 +3035,7 @@ object PdfGenerator {
 
         fun drawTableHeader(startY: Float): Float {
             val headerBg = Paint().apply { color = Color.rgb(30, 41, 59); style = Paint.Style.FILL }
-            canvas.drawRoundRect(RectF(34f, startY - 11f, 561f, startY + 9f), 4f, 4f, headerBg)
+            canvas.drawRoundRect(RectF(34f, startY - 13f, 561f, startY + 10f), 4f, 4f, headerBg)
             canvas.drawText("#", 45f, startY, centerHeaderPaint)
             canvas.drawText("পণ্যের নাম ও বিবরণ", 65f, startY, leftHeaderPaint)
             canvas.drawText("ক্যাটাগরি", 240f, startY, leftHeaderPaint)
@@ -3039,7 +3043,7 @@ object PdfGenerator {
             canvas.drawText("অর্ডার পরিমাণ", 430f, startY, rightHeaderPaint)
             canvas.drawText("দর ($currency)", 495f, startY, rightHeaderPaint)
             canvas.drawText("মোট ($currency)", 553f, startY, rightHeaderPaint)
-            return startY + 16f
+            return startY + 24f
         }
 
         drawHeaderAndSummary(drawSummaryBox = true)
@@ -3049,8 +3053,8 @@ object PdfGenerator {
         val rowBgAlt = Paint().apply { color = Color.rgb(255, 251, 235); style = Paint.Style.FILL }
 
         for ((index, item) in items.withIndex()) {
-            if (y > 745f) {
-                drawSponsorFooter(canvas, 812f, "পণ্য ক্রয় ও রি-অর্ডার মেমো")
+            if (y > 690f) {
+                drawSponsorFooter(canvas, 775f, "পণ্য ক্রয় ও রি-অর্ডার মেমো")
                 pdfDocument.finishPage(page)
                 pageNumber++
                 pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
@@ -3062,9 +3066,9 @@ object PdfGenerator {
             }
 
             if (index % 2 == 1) {
-                canvas.drawRect(RectF(34f, y - 10f, 561f, y + 6f), rowBgAlt)
+                canvas.drawRect(RectF(34f, y - 13f, 561f, y + 9f), rowBgAlt)
             }
-            canvas.drawLine(34f, y + 6f, 561f, y + 6f, linePaint)
+            canvas.drawLine(34f, y + 9f, 561f, y + 9f, linePaint)
 
             val p = item.product
             val itemTotal = item.orderQuantity * item.unitPrice
@@ -3082,11 +3086,11 @@ object PdfGenerator {
             val itemTotalStr = if (itemTotal % 1.0 == 0.0) itemTotal.toInt().toString() else "%.1f".format(itemTotal)
             canvas.drawText(itemTotalStr, 553f, y, rightBoldPaint)
 
-            y += 16f
+            y += 22f
         }
 
         // Table Bottom Summary Row
-        if (y <= 730f) {
+        if (y <= 695f) {
             y += 6f
             val totalRowBg = Paint().apply { color = Color.rgb(254, 243, 199); style = Paint.Style.FILL }
             canvas.drawRoundRect(RectF(34f, y - 8f, 561f, y + 14f), 4f, 4f, totalRowBg)
@@ -3101,7 +3105,7 @@ object PdfGenerator {
         }
 
         // Signatures Block
-        val sigY = 780f
+        val sigY = 720f
         val sigLinePaint = Paint().apply { color = Color.rgb(148, 163, 184); strokeWidth = 1f }
         val sigTextPaint = Paint().apply {
             isAntiAlias = true
@@ -3110,12 +3114,12 @@ object PdfGenerator {
             textAlign = Paint.Align.CENTER
         }
         canvas.drawLine(44f, sigY, 180f, sigY, sigLinePaint)
-        canvas.drawText("দোকানদারের স্বাক্ষর", 112f, sigY + 13f, sigTextPaint)
+        canvas.drawText("দোকানদারের স্বাক্ষর", 112f, sigY + 14f, sigTextPaint)
 
-        canvas.drawLine(425f, sigY, 551f, sigY, sigLinePaint)
-        canvas.drawText("সরবরাহকারী / ডিলারের স্বাক্ষর", 488f, sigY + 13f, sigTextPaint)
+        canvas.drawLine(415f, sigY, 551f, sigY, sigLinePaint)
+        canvas.drawText("সরবরাহকারী / ডিলারের স্বাক্ষর", 483f, sigY + 14f, sigTextPaint)
 
-        drawSponsorFooter(canvas, 812f, "NAFI KHATA রি-অর্ডার মেমো • সরবরাহকারী অর্ডার ভাউচার")
+        drawSponsorFooter(canvas, 775f, "NAFI KHATA রি-অর্ডার মেমো • সরবরাহকারী অর্ডার ভাউচার")
         pdfDocument.finishPage(page)
 
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
@@ -3305,7 +3309,7 @@ object PdfGenerator {
 
         fun drawTableHeader(startY: Float): Float {
             val headerBg = Paint().apply { color = Color.rgb(30, 41, 59); style = Paint.Style.FILL }
-            canvas.drawRoundRect(RectF(34f, startY - 11f, 561f, startY + 9f), 4f, 4f, headerBg)
+            canvas.drawRoundRect(RectF(34f, startY - 13f, 561f, startY + 10f), 4f, 4f, headerBg)
             canvas.drawText("#", 45f, startY, centerHeaderPaint)
             canvas.drawText("পণ্যের বিবরণ", 65f, startY, leftHeaderPaint)
             canvas.drawText("অর্ডার", 260f, startY, rightHeaderPaint)
@@ -3313,7 +3317,7 @@ object PdfGenerator {
             canvas.drawText("ক্রয় দর ($currency)", 415f, startY, rightHeaderPaint)
             canvas.drawText("মোট মূল্য ($currency)", 485f, startY, rightHeaderPaint)
             canvas.drawText("অবস্থা", 535f, startY, centerHeaderPaint)
-            return startY + 16f
+            return startY + 24f
         }
 
         drawHeaderAndSummary(drawSummaryBox = true)
@@ -3330,8 +3334,8 @@ object PdfGenerator {
         }
 
         for ((index, item) in order.items.withIndex()) {
-            if (y > 745f) {
-                drawSponsorFooter(canvas, 812f, "পণ্য স্টক-ইন ও প্রাপ্তি চালান মেমো")
+            if (y > 690f) {
+                drawSponsorFooter(canvas, 775f, "পণ্য স্টক-ইন ও প্রাপ্তি চালান মেমো")
                 pdfDocument.finishPage(page)
                 pageNumber++
                 pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
@@ -3344,11 +3348,11 @@ object PdfGenerator {
 
             val isMissing = item.isNotFound || item.receivedQuantity <= 0
             if (isMissing) {
-                canvas.drawRect(RectF(34f, y - 10f, 561f, y + 6f), notFoundBgPaint)
+                canvas.drawRect(RectF(34f, y - 13f, 561f, y + 9f), notFoundBgPaint)
             } else if (index % 2 == 1) {
-                canvas.drawRect(RectF(34f, y - 10f, 561f, y + 6f), rowBgAlt)
+                canvas.drawRect(RectF(34f, y - 13f, 561f, y + 9f), rowBgAlt)
             }
-            canvas.drawLine(34f, y + 6f, 561f, y + 6f, linePaint)
+            canvas.drawLine(34f, y + 9f, 561f, y + 9f, linePaint)
 
             canvas.drawText("${index + 1}", 45f, y, centerTextPaint)
             val nameStr = if (item.productName.length > 24) item.productName.take(22) + ".." else item.productName
@@ -3376,11 +3380,11 @@ object PdfGenerator {
                 canvas.drawText("প্রাপ্ত", 535f, y, greenTextPaint)
             }
 
-            y += 16f
+            y += 22f
         }
 
         // Table Bottom Summary Row
-        if (y <= 730f) {
+        if (y <= 695f) {
             y += 6f
             val grandTotalPaint = Paint().apply { color = Color.rgb(239, 246, 255); style = Paint.Style.FILL }
             canvas.drawRoundRect(RectF(34f, y - 8f, 561f, y + 14f), 4f, 4f, grandTotalPaint)
@@ -3395,7 +3399,7 @@ object PdfGenerator {
         }
 
         // Signatures Block
-        val sigY = 780f
+        val sigY = 720f
         val sigLinePaint = Paint().apply { color = Color.rgb(148, 163, 184); strokeWidth = 1f }
         val sigTextPaint = Paint().apply {
             isAntiAlias = true
@@ -3404,12 +3408,12 @@ object PdfGenerator {
             textAlign = Paint.Align.CENTER
         }
         canvas.drawLine(44f, sigY, 180f, sigY, sigLinePaint)
-        canvas.drawText("গ্রহীতা / দোকানদারের স্বাক্ষর", 112f, sigY + 13f, sigTextPaint)
+        canvas.drawText("গ্রহীতা / দোকানদারের স্বাক্ষর", 112f, sigY + 14f, sigTextPaint)
 
-        canvas.drawLine(425f, sigY, 551f, sigY, sigLinePaint)
-        canvas.drawText("ডেলিভারি প্রদানকারীর স্বাক্ষর", 488f, sigY + 13f, sigTextPaint)
+        canvas.drawLine(415f, sigY, 551f, sigY, sigLinePaint)
+        canvas.drawText("ডেলিভারি প্রদানকারীর স্বাক্ষর", 483f, sigY + 14f, sigTextPaint)
 
-        drawSponsorFooter(canvas, 812f, "NAFI KHATA স্টক-ইন রিসিট চালান • মেমো প্রিন্ট")
+        drawSponsorFooter(canvas, 775f, "NAFI KHATA স্টক-ইন রিসিট চালান • মেমো প্রিন্ট")
         pdfDocument.finishPage(page)
 
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
@@ -3611,15 +3615,15 @@ object PdfGenerator {
 
         fun drawTableHeader(startY: Float): Float {
             val thBg = Paint().apply { color = Color.rgb(30, 41, 59); style = Paint.Style.FILL }
-            canvas.drawRoundRect(RectF(34f, startY - 10f, 561f, startY + 12f), 4f, 4f, thBg)
-            canvas.drawText("#", 45f, startY + 4f, centerHeaderPaint)
-            canvas.drawText("তারিখ ও সময়", 65f, startY + 4f, leftHeaderPaint)
-            canvas.drawText("জমার উৎস", 155f, startY + 4f, leftHeaderPaint)
-            canvas.drawText("যার কাছ থেকে আনা", 240f, startY + 4f, leftHeaderPaint)
-            canvas.drawText("বিবরণ / নোট", 340f, startY + 4f, leftHeaderPaint)
-            canvas.drawText("যুক্ত টাকা ($currency)", 485f, startY + 4f, rightHeaderPaint)
-            canvas.drawText("ব্যালেন্স ($currency)", 555f, startY + 4f, rightHeaderPaint)
-            return startY + 20f
+            canvas.drawRoundRect(RectF(34f, startY - 13f, 561f, startY + 10f), 4f, 4f, thBg)
+            canvas.drawText("#", 45f, startY, centerHeaderPaint)
+            canvas.drawText("তারিখ ও সময়", 65f, startY, leftHeaderPaint)
+            canvas.drawText("জমার উৎস", 155f, startY, leftHeaderPaint)
+            canvas.drawText("যার কাছ থেকে আনা", 240f, startY, leftHeaderPaint)
+            canvas.drawText("বিবরণ / নোট", 340f, startY, leftHeaderPaint)
+            canvas.drawText("যুক্ত টাকা ($currency)", 485f, startY, rightHeaderPaint)
+            canvas.drawText("ব্যালেন্স ($currency)", 555f, startY, rightHeaderPaint)
+            return startY + 24f
         }
 
         drawHeaderAndSummary(drawSummaryBox = true)
@@ -3629,8 +3633,8 @@ object PdfGenerator {
         val rowBgAlt = Paint().apply { color = Color.rgb(248, 250, 252); style = Paint.Style.FILL }
 
         entries.forEachIndexed { index, item ->
-            if (y > 745f) {
-                drawSponsorFooter(canvas, 812f, "মূল ক্যাশে টাকা জমার খতিয়ান মেমো")
+            if (y > 690f) {
+                drawSponsorFooter(canvas, 775f, "মূল ক্যাশে টাকা জমার খতিয়ান মেমো")
                 pdfDocument.finishPage(page)
                 pageNumber++
                 pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
@@ -3642,9 +3646,9 @@ object PdfGenerator {
             }
 
             if (index % 2 == 1) {
-                canvas.drawRect(RectF(34f, y - 10f, 561f, y + 6f), rowBgAlt)
+                canvas.drawRect(RectF(34f, y - 13f, 561f, y + 9f), rowBgAlt)
             }
-            canvas.drawLine(34f, y + 6f, 561f, y + 6f, linePaint)
+            canvas.drawLine(34f, y + 9f, 561f, y + 9f, linePaint)
 
             canvas.drawText("${index + 1}", 45f, y, centerTextPaint)
             val dateStr = SimpleDateFormat("dd/MM/yy hh:mm a", Locale.getDefault()).format(Date(item.timestamp))
@@ -3688,11 +3692,11 @@ object PdfGenerator {
             val balStr = "${item.balanceAfter.toIntOrNull() ?: item.balanceAfter}"
             canvas.drawText(balStr, 555f, y, balanceTextPaint)
 
-            y += 16f
+            y += 22f
         }
 
         // Table Bottom Summary Row
-        if (y <= 730f) {
+        if (y <= 695f) {
             y += 6f
             val totalRowBg = Paint().apply { color = Color.rgb(236, 253, 245); style = Paint.Style.FILL }
             canvas.drawRoundRect(RectF(34f, y - 8f, 561f, y + 14f), 4f, 4f, totalRowBg)
@@ -3719,7 +3723,7 @@ object PdfGenerator {
         }
 
         // Signature Blocks
-        val sigY = 780f
+        val sigY = 720f
         val sigLine = Paint().apply { color = Color.rgb(203, 213, 225); strokeWidth = 0.9f }
         val sigTextPaint = Paint().apply {
             isAntiAlias = true
@@ -3730,13 +3734,13 @@ object PdfGenerator {
 
         // Left Signature: হিসাবরক্ষক / ক্যাশিয়ার
         canvas.drawLine(55f, sigY, 175f, sigY, sigLine)
-        canvas.drawText("হিসাবরক্ষক / ক্যাশিয়ারের স্বাক্ষর", 115f, sigY + 13f, sigTextPaint)
+        canvas.drawText("হিসাবরক্ষক / ক্যাশিয়ারের স্বাক্ষর", 115f, sigY + 14f, sigTextPaint)
 
         // Right Signature: দোকানদার / স্বত্বাধিকারী
         canvas.drawLine(415f, sigY, 545f, sigY, sigLine)
-        canvas.drawText("দোকানদার / স্বত্বাধিকারীর স্বাক্ষর", 480f, sigY + 13f, sigTextPaint)
+        canvas.drawText("দোকানদার / স্বত্বাধিকারীর স্বাক্ষর", 480f, sigY + 14f, sigTextPaint)
 
-        drawSponsorFooter(canvas, 812f, "দোকানের মূল ক্যাশে টাকা জমার খতিয়ান মেমো")
+        drawSponsorFooter(canvas, 775f, "দোকানের মূল ক্যাশে টাকা জমার খতিয়ান মেমো")
         pdfDocument.finishPage(page)
 
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
