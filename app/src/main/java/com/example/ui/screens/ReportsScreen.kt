@@ -31,6 +31,7 @@ import com.example.ui.components.EditOrReturnSaleDialog
 import com.example.ui.components.toIntOrNull
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.ShopViewModel
+import com.example.util.CalculationHelper
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -48,11 +49,14 @@ fun ReportsScreen(
     val language by viewModel.language.collectAsState()
     val currency = shopInfo.currency
 
-    var selectedPeriod by remember { mutableStateOf("TODAY") } // TODAY, YESTERDAY, WEEK, MONTH, CUSTOM, ALL
+    var selectedPeriod by remember { mutableStateOf("ALL") } // ALL, TODAY, YESTERDAY, WEEK, MONTH, CUSTOM
     var customTimestamp by remember { mutableStateOf<Long?>(null) }
     var customLabel by remember { mutableStateOf("") }
     var editingTransaction by remember { mutableStateOf<TransactionRecord?>(null) }
     var showExpenseDetailsList by remember { mutableStateOf(false) }
+    var showSalesDetailsList by remember { mutableStateOf(false) }
+    var transactionTypeFilter by remember { mutableStateOf("ALL") } // "ALL", "SALE", "PURCHASE"
+    var showAllTransactions by remember { mutableStateOf(false) }
 
     val dateDisplaySdf = remember(language) {
         SimpleDateFormat("d MMMM yyyy", if (language == "bn") Locale("bn", "BD") else Locale.ENGLISH)
@@ -60,8 +64,8 @@ fun ReportsScreen(
 
     val periodRange = remember(selectedPeriod, customTimestamp) {
         val cal = Calendar.getInstance()
-        val endTime = System.currentTimeMillis()
         when (selectedPeriod) {
+            "ALL" -> 0L to Long.MAX_VALUE
             "TODAY" -> {
                 cal.set(Calendar.HOUR_OF_DAY, 0)
                 cal.set(Calendar.MINUTE, 0)
@@ -85,7 +89,7 @@ fun ReportsScreen(
                 cal.set(Calendar.SECOND, 0)
                 cal.set(Calendar.MILLISECOND, 0)
                 cal.add(Calendar.DAY_OF_YEAR, -6)
-                cal.timeInMillis to endTime
+                cal.timeInMillis to Long.MAX_VALUE
             }
             "MONTH" -> {
                 cal.set(Calendar.DAY_OF_MONTH, 1)
@@ -93,7 +97,7 @@ fun ReportsScreen(
                 cal.set(Calendar.MINUTE, 0)
                 cal.set(Calendar.SECOND, 0)
                 cal.set(Calendar.MILLISECOND, 0)
-                cal.timeInMillis to endTime
+                cal.timeInMillis to Long.MAX_VALUE
             }
             "CUSTOM" -> {
                 val start = customTimestamp ?: System.currentTimeMillis()
@@ -103,42 +107,59 @@ fun ReportsScreen(
         }
     }
 
-    val periodTransactions = remember(transactions, periodRange) {
-        transactions.filter { it.timestamp in periodRange.first..periodRange.second }
+    val periodTransactions = remember(transactions, periodRange, selectedPeriod) {
+        if (selectedPeriod == "ALL") {
+            transactions
+        } else {
+            transactions.filter { it.timestamp in periodRange.first..periodRange.second }
+        }
     }
 
-    val periodExpenses = remember(expenses, periodRange) {
-        expenses.filter { it.timestamp in periodRange.first..periodRange.second }
+    val periodExpenses = remember(expenses, periodRange, selectedPeriod) {
+        if (selectedPeriod == "ALL") {
+            expenses
+        } else {
+            expenses.filter { it.timestamp in periodRange.first..periodRange.second }
+        }
     }
 
     // Calculations
     val totalSales = remember(periodTransactions) {
-        periodTransactions.filter { it.type == "SALE" }.sumOf { it.totalAmount }
+        CalculationHelper.round2(periodTransactions.filter { it.type == "SALE" }.sumOf { it.totalAmount })
     }
     val totalSalesCost = remember(periodTransactions) {
-        periodTransactions.filter { it.type == "SALE" }.sumOf { it.costPrice * it.quantity }
+        CalculationHelper.round2(periodTransactions.filter { it.type == "SALE" }.sumOf { tx ->
+            if (tx.costPrice > 0) {
+                tx.costPrice * tx.quantity
+            } else if (tx.totalAmount > tx.profitAmount && tx.profitAmount != 0.0) {
+                tx.totalAmount - tx.profitAmount
+            } else {
+                0.0
+            }
+        })
     }
-    val grossProfit = remember(periodTransactions) {
-        periodTransactions.filter { it.type == "SALE" }.sumOf { it.profitAmount }
+    val grossProfit = remember(periodTransactions, totalSales, totalSalesCost) {
+        val profitFromField = CalculationHelper.round2(periodTransactions.filter { it.type == "SALE" }.sumOf { it.profitAmount })
+        if (profitFromField != 0.0) profitFromField else CalculationHelper.round2(totalSales - totalSalesCost)
     }
     val totalExpensesSum = remember(periodExpenses) {
-        periodExpenses.sumOf { it.amount }
+        CalculationHelper.round2(periodExpenses.sumOf { it.amount })
     }
     val expensesByCategory = remember(periodExpenses) {
         periodExpenses
             .groupBy { it.category.ifBlank { "অন্যান্য" } }
             .map { (cat, list) ->
-                val sum = list.sumOf { it.amount }
+                val sum = CalculationHelper.round2(list.sumOf { it.amount })
                 val count = list.size
                 Triple(cat, sum, count)
             }
             .sortedByDescending { it.second }
     }
     val netProfit = remember(grossProfit, totalExpensesSum) {
-        grossProfit - totalExpensesSum
+        CalculationHelper.round2(grossProfit - totalExpensesSum)
     }
     val totalPurchases = remember(periodTransactions) {
-        periodTransactions.filter { it.type == "STOCK_IN" || it.type == "PURCHASE" }.sumOf { it.totalAmount }
+        CalculationHelper.round2(periodTransactions.filter { it.type == "STOCK_IN" || it.type == "PURCHASE" }.sumOf { it.totalAmount })
     }
 
     val initialTab by viewModel.reportsScreenInitialTab.collectAsState()
@@ -188,13 +209,35 @@ fun ReportsScreen(
     }
 
     val periodTitle = when (selectedPeriod) {
+        "ALL" -> if (language == "bn") "সব সময়ের মোট রিপোর্ট" else "All Time Report"
         "TODAY" -> if (language == "bn") "আজকের হিসাব রিপোর্ট (${dateDisplaySdf.format(Date(periodRange.first))})" else "Today's Report (${dateDisplaySdf.format(Date(periodRange.first))})"
         "YESTERDAY" -> if (language == "bn") "গতকালের হিসাব রিপোর্ট (${dateDisplaySdf.format(Date(periodRange.first))})" else "Yesterday's Report (${dateDisplaySdf.format(Date(periodRange.first))})"
         "WEEK" -> if (language == "bn") "গত ৭ দিনের রিপোর্ট" else "Last 7 Days Report"
         "MONTH" -> if (language == "bn") "চলতি মাসের রিপোর্ট" else "This Month's Report"
         "CUSTOM" -> if (customLabel.isNotBlank()) customLabel else dateDisplaySdf.format(Date(periodRange.first))
-        else -> if (language == "bn") "সর্বকালের মোট রিপোর্ট" else "All Time Report"
+        else -> if (language == "bn") "সব সময়ের মোট রিপোর্ট" else "All Time Report"
     }
+
+    val periodSalesTxs = remember(periodTransactions) {
+        periodTransactions.filter { it.type == "SALE" }
+    }
+    val cashSalesAmount = remember(periodSalesTxs) {
+        CalculationHelper.round2(periodSalesTxs.sumOf { it.paidAmount })
+    }
+    val dueSalesAmount = remember(periodSalesTxs) {
+        CalculationHelper.round2(periodSalesTxs.sumOf { it.dueAmount })
+    }
+
+    val filteredPeriodTxs = remember(periodTransactions, transactionTypeFilter) {
+        val list = when (transactionTypeFilter) {
+            "SALE" -> periodTransactions.filter { it.type == "SALE" }
+            "PURCHASE" -> periodTransactions.filter { it.type == "STOCK_IN" || it.type == "PURCHASE" }
+            else -> periodTransactions
+        }
+        list.sortedByDescending { it.timestamp }
+    }
+
+    val itemSdf = remember { SimpleDateFormat("dd MMM, hh:mm a", Locale.ENGLISH) }
 
     LazyColumn(
         modifier = Modifier
@@ -283,6 +326,17 @@ fun ReportsScreen(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                item {
+                    FilterChip(
+                        selected = selectedPeriod == "ALL",
+                        onClick = {
+                            selectedPeriod = "ALL"
+                            customTimestamp = null
+                        },
+                        label = { Text(if (language == "bn") "সব সময়" else "All Time", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                }
                 item {
                     FilterChip(
                         selected = selectedPeriod == "TODAY",
@@ -643,6 +697,288 @@ fun ReportsScreen(
             }
         }
 
+        // Dedicated Sales Breakdown & Invoice History Section (পণ্য বিক্রয় ও মেমোর বিবরণী)
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = CardDefaults.outlinedCardBorder()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(ProfitGreen.copy(alpha = 0.15f), RoundedCornerShape(8.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = ProfitGreen, modifier = Modifier.size(20.dp))
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = if (language == "bn") "পণ্য বিক্রয় ও লেনদেন বিবরণী" else "Sales & Transactions Summary",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = if (language == "bn") "মোট বিক্রয় মেমো: ${periodSalesTxs.size} টি" else "Total Invoices: ${periodSalesTxs.size}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = ProfitGreen.copy(alpha = 0.12f)
+                        ) {
+                            Text(
+                                text = "$currency$totalSales",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = ProfitGreen,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // 3-stat summary row: Gross Sales, COGS, Profit
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Stat 1: মোট বিক্রি
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text(
+                                    text = if (language == "bn") "মোট বিক্রি" else "Gross Sales",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "$currency$totalSales",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+
+                        // Stat 2: ক্রয়মূল্য (COGS)
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text(
+                                    text = if (language == "bn") "ক্রয়মূল্য (COGS)" else "COGS",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "$currency$totalSalesCost",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+
+                        // Stat 3: বিক্রি লাভ
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp),
+                            color = ProfitGreen.copy(alpha = 0.08f)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text(
+                                    text = if (language == "bn") "বিক্রি লাভ" else "Gross Profit",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = ProfitGreen
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "$currency$grossProfit",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = ProfitGreen
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Cash received vs Due row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (language == "bn") "নগদ আদায়: $currency$cashSalesAmount | বাকিতে বিক্রি: $currency$dueSalesAmount" else "Cash: $currency$cashSalesAmount | Due: $currency$dueSalesAmount",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedButton(
+                        onClick = { showSalesDetailsList = !showSalesDetailsList },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = if (showSalesDetailsList) ProfitGreen.copy(alpha = 0.08f) else Color.Transparent
+                        )
+                    ) {
+                        Icon(
+                            imageVector = if (showSalesDetailsList) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = null,
+                            tint = ProfitGreen,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (showSalesDetailsList) {
+                                if (language == "bn") "বিক্রি তালিকা সংক্ষেপ করুন" else "Hide Sales Details"
+                            } else {
+                                if (language == "bn") "বিক্রির প্রতিটি এন্ট্রি দেখুন (${periodSalesTxs.size} টি)" else "View All Sales Entries (${periodSalesTxs.size})"
+                            },
+                            fontWeight = FontWeight.SemiBold,
+                            color = ProfitGreen
+                        )
+                    }
+
+                    AnimatedVisibility(
+                        visible = showSalesDetailsList,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (periodSalesTxs.isEmpty()) {
+                                Text(
+                                    text = if (language == "bn") "এই সময়কালের কোনো বিক্রয় এন্ট্রি পাওয়া যায়নি।" else "No sales entries found in this period.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.outline,
+                                    modifier = Modifier.padding(vertical = 8.dp)
+                                )
+                            } else {
+                                periodSalesTxs.forEach { saleTx ->
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(10.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Text(
+                                                        text = saleTx.productName.ifBlank { if (language == "bn") "পণ্য বিক্রি" else "Sale" },
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                    if (saleTx.invoiceNumber.isNotBlank()) {
+                                                        Spacer(modifier = Modifier.width(6.dp))
+                                                        Surface(
+                                                            shape = RoundedCornerShape(4.dp),
+                                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                                                        ) {
+                                                            Text(
+                                                                text = "#${saleTx.invoiceNumber}",
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = MaterialTheme.colorScheme.primary,
+                                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                val detailsLine = buildString {
+                                                    if (saleTx.quantity > 0) {
+                                                        append("${saleTx.quantity} ${saleTx.unit.ifBlank { "pcs" }} @ $currency${saleTx.unitPrice}")
+                                                    }
+                                                    if (saleTx.customerName.isNotBlank()) {
+                                                        append(" • ${saleTx.customerName}")
+                                                    }
+                                                }
+                                                if (detailsLine.isNotBlank()) {
+                                                    Text(
+                                                        text = detailsLine,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                                Text(
+                                                    text = itemSdf.format(Date(saleTx.timestamp)),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.outline
+                                                )
+                                            }
+
+                                            Column(horizontalAlignment = Alignment.End) {
+                                                Text(
+                                                    text = "$currency${saleTx.totalAmount}",
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = ProfitGreen
+                                                )
+                                                if (saleTx.profitAmount != 0.0) {
+                                                    Text(
+                                                        text = "${if (language == "bn") "লাভ" else "Profit"}: $currency${saleTx.profitAmount}",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = ProfitGreen
+                                                    )
+                                                }
+                                                if (saleTx.dueAmount > 0) {
+                                                    Text(
+                                                        text = "${if (language == "bn") "বাকি" else "Due"}: $currency${saleTx.dueAmount}",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = DueOrange,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Dedicated Store Expenses by Sector Section (দোকান খরচ কোন খাতে কত টাকা খরচ হলো)
         item {
             Card(
@@ -956,15 +1292,58 @@ fun ReportsScreen(
 
         // Transaction History for Period
         item {
-            Text(
-                text = "${if (language == "bn") "এই সময়ের লেনদেন সমূহ" else "Transactions in Period"} (${periodTransactions.size})",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "${if (language == "bn") "এই সময়ের লেনদেন সমূহ" else "Transactions in Period"} (${periodTransactions.size})",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (periodTransactions.size > 15) {
+                        TextButton(onClick = { showAllTransactions = !showAllTransactions }) {
+                            Text(
+                                text = if (showAllTransactions) {
+                                    if (language == "bn") "সংক্ষেপ করুন (১৫টি)" else "Show Less"
+                                } else {
+                                    if (language == "bn") "সবগুলো দেখুন (${periodTransactions.size}টি)" else "View All (${periodTransactions.size})"
+                                },
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+
+                // Filter tabs for transactions
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    FilterChip(
+                        selected = transactionTypeFilter == "ALL",
+                        onClick = { transactionTypeFilter = "ALL" },
+                        label = { Text(if (language == "bn") "সব (${periodTransactions.size})" else "All (${periodTransactions.size})", fontSize = 11.sp) }
+                    )
+                    FilterChip(
+                        selected = transactionTypeFilter == "SALE",
+                        onClick = { transactionTypeFilter = "SALE" },
+                        label = { Text(if (language == "bn") "বিক্রি (${periodTransactions.count { it.type == "SALE" }})" else "Sales", fontSize = 11.sp) }
+                    )
+                    FilterChip(
+                        selected = transactionTypeFilter == "PURCHASE",
+                        onClick = { transactionTypeFilter = "PURCHASE" },
+                        label = { Text(if (language == "bn") "স্টক ইন (${periodTransactions.count { it.type == "STOCK_IN" || it.type == "PURCHASE" }})" else "Stock In", fontSize = 11.sp) }
+                    )
+                }
+            }
         }
 
-        if (periodTransactions.isEmpty()) {
+        if (filteredPeriodTxs.isEmpty()) {
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -977,7 +1356,8 @@ fun ReportsScreen(
                 }
             }
         } else {
-            items(periodTransactions.take(15)) { tx ->
+            val displayList = if (showAllTransactions) filteredPeriodTxs else filteredPeriodTxs.take(15)
+            items(displayList) { tx ->
                 TransactionFeedItem(
                     tx = tx,
                     currency = currency,
