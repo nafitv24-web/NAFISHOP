@@ -90,6 +90,47 @@ fun LowStockOrderDialog(
     var supplierName by remember { mutableStateOf("") }
     var orderNote by remember { mutableStateOf("") }
 
+    var selectedCategories by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var addProductSelectedCategory by remember { mutableStateOf("সব") }
+
+    val otherCategoryLabel = if (language == "bn") "অন্যান্য" else "Others"
+
+    val allCategoriesList = remember(orderItems, allProducts, language) {
+        val fromOrder = orderItems.map { it.product.category.trim() }.filter { it.isNotBlank() }.distinct()
+        val fromAll = allProducts.map { it.category.trim() }.filter { it.isNotBlank() }.distinct()
+        val orderSorted = fromOrder.sorted()
+        val remainingSorted = fromAll.filter { !fromOrder.contains(it) }.sorted()
+        val combined = orderSorted + remainingSorted
+        val hasBlank = orderItems.any { it.product.category.trim().isBlank() } || allProducts.any { it.category.trim().isBlank() }
+        if (hasBlank) {
+            combined + otherCategoryLabel
+        } else {
+            combined
+        }
+    }
+
+    val categoryCounts = remember(orderItems, language) {
+        val map = mutableMapOf<String, Int>()
+        orderItems.forEach { item ->
+            val cat = item.product.category.trim()
+            val key = if (cat.isBlank()) otherCategoryLabel else cat
+            map[key] = (map[key] ?: 0) + 1
+        }
+        map
+    }
+
+    val displayedItems = remember(orderItems, selectedCategories, language) {
+        if (selectedCategories.isEmpty()) {
+            orderItems
+        } else {
+            orderItems.filter { item ->
+                val cat = item.product.category.trim()
+                val key = if (cat.isBlank()) otherCategoryLabel else cat
+                selectedCategories.contains(key)
+            }
+        }
+    }
+
     var showAddProductSheet by remember { mutableStateOf(false) }
     var addProductSearchQuery by remember { mutableStateOf("") }
     var showStockInConfirmDialog by remember { mutableStateOf(false) }
@@ -244,9 +285,101 @@ fun LowStockOrderDialog(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Category Filter Chips Row
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // "সব" (All) Chip
+                    item {
+                        FilterChip(
+                            selected = selectedCategories.isEmpty(),
+                            onClick = { selectedCategories = emptySet() },
+                            label = {
+                                Text(
+                                    text = "${if (language == "bn") "সব" else "All"} (${orderItems.size})",
+                                    fontSize = 11.sp,
+                                    fontWeight = if (selectedCategories.isEmpty()) FontWeight.Bold else FontWeight.Normal
+                                )
+                            },
+                            leadingIcon = if (selectedCategories.isEmpty()) {
+                                {
+                                    Icon(
+                                        Icons.Default.Check,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            } else null,
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = EmeraldPrimary.copy(alpha = 0.2f),
+                                selectedLabelColor = EmeraldPrimary,
+                                selectedLeadingIconColor = EmeraldPrimary
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = selectedCategories.isEmpty(),
+                                borderColor = MaterialTheme.colorScheme.outlineVariant,
+                                selectedBorderColor = EmeraldPrimary
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
+
+                    // Individual Category Chips
+                    items(allCategoriesList) { cat ->
+                        val isSelected = selectedCategories.contains(cat)
+                        val count = categoryCounts[cat] ?: 0
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = {
+                                selectedCategories = if (isSelected) {
+                                    selectedCategories - cat
+                                } else {
+                                    selectedCategories + cat
+                                }
+                            },
+                            label = {
+                                Text(
+                                    text = "$cat ($count)",
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            },
+                            leadingIcon = if (isSelected) {
+                                {
+                                    Icon(
+                                        Icons.Default.Check,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            } else null,
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = DueOrange.copy(alpha = 0.2f),
+                                selectedLabelColor = DueOrange,
+                                selectedLeadingIconColor = DueOrange
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = isSelected,
+                                borderColor = MaterialTheme.colorScheme.outlineVariant,
+                                selectedBorderColor = DueOrange
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
 
                 // Action Bar: Select All / Deselect All & Add Product
+                val displayedProductIds = remember(displayedItems) { displayedItems.map { it.product.id }.toSet() }
+                val isAllDisplayedSelected = displayedProductIds.isNotEmpty() && displayedProductIds.all { selectedProductIds.contains(it) }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -255,26 +388,26 @@ fun LowStockOrderDialog(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         TextButton(
                             onClick = {
-                                selectedProductIds = if (selectedProductIds.size == orderItems.size) {
-                                    emptySet()
+                                selectedProductIds = if (isAllDisplayedSelected) {
+                                    selectedProductIds - displayedProductIds
                                 } else {
-                                    orderItems.map { it.product.id }.toSet()
+                                    selectedProductIds + displayedProductIds
                                 }
                             },
                             contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
                         ) {
                             Icon(
-                                if (selectedProductIds.size == orderItems.size && orderItems.isNotEmpty()) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
+                                if (isAllDisplayedSelected) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
                                 contentDescription = null,
                                 modifier = Modifier.size(18.dp),
                                 tint = EmeraldPrimary
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = if (selectedProductIds.size == orderItems.size && orderItems.isNotEmpty()) {
+                                text = if (isAllDisplayedSelected) {
                                     if (language == "bn") "সব বাতিল" else "Deselect"
                                 } else {
-                                    if (language == "bn") "সব নির্বাচন (${orderItems.size})" else "Select All"
+                                    if (language == "bn") "সব নির্বাচন (${displayedItems.size})" else "Select All (${displayedItems.size})"
                                 },
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
@@ -285,7 +418,12 @@ fun LowStockOrderDialog(
 
                     // Add other product button
                     FilledTonalButton(
-                        onClick = { showAddProductSheet = true },
+                        onClick = {
+                            if (selectedCategories.size == 1) {
+                                addProductSelectedCategory = selectedCategories.first()
+                            }
+                            showAddProductSheet = true
+                        },
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                         colors = ButtonDefaults.filledTonalButtonColors(
@@ -338,6 +476,61 @@ fun LowStockOrderDialog(
                             )
                         }
                     }
+                } else if (displayedItems.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(24.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Category,
+                                contentDescription = null,
+                                tint = DueOrange,
+                                modifier = Modifier.size(54.dp)
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = if (language == "bn") "নির্বাচিত ক্যাটাগরিতে কোনো কম স্টক পণ্য নেই!" else "No low stock products in selected category!",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = if (language == "bn") "অন্য কোনো ক্যাটাগরি বেছে নিন অথবা 'সব' অপশনে চাপুন।" else "Select another category or tap 'All'.",
+                                style = MaterialTheme.typography.bodySmall,
+                                textAlign = TextAlign.Center,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(
+                                    onClick = { selectedCategories = emptySet() },
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text(if (language == "bn") "সব পণ্য দেখুন" else "Show All")
+                                }
+                                FilledTonalButton(
+                                    onClick = {
+                                        if (selectedCategories.size == 1) {
+                                            addProductSelectedCategory = selectedCategories.first()
+                                        }
+                                        showAddProductSheet = true
+                                    },
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(if (language == "bn") "+ পণ্য যোগ করুন" else "+ Add Item")
+                                }
+                            }
+                        }
+                    }
                 } else {
                     LazyColumn(
                         modifier = Modifier
@@ -346,7 +539,7 @@ fun LowStockOrderDialog(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         contentPadding = PaddingValues(vertical = 4.dp)
                     ) {
-                        items(orderItems, key = { it.product.id }) { item ->
+                        items(displayedItems, key = { it.product.id }) { item ->
                             val p = item.product
                             val isSelected = selectedProductIds.contains(p.id)
 
@@ -920,9 +1113,18 @@ fun LowStockOrderDialog(
 
     // Modal Sheet to Add Other Products
     if (showAddProductSheet) {
-        val nonSelectedProducts = remember(allProducts, orderItems, addProductSearchQuery) {
+        val addProductCategories = remember(allProducts, language) {
+            val cats = allProducts.map { it.category.trim() }.filter { it.isNotBlank() }.distinct().sorted()
+            listOf(if (language == "bn") "সব" else "All") + cats
+        }
+
+        val nonSelectedProducts = remember(allProducts, orderItems, addProductSearchQuery, addProductSelectedCategory) {
             val existingIds = orderItems.map { it.product.id }.toSet()
-            allProducts.filter { !existingIds.contains(it.id) && (addProductSearchQuery.isBlank() || it.name.contains(addProductSearchQuery, ignoreCase = true) || it.barcode.contains(addProductSearchQuery, ignoreCase = true)) }
+            allProducts.filter { prod ->
+                !existingIds.contains(prod.id) &&
+                (addProductSearchQuery.isBlank() || prod.name.contains(addProductSearchQuery, ignoreCase = true) || prod.barcode.contains(addProductSearchQuery, ignoreCase = true)) &&
+                (addProductSelectedCategory == "সব" || addProductSelectedCategory == "All" || prod.category.trim() == addProductSelectedCategory)
+            }
         }
 
         AlertDialog(
@@ -945,7 +1147,31 @@ fun LowStockOrderDialog(
                         singleLine = true
                     )
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        items(addProductCategories) { cat ->
+                            val isSelected = addProductSelectedCategory == cat
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { addProductSelectedCategory = cat },
+                                label = {
+                                    Text(
+                                        cat,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     if (nonSelectedProducts.isEmpty()) {
                         Box(
