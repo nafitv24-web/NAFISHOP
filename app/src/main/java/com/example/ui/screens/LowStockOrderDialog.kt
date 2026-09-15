@@ -93,7 +93,7 @@ fun LowStockOrderDialog(
     val allLabel = if (language == "bn") "সব" else "All"
     val otherCategoryLabel = if (language == "bn") "অন্যান্য" else "Others"
 
-    var selectedCategory by remember { mutableStateOf(allLabel) }
+    var selectedCategories by remember { mutableStateOf<Set<String>>(emptySet()) }
     var addProductSelectedCategory by remember { mutableStateOf(allLabel) }
 
     val allCategoriesList = remember(orderItems, allProducts, language) {
@@ -120,14 +120,14 @@ fun LowStockOrderDialog(
         map
     }
 
-    val displayedItems = remember(orderItems, selectedCategory, language) {
-        if (selectedCategory == allLabel) {
+    val displayedItems = remember(orderItems, selectedCategories, language) {
+        if (selectedCategories.isEmpty()) {
             orderItems
         } else {
             orderItems.filter { item ->
                 val cat = item.product.category.trim()
                 val key = if (cat.isBlank()) otherCategoryLabel else cat
-                key == selectedCategory
+                selectedCategories.contains(key)
             }
         }
     }
@@ -138,7 +138,7 @@ fun LowStockOrderDialog(
     var itemToEditPrice by remember { mutableStateOf<ReorderItem?>(null) }
     var showWaitingSavedDialog by remember { mutableStateOf(false) }
 
-    // Strictly restrict active order items to the currently displayed/selected category
+    // Strictly restrict active order items to the currently displayed/selected categories
     val activeSelectedItems = remember(displayedItems, selectedProductIds) {
         displayedItems.filter { selectedProductIds.contains(it.product.id) && it.orderQuantity > 0 }
     }
@@ -155,8 +155,8 @@ fun LowStockOrderDialog(
         if (shopPhone.isNotBlank()) sb.append("মোবাইল: $shopPhone\n")
         sb.append("তারিখ: $dateStr\n")
         if (supplierName.isNotBlank()) sb.append("ডিলার/মহাজন: $supplierName\n")
-        if (selectedCategory != allLabel) {
-            sb.append("ক্যাটাগরি: *$selectedCategory*\n")
+        if (selectedCategories.isNotEmpty()) {
+            sb.append("ক্যাটাগরি: *${selectedCategories.joinToString(", ")}*\n")
         }
         sb.append("----------------------------------------\n")
 
@@ -300,11 +300,11 @@ fun LowStockOrderDialog(
                 ) {
                     // "সব" (All) Chip
                     item {
-                        val isAll = selectedCategory == allLabel
+                        val isAll = selectedCategories.isEmpty()
                         FilterChip(
                             selected = isAll,
                             onClick = {
-                                selectedCategory = allLabel
+                                selectedCategories = emptySet()
                                 selectedProductIds = orderItems.map { it.product.id }.toSet()
                             },
                             label = {
@@ -338,20 +338,44 @@ fun LowStockOrderDialog(
                         )
                     }
 
-                    // Individual Category Chips
+                    // Individual Category Chips (Multi-select capable)
                     items(allCategoriesList) { cat ->
-                        val isSelected = selectedCategory == cat
+                        val isSelected = selectedCategories.contains(cat)
                         val count = categoryCounts[cat] ?: 0
                         FilterChip(
                             selected = isSelected,
                             onClick = {
-                                selectedCategory = cat
-                                val catItemIds = orderItems.filter { item ->
-                                    val itemCat = item.product.category.trim()
-                                    val key = if (itemCat.isBlank()) otherCategoryLabel else itemCat
-                                    key == cat
-                                }.map { it.product.id }.toSet()
-                                selectedProductIds = catItemIds
+                                if (selectedCategories.isEmpty()) {
+                                    // Selecting first category from all
+                                    selectedCategories = setOf(cat)
+                                    val catItemIds = orderItems.filter { item ->
+                                        val itemCat = item.product.category.trim().ifBlank { otherCategoryLabel }
+                                        itemCat == cat
+                                    }.map { it.product.id }.toSet()
+                                    selectedProductIds = catItemIds
+                                } else if (isSelected) {
+                                    // Deselecting this category
+                                    val nextCats = selectedCategories - cat
+                                    if (nextCats.isEmpty()) {
+                                        selectedCategories = emptySet()
+                                        selectedProductIds = orderItems.map { it.product.id }.toSet()
+                                    } else {
+                                        selectedCategories = nextCats
+                                        val removedCatItemIds = orderItems.filter { item ->
+                                            val itemCat = item.product.category.trim().ifBlank { otherCategoryLabel }
+                                            itemCat == cat
+                                        }.map { it.product.id }.toSet()
+                                        selectedProductIds = selectedProductIds - removedCatItemIds
+                                    }
+                                } else {
+                                    // Adding another category to multi-selection
+                                    selectedCategories = selectedCategories + cat
+                                    val addedCatItemIds = orderItems.filter { item ->
+                                        val itemCat = item.product.category.trim().ifBlank { otherCategoryLabel }
+                                        itemCat == cat
+                                    }.map { it.product.id }.toSet()
+                                    selectedProductIds = selectedProductIds + addedCatItemIds
+                                }
                             },
                             label = {
                                 Text(
@@ -430,8 +454,8 @@ fun LowStockOrderDialog(
                     // Add other product button
                     FilledTonalButton(
                         onClick = {
-                            if (selectedCategory != allLabel) {
-                                addProductSelectedCategory = selectedCategory
+                            if (selectedCategories.size == 1) {
+                                addProductSelectedCategory = selectedCategories.first()
                             } else {
                                 addProductSelectedCategory = allLabel
                             }
@@ -524,7 +548,7 @@ fun LowStockOrderDialog(
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 OutlinedButton(
                                     onClick = {
-                                        selectedCategory = allLabel
+                                        selectedCategories = emptySet()
                                         selectedProductIds = orderItems.map { it.product.id }.toSet()
                                     },
                                     shape = RoundedCornerShape(8.dp)
@@ -533,8 +557,8 @@ fun LowStockOrderDialog(
                                 }
                                 FilledTonalButton(
                                     onClick = {
-                                        if (selectedCategory != allLabel) {
-                                            addProductSelectedCategory = selectedCategory
+                                        if (selectedCategories.size == 1) {
+                                            addProductSelectedCategory = selectedCategories.first()
                                         } else {
                                             addProductSelectedCategory = allLabel
                                         }
@@ -914,8 +938,8 @@ fun LowStockOrderDialog(
                             }
 
                             val pdfNote = buildString {
-                                if (selectedCategory != allLabel) {
-                                    append("ক্যাটাগরি: $selectedCategory")
+                                if (selectedCategories.isNotEmpty()) {
+                                    append("ক্যাটাগরি: ${selectedCategories.joinToString(", ")}")
                                 }
                                 if (orderNote.isNotBlank()) {
                                     if (isNotEmpty()) append(" | ")
@@ -1072,8 +1096,8 @@ fun LowStockOrderDialog(
                             }
 
                             val pendingNote = buildString {
-                                if (selectedCategory != allLabel) {
-                                    append("ক্যাটাগরি: $selectedCategory")
+                                if (selectedCategories.isNotEmpty()) {
+                                    append("ক্যাটাগরি: ${selectedCategories.joinToString(", ")}")
                                 }
                                 if (orderNote.isNotBlank()) {
                                     if (isNotEmpty()) append(" | ")
@@ -1241,8 +1265,8 @@ fun LowStockOrderDialog(
                                             orderItems = orderItems + newItem
                                             selectedProductIds = selectedProductIds + prod.id
                                             val prodCat = prod.category.trim().ifBlank { otherCategoryLabel }
-                                            if (selectedCategory != allLabel && selectedCategory != prodCat) {
-                                                selectedCategory = prodCat
+                                            if (selectedCategories.isNotEmpty() && !selectedCategories.contains(prodCat)) {
+                                                selectedCategories = selectedCategories + prodCat
                                             }
                                             showAddProductSheet = false
                                             Toast.makeText(
