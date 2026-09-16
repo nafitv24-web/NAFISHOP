@@ -2963,8 +2963,16 @@ object PdfGenerator {
             textAlign = Paint.Align.RIGHT
         }
 
-        val totalPcs = items.sumOf { it.orderQuantity }
-        val totalCost = items.sumOf { it.orderQuantity * it.unitPrice }
+        // Sort items strictly by category first, then by product name
+        val sortedItems = items.sortedWith(
+            compareBy<ReorderItem> { 
+                val c = it.product.category.trim()
+                if (c.isBlank()) "zzz_others" else c
+            }.thenBy { it.product.name.trim().lowercase() }
+        )
+
+        val totalPcs = sortedItems.sumOf { it.orderQuantity }
+        val totalCost = sortedItems.sumOf { it.orderQuantity * it.unitPrice }
 
         fun drawHeaderAndSummary(drawSummaryBox: Boolean) {
             // Outer Document Frame
@@ -3009,7 +3017,7 @@ object PdfGenerator {
                 val cardLbl = Paint().apply { isAntiAlias = true; textSize = 8.5f; color = Color.rgb(100, 116, 139) }
                 canvas.drawText("মোট অর্ডার তালিকা", 44f, y + 14f, cardLbl)
                 val darkBold = Paint().apply { isAntiAlias = true; textSize = 11f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); color = Color.rgb(15, 23, 42) }
-                canvas.drawText("${items.size} টি পণ্য (${totalPcs.toIntOrNull() ?: totalPcs} পিছ)", 44f, y + 28f, darkBold)
+                canvas.drawText("${sortedItems.size} টি পণ্য (${totalPcs.toIntOrNull() ?: totalPcs} পিছ)", 44f, y + 28f, darkBold)
 
                 // Total Cost Card
                 val b2 = Paint().apply { color = Color.rgb(254, 243, 199); style = Paint.Style.FILL }
@@ -3052,7 +3060,58 @@ object PdfGenerator {
 
         val rowBgAlt = Paint().apply { color = Color.rgb(255, 251, 235); style = Paint.Style.FILL }
 
-        for ((index, item) in items.withIndex()) {
+        val catHeaderBg = Paint().apply { color = Color.rgb(248, 250, 252); style = Paint.Style.FILL }
+        val catHeaderBorder = Paint().apply { color = Color.rgb(226, 232, 240); style = Paint.Style.STROKE; strokeWidth = 0.8f }
+        val catAccent = Paint().apply { color = Color.rgb(217, 119, 6); style = Paint.Style.FILL }
+        val catTitlePaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 9.5f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(15, 23, 42)
+        }
+        val catSubPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 8.5f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(180, 83, 9)
+            textAlign = Paint.Align.RIGHT
+        }
+
+        var currentCategory: String? = null
+
+        for ((index, item) in sortedItems.withIndex()) {
+            val itemCat = item.product.category.trim().ifBlank { "অন্যান্য" }
+
+            // When category changes, draw a dedicated category group section header
+            if (itemCat != currentCategory) {
+                currentCategory = itemCat
+
+                // Check if page break needed for category header + first item
+                if (y > 665f) {
+                    drawSponsorFooter(canvas, 775f, "পণ্য ক্রয় ও রি-অর্ডার মেমো")
+                    pdfDocument.finishPage(page)
+                    pageNumber++
+                    pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+                    page = pdfDocument.startPage(pageInfo)
+                    canvas = page.canvas
+                    drawHeaderAndSummary(drawSummaryBox = false)
+                    y = 86f
+                    y = drawTableHeader(y)
+                }
+
+                val catItems = sortedItems.filter { it.product.category.trim().ifBlank { "অন্যান্য" } == itemCat }
+                val catPcs = catItems.sumOf { it.orderQuantity }
+                val catPcsStr = if (catPcs % 1.0 == 0.0) catPcs.toInt().toString() else catPcs.toString()
+
+                // Category header row across full table width
+                canvas.drawRoundRect(RectF(34f, y - 11f, 561f, y + 8f), 3f, 3f, catHeaderBg)
+                canvas.drawRoundRect(RectF(34f, y - 11f, 561f, y + 8f), 3f, 3f, catHeaderBorder)
+                canvas.drawRect(RectF(34f, y - 11f, 38f, y + 8f), catAccent)
+                canvas.drawText("📁 ক্যাটাগরি: $itemCat", 44f, y, catTitlePaint)
+                canvas.drawText("উপমোট: ${catItems.size}টি পণ্য | $catPcsStr পিছ", 553f, y, catSubPaint)
+                y += 21f
+            }
+
             if (y > 690f) {
                 drawSponsorFooter(canvas, 775f, "পণ্য ক্রয় ও রি-অর্ডার মেমো")
                 pdfDocument.finishPage(page)
@@ -3063,6 +3122,13 @@ object PdfGenerator {
                 drawHeaderAndSummary(drawSummaryBox = false)
                 y = 86f
                 y = drawTableHeader(y)
+
+                // Category continuation banner
+                canvas.drawRoundRect(RectF(34f, y - 11f, 561f, y + 8f), 3f, 3f, catHeaderBg)
+                canvas.drawRoundRect(RectF(34f, y - 11f, 561f, y + 8f), 3f, 3f, catHeaderBorder)
+                canvas.drawRect(RectF(34f, y - 11f, 38f, y + 8f), catAccent)
+                canvas.drawText("📁 ক্যাটাগরি: $itemCat (চলমান)", 44f, y, catTitlePaint)
+                y += 21f
             }
 
             if (index % 2 == 1) {
@@ -3090,22 +3156,42 @@ object PdfGenerator {
         }
 
         // Table Bottom Summary Row
-        if (y <= 695f) {
-            y += 6f
-            val totalRowBg = Paint().apply { color = Color.rgb(254, 243, 199); style = Paint.Style.FILL }
-            canvas.drawRoundRect(RectF(34f, y - 8f, 561f, y + 14f), 4f, 4f, totalRowBg)
-            val doubleLine = Paint().apply { color = Color.rgb(253, 230, 138); strokeWidth = 1f }
-            canvas.drawLine(34f, y - 8f, 561f, y - 8f, doubleLine)
-            canvas.drawLine(34f, y + 14f, 561f, y + 14f, doubleLine)
-
-            val totalCostStr = if (totalCost % 1.0 == 0.0) totalCost.toInt().toString() else "%.2f".format(totalCost)
-            canvas.drawText("সর্বমোট অর্ডার: ${totalPcs.toIntOrNull() ?: totalPcs} পিছ (${items.size} পণ্য)", 65f, y + 5f, boldPaint)
-            canvas.drawText("মোট প্রদেয় বিল: $currency$totalCostStr", 553f, y + 5f, rightBoldPaint)
-            y += 24f
+        if (y > 675f) {
+            drawSponsorFooter(canvas, 775f, "পণ্য ক্রয় ও রি-অর্ডার মেমো")
+            pdfDocument.finishPage(page)
+            pageNumber++
+            pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+            page = pdfDocument.startPage(pageInfo)
+            canvas = page.canvas
+            drawHeaderAndSummary(drawSummaryBox = false)
+            y = 86f
         }
 
+        y += 6f
+        val totalRowBg = Paint().apply { color = Color.rgb(254, 243, 199); style = Paint.Style.FILL }
+        canvas.drawRoundRect(RectF(34f, y - 8f, 561f, y + 14f), 4f, 4f, totalRowBg)
+        val doubleLine = Paint().apply { color = Color.rgb(253, 230, 138); strokeWidth = 1f }
+        canvas.drawLine(34f, y - 8f, 561f, y - 8f, doubleLine)
+        canvas.drawLine(34f, y + 14f, 561f, y + 14f, doubleLine)
+
+        val totalCostStr = if (totalCost % 1.0 == 0.0) totalCost.toInt().toString() else "%.2f".format(totalCost)
+        canvas.drawText("সর্বমোট অর্ডার: ${totalPcs.toIntOrNull() ?: totalPcs} পিছ (${sortedItems.size} পণ্য)", 65f, y + 5f, boldPaint)
+        canvas.drawText("মোট প্রদেয় বিল: $currency$totalCostStr", 553f, y + 5f, rightBoldPaint)
+        y += 24f
+
         // Signatures Block
-        val sigY = 720f
+        val sigY = if (y > 690f) {
+            drawSponsorFooter(canvas, 775f, "পণ্য ক্রয় ও রি-অর্ডার মেমো")
+            pdfDocument.finishPage(page)
+            pageNumber++
+            pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+            page = pdfDocument.startPage(pageInfo)
+            canvas = page.canvas
+            drawHeaderAndSummary(drawSummaryBox = false)
+            140f
+        } else {
+            720f
+        }
         val sigLinePaint = Paint().apply { color = Color.rgb(148, 163, 184); strokeWidth = 1f }
         val sigTextPaint = Paint().apply {
             isAntiAlias = true
@@ -3227,8 +3313,15 @@ object PdfGenerator {
             textAlign = Paint.Align.RIGHT
         }
 
-        val receivedItems = order.items.filter { !it.isNotFound && it.receivedQuantity > 0 }
-        val notFoundItems = order.items.filter { it.isNotFound || it.receivedQuantity <= 0 }
+        val sortedOrderItems = order.items.sortedWith(
+            compareBy<com.example.data.model.PendingOrderItem> { 
+                val c = it.category.trim()
+                if (c.isBlank()) "zzz_others" else c
+            }.thenBy { it.productName.trim().lowercase() }
+        )
+
+        val receivedItems = sortedOrderItems.filter { !it.isNotFound && it.receivedQuantity > 0 }
+        val notFoundItems = sortedOrderItems.filter { it.isNotFound || it.receivedQuantity <= 0 }
         val totalReceivedPcs = receivedItems.sumOf { it.receivedQuantity }
         val totalReceivedCost = receivedItems.sumOf { it.receivedQuantity * it.buyPrice }
 
@@ -3333,7 +3426,54 @@ object PdfGenerator {
             textAlign = Paint.Align.CENTER
         }
 
-        for ((index, item) in order.items.withIndex()) {
+        val catHeaderBg = Paint().apply { color = Color.rgb(241, 245, 249); style = Paint.Style.FILL }
+        val catHeaderBorder = Paint().apply { color = Color.rgb(226, 232, 240); style = Paint.Style.STROKE; strokeWidth = 0.8f }
+        val catAccent = Paint().apply { color = Color.rgb(37, 99, 235); style = Paint.Style.FILL } // Blue
+        val catTitlePaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 9.5f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(15, 23, 42)
+        }
+        val catSubPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 8.5f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(37, 99, 235)
+            textAlign = Paint.Align.RIGHT
+        }
+
+        var currentCategory: String? = null
+
+        for ((index, item) in sortedOrderItems.withIndex()) {
+            val itemCat = item.category.trim().ifBlank { "অন্যান্য" }
+
+            if (itemCat != currentCategory) {
+                currentCategory = itemCat
+                if (y > 665f) {
+                    drawSponsorFooter(canvas, 775f, "পণ্য স্টক-ইন ও প্রাপ্তি চালান মেমো")
+                    pdfDocument.finishPage(page)
+                    pageNumber++
+                    pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+                    page = pdfDocument.startPage(pageInfo)
+                    canvas = page.canvas
+                    drawHeaderAndSummary(drawSummaryBox = false)
+                    y = 86f
+                    y = drawTableHeader(y)
+                }
+
+                val catItems = sortedOrderItems.filter { it.category.trim().ifBlank { "অন্যান্য" } == itemCat }
+                val catRcvPcs = catItems.filter { !it.isNotFound && it.receivedQuantity > 0 }.sumOf { it.receivedQuantity }
+                val catPcsStr = if (catRcvPcs % 1.0 == 0.0) catRcvPcs.toInt().toString() else catRcvPcs.toString()
+
+                canvas.drawRoundRect(RectF(34f, y - 11f, 561f, y + 8f), 3f, 3f, catHeaderBg)
+                canvas.drawRoundRect(RectF(34f, y - 11f, 561f, y + 8f), 3f, 3f, catHeaderBorder)
+                canvas.drawRect(RectF(34f, y - 11f, 38f, y + 8f), catAccent)
+                canvas.drawText("📁 ক্যাটাগরি: $itemCat", 44f, y, catTitlePaint)
+                canvas.drawText("প্রাপ্ত: ${catItems.count { !it.isNotFound && it.receivedQuantity > 0 }}/${catItems.size}টি পণ্য | $catPcsStr পিছ", 553f, y, catSubPaint)
+                y += 21f
+            }
+
             if (y > 690f) {
                 drawSponsorFooter(canvas, 775f, "পণ্য স্টক-ইন ও প্রাপ্তি চালান মেমো")
                 pdfDocument.finishPage(page)
@@ -3344,6 +3484,12 @@ object PdfGenerator {
                 drawHeaderAndSummary(drawSummaryBox = false)
                 y = 86f
                 y = drawTableHeader(y)
+
+                canvas.drawRoundRect(RectF(34f, y - 11f, 561f, y + 8f), 3f, 3f, catHeaderBg)
+                canvas.drawRoundRect(RectF(34f, y - 11f, 561f, y + 8f), 3f, 3f, catHeaderBorder)
+                canvas.drawRect(RectF(34f, y - 11f, 38f, y + 8f), catAccent)
+                canvas.drawText("📁 ক্যাটাগরি: $itemCat (চলমান)", 44f, y, catTitlePaint)
+                y += 21f
             }
 
             val isMissing = item.isNotFound || item.receivedQuantity <= 0

@@ -90,14 +90,21 @@ fun PendingOrderReceiveDialog(
         statusBarTopDp
     )
 
-    // Local mutable state for the items being received
+    // Local mutable state for the items being received, sorted by category then product name
     var editableItems by remember(order) {
         mutableStateOf(
-            order.items.map { item ->
-                item.copy(
-                    receivedQuantity = if (item.isNotFound) 0.0 else if (item.receivedQuantity > 0.0) item.receivedQuantity else item.orderedQuantity
+            order.items
+                .sortedWith(
+                    compareBy<PendingOrderItem> { 
+                        val c = it.category.trim()
+                        if (c.isBlank()) "zzz_others" else c
+                    }.thenBy { it.productName.trim().lowercase() }
                 )
-            }
+                .map { item ->
+                    item.copy(
+                        receivedQuantity = if (item.isNotFound) 0.0 else if (item.receivedQuantity > 0.0) item.receivedQuantity else item.orderedQuantity
+                    )
+                }
         )
     }
 

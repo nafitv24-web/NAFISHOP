@@ -67,19 +67,26 @@ fun LowStockOrderDialog(
     // Initialize list of items from lowStockProducts (or default to empty if none)
     var orderItems by remember {
         mutableStateOf(
-            lowStockProducts.map { prod ->
-                // Smart recommended order quantity: at least 10 pcs or deficiency from threshold
-                val recommended = if (prod.minStockAlert > 0) {
-                    ((prod.minStockAlert * 2) - prod.stockQuantity).coerceAtLeast(10.0)
-                } else {
-                    10.0
-                }
-                ReorderItem(
-                    product = prod,
-                    orderQuantity = recommended,
-                    unitPrice = prod.buyPrice
+            lowStockProducts
+                .sortedWith(
+                    compareBy<Product> { 
+                        val c = it.category.trim()
+                        if (c.isBlank()) "zzz_others" else c
+                    }.thenBy { it.name.trim().lowercase() }
                 )
-            }
+                .map { prod ->
+                    // Smart recommended order quantity: at least 10 pcs or deficiency from threshold
+                    val recommended = if (prod.minStockAlert > 0) {
+                        ((prod.minStockAlert * 2) - prod.stockQuantity).coerceAtLeast(10.0)
+                    } else {
+                        10.0
+                    }
+                    ReorderItem(
+                        product = prod,
+                        orderQuantity = recommended,
+                        unitPrice = prod.buyPrice
+                    )
+                }
         )
     }
 
@@ -121,7 +128,7 @@ fun LowStockOrderDialog(
     }
 
     val displayedItems = remember(orderItems, selectedCategories, language) {
-        if (selectedCategories.isEmpty()) {
+        val filtered = if (selectedCategories.isEmpty()) {
             orderItems
         } else {
             orderItems.filter { item ->
@@ -130,6 +137,12 @@ fun LowStockOrderDialog(
                 selectedCategories.contains(key)
             }
         }
+        filtered.sortedWith(
+            compareBy<ReorderItem> { 
+                val c = it.product.category.trim()
+                if (c.isBlank()) "zzz_others" else c
+            }.thenBy { it.product.name.trim().lowercase() }
+        )
     }
 
     var showAddProductSheet by remember { mutableStateOf(false) }
@@ -138,9 +151,16 @@ fun LowStockOrderDialog(
     var itemToEditPrice by remember { mutableStateOf<ReorderItem?>(null) }
     var showWaitingSavedDialog by remember { mutableStateOf(false) }
 
-    // Strictly restrict active order items to the currently displayed/selected categories
+    // Strictly restrict active order items to the currently displayed/selected categories, sorted by category
     val activeSelectedItems = remember(displayedItems, selectedProductIds) {
-        displayedItems.filter { selectedProductIds.contains(it.product.id) && it.orderQuantity > 0 }
+        displayedItems
+            .filter { selectedProductIds.contains(it.product.id) && it.orderQuantity > 0 }
+            .sortedWith(
+                compareBy<ReorderItem> { 
+                    val c = it.product.category.trim()
+                    if (c.isBlank()) "zzz_others" else c
+                }.thenBy { it.product.name.trim().lowercase() }
+            )
     }
 
     val totalSelectedCount = activeSelectedItems.size
@@ -160,8 +180,14 @@ fun LowStockOrderDialog(
         }
         sb.append("----------------------------------------\n")
 
+        var lastCategory: String? = null
         activeSelectedItems.forEachIndexed { idx, item ->
             val p = item.product
+            val cat = p.category.trim().ifBlank { if (language == "bn") "অন্যান্য" else "Others" }
+            if (cat != lastCategory) {
+                lastCategory = cat
+                sb.append("\n📁 *[$cat]*\n")
+            }
             val itemTotal = item.orderQuantity * item.unitPrice
             val itemTotalStr = if (itemTotal % 1.0 == 0.0) itemTotal.toInt().toString() else "%.1f".format(itemTotal)
             val qtyStr = if (item.orderQuantity % 1.0 == 0.0) item.orderQuantity.toInt().toString() else item.orderQuantity.toString()
@@ -174,7 +200,7 @@ fun LowStockOrderDialog(
             sb.append("   অর্ডার পরিমাণ: *$qtyStr ${p.unit}* (দর: $currency$buyStr, মোট: $currency$itemTotalStr)\n")
         }
 
-        sb.append("----------------------------------------\n")
+        sb.append("\n----------------------------------------\n")
         val totalPcsStr = if (totalOrderPcs % 1.0 == 0.0) totalOrderPcs.toInt().toString() else "%.1f".format(totalOrderPcs)
         val costStr = if (estimatedTotalCost % 1.0 == 0.0) estimatedTotalCost.toInt().toString() else "%.2f".format(estimatedTotalCost)
         sb.append("মোট পণ্য: $totalSelectedCount টি | মোট অর্ডার: $totalPcsStr পিছ\n")
@@ -1086,6 +1112,7 @@ fun LowStockOrderDialog(
                                     productId = item.product.id,
                                     productName = item.product.name,
                                     productBarcode = item.product.barcode,
+                                    category = item.product.category,
                                     unit = item.product.unit,
                                     orderedQuantity = item.orderQuantity,
                                     receivedQuantity = item.orderQuantity,
@@ -1262,7 +1289,12 @@ fun LowStockOrderDialog(
                                                 orderQuantity = 10.0,
                                                 unitPrice = prod.buyPrice
                                             )
-                                            orderItems = orderItems + newItem
+                                            orderItems = (orderItems + newItem).sortedWith(
+                                                compareBy<ReorderItem> { 
+                                                    val c = it.product.category.trim()
+                                                    if (c.isBlank()) "zzz_others" else c
+                                                }.thenBy { it.product.name.trim().lowercase() }
+                                            )
                                             selectedProductIds = selectedProductIds + prod.id
                                             val prodCat = prod.category.trim().ifBlank { otherCategoryLabel }
                                             if (selectedCategories.isNotEmpty() && !selectedCategories.contains(prodCat)) {
