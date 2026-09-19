@@ -241,13 +241,19 @@ fun CashBookScreen(
         val purchases = allTransactions.filter { (it.type == "STOCK_IN" || it.type == "PURCHASE") && it.totalAmount > 0 }
         for (pur in purchases) {
             val invLabel = if (pur.invoiceNumber.isNotBlank()) " (মেমো #${pur.invoiceNumber})" else ""
+            val noteDetails = buildString {
+                if (pur.note.isNotBlank() && pur.note != "স্টক ইন" && pur.note != "স্টক-ইন") {
+                    append("${pur.note} • ")
+                }
+                append("পরিমাণ: ${formatQuantity(pur.quantity)} ${pur.unit} • দর: $currency${pur.unitPrice.toIntOrNull() ?: pur.unitPrice}")
+            }
             list.add(
                 MasterCashEntry(
                     id = "PUR_${pur.id}",
                     source = "PURCHASE",
                     timestamp = pur.timestamp,
                     title = if (language == "bn") "পণ্য ক্রয়: ${pur.productName}$invLabel" else "Purchase: ${pur.productName}$invLabel",
-                    note = "পরিমাণ: ${formatQuantity(pur.quantity)} ${pur.unit} • দর: $currency${pur.unitPrice.toIntOrNull() ?: pur.unitPrice}",
+                    note = noteDetails,
                     categoryOrCustomer = "স্টক ক্রয়",
                     amount = CalculationHelper.round2(pur.totalAmount),
                     isAddition = false,
@@ -263,7 +269,13 @@ fun CashBookScreen(
             val noteLower = log.note.trim()
             val isAutoExpenseDuplicate = noteLower.startsWith("খরচ:") || noteLower.startsWith("খরচ বাতিল")
             val isAutoDueDuplicate = noteLower.startsWith("বাকি আদায়") || noteLower.startsWith("বাকি লগ")
-            val isAutoPurchaseDuplicate = noteLower.startsWith("পণ্য ক্রয়") || noteLower.startsWith("স্টক ইন")
+            val isAutoPurchaseDuplicate = noteLower.startsWith("পণ্য ক্রয়") ||
+                    noteLower.startsWith("স্টক ইন") ||
+                    noteLower.startsWith("স্টক-ইন") ||
+                    noteLower.contains("স্টক-ইন") ||
+                    noteLower.contains("স্টক ইন") ||
+                    noteLower.contains("ক্রয় বিল") ||
+                    (noteLower.contains("অর্ডার") && (noteLower.contains("বিল") || noteLower.contains("স্টক") || noteLower.contains("ক্রয়")))
             val isAutoSaleDuplicate = noteLower.startsWith("বিক্রি বাতিল") || noteLower.startsWith("ট্রানজেকশন")
 
             if (!isAutoExpenseDuplicate && !isAutoDueDuplicate && !isAutoPurchaseDuplicate && !isAutoSaleDuplicate) {

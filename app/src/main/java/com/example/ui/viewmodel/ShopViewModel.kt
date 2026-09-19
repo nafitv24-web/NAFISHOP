@@ -1235,7 +1235,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             if (totalCostAccumulator > 0) {
-                withdrawCashFromMainBalance(totalCostAccumulator, "অর্ডার #${order.orderNumber} স্টক-ইন ক্রয় বিল")
+                withdrawCashFromMainBalance(totalCostAccumulator, "পণ্য ক্রয়: অর্ডার #${order.orderNumber} স্টক-ইন বিল")
             }
 
             // Update order status to RECEIVED
