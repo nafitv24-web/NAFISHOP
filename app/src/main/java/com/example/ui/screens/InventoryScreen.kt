@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.example.data.model.Product
+import com.example.ui.components.ProductImageViewerDialog
 import com.example.ui.components.toIntOrNull
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.ShopViewModel
@@ -81,6 +82,7 @@ fun InventoryScreen(
 
     var showBarcodeScannerModal by remember { mutableStateOf(false) }
     var showLowStockOrderDialog by remember { mutableStateOf(false) }
+    var viewingImageProduct by remember { mutableStateOf<Product?>(null) }
 
     // Waiting / Pending Orders dialogs
     var showPendingOrdersListDialog by remember { mutableStateOf(false) }
@@ -510,12 +512,32 @@ fun InventoryScreen(
                             },
                             onAddToCart = {
                                 viewModel.addToCart(product)
+                            },
+                            onImageClick = {
+                                viewingImageProduct = product
                             }
                         )
                     }
                 }
             }
         }
+    }
+
+    // Fullscreen / Zoomed Product Image Dialog
+    viewingImageProduct?.let { prod ->
+        ProductImageViewerDialog(
+            product = prod,
+            currency = currency,
+            language = language,
+            onDismiss = { viewingImageProduct = null },
+            onEdit = {
+                editingProduct = prod
+                showAddEditDialog = true
+            },
+            onAddToCart = {
+                viewModel.addToCart(prod)
+            }
+        )
     }
 
     // Add / Edit Product Dialog
@@ -658,7 +680,8 @@ fun ProductItemCard(
     onStockOut: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
-    onAddToCart: () -> Unit
+    onAddToCart: () -> Unit,
+    onImageClick: () -> Unit = {}
 ) {
     var expandedMenu by remember { mutableStateOf(false) }
 
@@ -690,15 +713,40 @@ fun ProductItemCard(
                 Surface(
                     shape = RoundedCornerShape(10.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant,
-                    modifier = Modifier.size(52.dp)
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable(enabled = !product.imageUri.isNullOrBlank()) {
+                            onImageClick()
+                        }
                 ) {
                     if (!product.imageUri.isNullOrBlank()) {
-                        AsyncImage(
-                            model = product.imageUri,
-                            contentDescription = product.name,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            AsyncImage(
+                                model = product.imageUri,
+                                contentDescription = product.name,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            // Zoom Indicator Overlay Icon
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .size(18.dp)
+                                    .background(
+                                        Color.Black.copy(alpha = 0.55f),
+                                        shape = RoundedCornerShape(topStart = 6.dp)
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.ZoomIn,
+                                    contentDescription = "বড় করে দেখুন",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                            }
+                        }
                     } else {
                         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                             Icon(
@@ -941,6 +989,7 @@ fun AddEditProductDialog(
     var expiryTimestamp by remember { mutableStateOf(product?.expiryDate ?: 0L) }
     var tempCameraUri by remember { mutableStateOf<Uri?>(null) }
     var showPhotoOptionsDialog by remember { mutableStateOf(false) }
+    var showLargeImageViewer by remember { mutableStateOf(false) }
 
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
@@ -1091,6 +1140,31 @@ fun AddEditProductDialog(
                     if (imageUri.isNotBlank()) {
                         Surface(
                             shape = RoundedCornerShape(10.dp),
+                            color = EmeraldPrimary.copy(alpha = 0.12f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    showPhotoOptionsDialog = false
+                                    showLargeImageViewer = true
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.ZoomIn, contentDescription = null, tint = EmeraldPrimary)
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = if (language == "bn") "ছবি বড় করে দেখুন" else "View Large Photo",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = EmeraldPrimary
+                                )
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
                             color = LossRed.copy(alpha = 0.1f),
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1164,15 +1238,41 @@ fun AddEditProductDialog(
                             color = MaterialTheme.colorScheme.surface,
                             modifier = Modifier
                                 .size(64.dp)
-                                .clickable { showPhotoOptionsDialog = true }
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    if (imageUri.isNotBlank()) {
+                                        showLargeImageViewer = true
+                                    } else {
+                                        showPhotoOptionsDialog = true
+                                    }
+                                }
                         ) {
                             if (imageUri.isNotBlank()) {
-                                AsyncImage(
-                                    model = imageUri,
-                                    contentDescription = "Product Image",
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
+                                Box(modifier = Modifier.fillMaxSize()) {
+                                    AsyncImage(
+                                        model = imageUri,
+                                        contentDescription = "Product Image",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.BottomEnd)
+                                            .size(20.dp)
+                                            .background(
+                                                Color.Black.copy(alpha = 0.55f),
+                                                shape = RoundedCornerShape(topStart = 6.dp)
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Default.ZoomIn,
+                                            contentDescription = "বড় করে দেখুন",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
                             } else {
                                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                                     Icon(
@@ -1554,6 +1654,17 @@ fun AddEditProductDialog(
                 }
             }
         }
+    }
+
+    if (showLargeImageViewer && imageUri.isNotBlank()) {
+        ProductImageViewerDialog(
+            imageUri = imageUri,
+            title = name.ifBlank { if (language == "bn") "পণ্যের ছবি" else "Product Photo" },
+            subtitle = category,
+            currency = currency,
+            language = language,
+            onDismiss = { showLargeImageViewer = false }
+        )
     }
 }
 
