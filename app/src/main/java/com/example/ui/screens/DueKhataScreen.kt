@@ -670,6 +670,7 @@ fun AddCustomerDialog(
     onDismiss: () -> Unit,
     onSave: (String, String, String, Double, String) -> Unit
 ) {
+    val context = LocalContext.current
     var name by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var address by remember { mutableStateOf("") }
@@ -680,7 +681,8 @@ fun AddCustomerDialog(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            imageUri = uri.toString()
+            val compressed = com.example.util.ImageStorageHelper.saveCompressedImage(context, uri, "cust")
+            imageUri = compressed ?: uri.toString()
         }
     }
 
@@ -841,6 +843,7 @@ fun EditCustomerDialog(
     onDismiss: () -> Unit,
     onSave: (Customer) -> Unit
 ) {
+    val context = LocalContext.current
     var name by remember { mutableStateOf(customer.name) }
     var phone by remember { mutableStateOf(customer.phone) }
     var address by remember { mutableStateOf(customer.address) }
@@ -850,7 +853,8 @@ fun EditCustomerDialog(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            imageUri = uri.toString()
+            val compressed = com.example.util.ImageStorageHelper.saveCompressedImage(context, uri, "cust")
+            imageUri = compressed ?: uri.toString()
         }
     }
 

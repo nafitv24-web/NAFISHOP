@@ -716,7 +716,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             if (!backupJson.isNullOrBlank()) {
-                val result = repository.importDataFromJson(backupJson, cleanSlate = true)
+                val result = repository.importDataFromJson(backupJson, cleanSlate = true, context = getApplication())
                 if (result.success) {
                     if (result.restoredShopInfo != null) {
                         val s = result.restoredShopInfo
@@ -1002,7 +1002,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
-            val importResult = repository.importDataFromJson(result.data, cleanSlate = true)
+            val importResult = repository.importDataFromJson(result.data, cleanSlate = true, context = getApplication())
             if (importResult.success && importResult.restoredShopInfo != null) {
                 val s = importResult.restoredShopInfo
                 updateShopInfo(
@@ -1767,7 +1767,8 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             transactionsList = txs,
             dueLogsList = dues,
             cashLogsList = cashes,
-            shopInfo = _shopInfo.value
+            shopInfo = _shopInfo.value,
+            context = getApplication()
         )
     }
 
@@ -1808,7 +1809,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             // Try reading as text first to see if it's JSON
             val textContent = com.example.util.DatabaseBackupHelper.readTextFromUri(context, uri)
             if (textContent != null && textContent.trim().startsWith("{") && textContent.contains("appName")) {
-                val result = repository.importDataFromJson(textContent, cleanSlate = true)
+                val result = repository.importDataFromJson(textContent, cleanSlate = true, context = getApplication())
                 if (result.success && result.restoredShopInfo != null) {
                     val s = result.restoredShopInfo
                     updateShopInfo(
@@ -1996,7 +1997,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
-            val result = repository.importDataFromJson(backupJson, cleanSlate = true)
+            val result = repository.importDataFromJson(backupJson, cleanSlate = true, context = getApplication())
             if (result.success && result.restoredShopInfo != null) {
                 val s = result.restoredShopInfo
                 updateShopInfo(
@@ -2017,7 +2018,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     fun importBackupJson(jsonString: String, onResult: (RestoreResult) -> Unit) {
         viewModelScope.launch {
             isSyncing.value = true
-            val result = repository.importDataFromJson(jsonString, cleanSlate = true)
+            val result = repository.importDataFromJson(jsonString, cleanSlate = true, context = getApplication())
             if (result.success && result.restoredShopInfo != null) {
                 val s = result.restoredShopInfo
                 updateShopInfo(

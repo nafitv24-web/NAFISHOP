@@ -1,10 +1,16 @@
 package com.example.ui.screens
 
+import android.Manifest
 import android.app.DatePickerDialog
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import java.io.File
+import java.io.FileOutputStream
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -933,13 +939,190 @@ fun AddEditProductDialog(
     var minStockStr by remember { mutableStateOf(product?.minStockAlert?.toString()?.replace(".0", "") ?: "5") }
     var imageUri by remember { mutableStateOf(product?.imageUri ?: "") }
     var expiryTimestamp by remember { mutableStateOf(product?.expiryDate ?: 0L) }
+    var tempCameraUri by remember { mutableStateOf<Uri?>(null) }
+    var showPhotoOptionsDialog by remember { mutableStateOf(false) }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && tempCameraUri != null) {
+            val compressed = com.example.util.ImageStorageHelper.saveCompressedImage(context, tempCameraUri!!, "prod")
+            imageUri = compressed ?: tempCameraUri.toString()
+        }
+    }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            try {
+                val imagesDir = File(context.filesDir, "product_images").apply { if (!exists()) mkdirs() }
+                val photoFile = File(imagesDir, "prod_${System.currentTimeMillis()}.jpg")
+                val uri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    photoFile
+                )
+                tempCameraUri = uri
+                cameraLauncher.launch(uri)
+            } catch (e: Exception) {
+                Toast.makeText(
+                    context,
+                    if (language == "bn") "ক্যামেরা চালু করা যায়নি: ${e.localizedMessage}" else "Could not open camera: ${e.localizedMessage}",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        } else {
+            Toast.makeText(
+                context,
+                if (language == "bn") "ছবি তোলার জন্য ক্যামেরার পারমিশন প্রয়োজন" else "Camera permission is required to take photos",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    fun launchCamera() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            try {
+                val imagesDir = File(context.filesDir, "product_images").apply { if (!exists()) mkdirs() }
+                val photoFile = File(imagesDir, "prod_${System.currentTimeMillis()}.jpg")
+                val uri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    photoFile
+                )
+                tempCameraUri = uri
+                cameraLauncher.launch(uri)
+            } catch (e: Exception) {
+                Toast.makeText(
+                    context,
+                    if (language == "bn") "ক্যামেরা চালু করা যায়নি: ${e.localizedMessage}" else "Could not open camera: ${e.localizedMessage}",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        } else {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            imageUri = uri.toString()
+            val compressed = com.example.util.ImageStorageHelper.saveCompressedImage(context, uri, "prod")
+            imageUri = compressed ?: uri.toString()
         }
+    }
+
+    if (showPhotoOptionsDialog) {
+        AlertDialog(
+            onDismissRequest = { showPhotoOptionsDialog = false },
+            title = {
+                Text(
+                    text = if (language == "bn") "পণ্যের ছবি দিন" else "Add Product Photo",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                showPhotoOptionsDialog = false
+                                launchCamera()
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.CameraAlt, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = if (language == "bn") "ক্যামেরা দিয়ে ছবি তুলুন" else "Take Photo with Camera",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = if (language == "bn") "সরাসরি পণ্যের ছবি তুলুন" else "Snap a picture directly",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                showPhotoOptionsDialog = false
+                                imagePickerLauncher.launch("image/*")
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = EmeraldPrimary)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = if (language == "bn") "গ্যালারি থেকে বাছাই করুন" else "Choose from Gallery",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = if (language == "bn") "ফোনের মেমোরি থেকে ছবি নিন" else "Pick photo from device",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    if (imageUri.isNotBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = LossRed.copy(alpha = 0.1f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    showPhotoOptionsDialog = false
+                                    imageUri = ""
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = LossRed)
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = if (language == "bn") "বর্তমান ছবি মুছে ফেলুন" else "Remove Current Photo",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = LossRed
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showPhotoOptionsDialog = false }) {
+                    Text(if (language == "bn") "বাতিল" else "Cancel")
+                }
+            }
+        )
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -979,7 +1162,9 @@ fun AddEditProductDialog(
                         Surface(
                             shape = RoundedCornerShape(10.dp),
                             color = MaterialTheme.colorScheme.surface,
-                            modifier = Modifier.size(64.dp)
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clickable { showPhotoOptionsDialog = true }
                         ) {
                             if (imageUri.isNotBlank()) {
                                 AsyncImage(
@@ -1009,27 +1194,42 @@ fun AddEditProductDialog(
                                 fontWeight = FontWeight.Bold
                             )
                             Spacer(modifier = Modifier.height(4.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Button(
-                                    onClick = { imagePickerLauncher.launch("image/*") },
+                                    onClick = { launchCamera() },
                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                                     shape = RoundedCornerShape(6.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
                                 ) {
+                                    Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (language == "bn") "ক্যামেরা" else "Camera",
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
+                                FilledTonalButton(
+                                    onClick = { imagePickerLauncher.launch("image/*") },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
                                     Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(14.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = if (imageUri.isNotBlank()) (if (language == "bn") "বদলান" else "Change") else (if (language == "bn") "ছবি দিন" else "Choose"),
+                                        text = if (language == "bn") "গ্যালারি" else "Gallery",
                                         style = MaterialTheme.typography.labelSmall
                                     )
                                 }
                                 if (imageUri.isNotBlank()) {
                                     OutlinedButton(
                                         onClick = { imageUri = "" },
-                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                                         shape = RoundedCornerShape(6.dp)
                                     ) {
-                                        Text(if (language == "bn") "মুছুন" else "Remove", style = MaterialTheme.typography.labelSmall, color = LossRed)
+                                        Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = LossRed, modifier = Modifier.size(14.dp))
                                     }
                                 }
                             }

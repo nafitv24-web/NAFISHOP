@@ -1,9 +1,11 @@
 package com.example.data.repository
 
+import android.content.Context
 import com.example.data.local.*
 import com.example.data.model.*
 import com.example.util.CalculationHelper
 import com.example.util.CalculationHelper.round2
+import com.example.util.ImageStorageHelper
 import com.example.ui.components.toIntOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -873,7 +875,8 @@ class ShopRepository(private val database: AppDatabase) {
         transactionsList: List<TransactionRecord>,
         dueLogsList: List<DueLog> = emptyList(),
         cashLogsList: List<CashLog> = emptyList(),
-        shopInfo: ShopInfo? = null
+        shopInfo: ShopInfo? = null,
+        context: Context? = null
     ): String = withContext(Dispatchers.Default) {
         val root = JSONObject()
         root.put("appName", "ShopKhata")
@@ -910,6 +913,12 @@ class ShopRepository(private val database: AppDatabase) {
             o.put("unit", p.unit)
             o.put("minStockAlert", p.minStockAlert)
             o.put("imageUri", p.imageUri)
+            if (context != null && !p.imageUri.isNullOrBlank()) {
+                val b64 = ImageStorageHelper.imageUriToBase64(context, p.imageUri)
+                if (!b64.isNullOrBlank()) {
+                    o.put("imageBase64", b64)
+                }
+            }
             o.put("expiryDate", p.expiryDate)
             o.put("createdAt", p.createdAt)
             pArray.put(o)
@@ -925,6 +934,12 @@ class ShopRepository(private val database: AppDatabase) {
             o.put("totalDue", c.totalDue)
             o.put("totalPurchased", c.totalPurchased)
             o.put("imageUri", c.imageUri)
+            if (context != null && !c.imageUri.isNullOrBlank()) {
+                val b64 = ImageStorageHelper.imageUriToBase64(context, c.imageUri)
+                if (!b64.isNullOrBlank()) {
+                    o.put("imageBase64", b64)
+                }
+            }
             o.put("lastTransactionDate", c.lastTransactionDate)
             cArray.put(o)
         }
@@ -1023,7 +1038,7 @@ class ShopRepository(private val database: AppDatabase) {
         return result
     }
 
-    suspend fun importDataFromJson(jsonStr: String, cleanSlate: Boolean = true): RestoreResult = withContext(Dispatchers.IO) {
+    suspend fun importDataFromJson(jsonStr: String, cleanSlate: Boolean = true, context: Context? = null): RestoreResult = withContext(Dispatchers.IO) {
         try {
             if (jsonStr.isBlank() || jsonStr.trim() == "null" || jsonStr.trim() == "{}") {
                 return@withContext RestoreResult(
@@ -1127,7 +1142,13 @@ class ShopRepository(private val database: AppDatabase) {
                     val stockQty = if (o.has("stockQuantity")) o.optDouble("stockQuantity") else if (o.has("stock_quantity")) o.optDouble("stock_quantity") else if (o.has("stock")) o.optDouble("stock") else if (o.has("quantity")) o.optDouble("quantity") else o.optDouble("qty", 0.0)
                     val unit = o.optString("unit").ifBlank { o.optString("unit_name", "পিস") }
                     val minAlert = if (o.has("minStockAlert")) o.optDouble("minStockAlert") else if (o.has("min_stock_alert")) o.optDouble("min_stock_alert") else o.optDouble("minStock", 5.0)
-                    val image = o.optString("imageUri").ifBlank { o.optString("image_uri").ifBlank { o.optString("image", "") } }
+                    val imageRaw = o.optString("imageUri").ifBlank { o.optString("image_uri").ifBlank { o.optString("image", "") } }
+                    val imageB64 = o.optString("imageBase64").ifBlank { if (imageRaw.startsWith("data:image/")) imageRaw else "" }
+                    val finalImage = if (context != null && imageB64.isNotBlank()) {
+                        ImageStorageHelper.base64ToLocalImageUri(context, imageB64, "prod") ?: imageRaw
+                    } else {
+                        imageRaw
+                    }
                     val expiry = if (o.has("expiryDate")) o.optLong("expiryDate") else if (o.has("expiry_date")) o.optLong("expiry_date") else o.optLong("expireDate", 0L)
                     val created = if (o.has("createdAt")) o.optLong("createdAt") else if (o.has("created_at")) o.optLong("created_at") else o.optLong("timestamp", System.currentTimeMillis())
 
@@ -1141,7 +1162,7 @@ class ShopRepository(private val database: AppDatabase) {
                             stockQuantity = round2(stockQty),
                             unit = unit,
                             minStockAlert = minAlert,
-                            imageUri = image,
+                            imageUri = finalImage,
                             expiryDate = expiry,
                             createdAt = created
                         )
@@ -1159,7 +1180,13 @@ class ShopRepository(private val database: AppDatabase) {
                     val address = o.optString("address", "")
                     val totalDue = if (o.has("totalDue")) o.optDouble("totalDue") else if (o.has("total_due")) o.optDouble("total_due") else if (o.has("due")) o.optDouble("due") else o.optDouble("dueAmount", 0.0)
                     val totalPurchased = if (o.has("totalPurchased")) o.optDouble("totalPurchased") else if (o.has("total_purchased")) o.optDouble("total_purchased") else if (o.has("total_buy")) o.optDouble("total_buy") else o.optDouble("totalPurchase", 0.0)
-                    val image = o.optString("imageUri").ifBlank { o.optString("image_uri", "") }
+                    val cImageRaw = o.optString("imageUri").ifBlank { o.optString("image_uri", "") }
+                    val cImageB64 = o.optString("imageBase64").ifBlank { if (cImageRaw.startsWith("data:image/")) cImageRaw else "" }
+                    val finalCImage = if (context != null && cImageB64.isNotBlank()) {
+                        ImageStorageHelper.base64ToLocalImageUri(context, cImageB64, "cust") ?: cImageRaw
+                    } else {
+                        cImageRaw
+                    }
                     val lastTx = if (o.has("lastTransactionDate")) o.optLong("lastTransactionDate") else if (o.has("last_transaction_date")) o.optLong("last_transaction_date") else o.optLong("timestamp", System.currentTimeMillis())
 
                     customers.add(
@@ -1169,7 +1196,7 @@ class ShopRepository(private val database: AppDatabase) {
                             address = address,
                             totalDue = round2(totalDue),
                             totalPurchased = round2(totalPurchased),
-                            imageUri = image,
+                            imageUri = finalCImage,
                             lastTransactionDate = lastTx
                         )
                     )
