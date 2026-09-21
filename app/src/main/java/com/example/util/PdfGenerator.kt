@@ -2882,7 +2882,11 @@ object PdfGenerator {
         supplierName: String = "",
         note: String = "",
         items: List<ReorderItem>,
-        currency: String = "৳"
+        currency: String = "৳",
+        showCurrentStock: Boolean = false,
+        showBuyPrice: Boolean = true,
+        showBarcode: Boolean = true,
+        showCategory: Boolean = true
     ): File? {
         val pdfDocument = PdfDocument()
         var pageNumber = 1
@@ -3007,26 +3011,34 @@ object PdfGenerator {
 
             if (drawSummaryBox) {
                 y += 14f
-                val boxWidth = 255f
                 val boxHeight = 36f
-
-                // Order Count Card
-                val b1 = Paint().apply { color = Color.rgb(255, 251, 235); style = Paint.Style.FILL }
-                canvas.drawRoundRect(RectF(34f, y, 34f + boxWidth, y + boxHeight), 5f, 5f, b1)
-                canvas.drawRoundRect(RectF(34f, y, 34f + boxWidth, y + boxHeight), 5f, 5f, linePaint)
                 val cardLbl = Paint().apply { isAntiAlias = true; textSize = 8.5f; color = Color.rgb(100, 116, 139) }
-                canvas.drawText("মোট অর্ডার তালিকা", 44f, y + 14f, cardLbl)
                 val darkBold = Paint().apply { isAntiAlias = true; textSize = 11f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); color = Color.rgb(15, 23, 42) }
-                canvas.drawText("${sortedItems.size} টি পণ্য (${totalPcs.toIntOrNull() ?: totalPcs} পিছ)", 44f, y + 28f, darkBold)
+                val b1 = Paint().apply { color = Color.rgb(255, 251, 235); style = Paint.Style.FILL }
 
-                // Total Cost Card
-                val b2 = Paint().apply { color = Color.rgb(254, 243, 199); style = Paint.Style.FILL }
-                canvas.drawRoundRect(RectF(306f, y, 561f, y + boxHeight), 5f, 5f, b2)
-                canvas.drawRoundRect(RectF(306f, y, 561f, y + boxHeight), 5f, 5f, linePaint)
-                canvas.drawText("আনুমানিক মোট প্রদেয় বিল", 316f, y + 14f, cardLbl)
-                val amberBold = Paint().apply { isAntiAlias = true; textSize = 11.5f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); color = Color.rgb(180, 83, 9) }
-                val totalCostStr = if (totalCost % 1.0 == 0.0) totalCost.toInt().toString() else "%.2f".format(totalCost)
-                canvas.drawText("$currency$totalCostStr", 316f, y + 28f, amberBold)
+                if (showBuyPrice) {
+                    val boxWidth = 255f
+                    // Order Count Card
+                    canvas.drawRoundRect(RectF(34f, y, 34f + boxWidth, y + boxHeight), 5f, 5f, b1)
+                    canvas.drawRoundRect(RectF(34f, y, 34f + boxWidth, y + boxHeight), 5f, 5f, linePaint)
+                    canvas.drawText("মোট অর্ডার তালিকা", 44f, y + 14f, cardLbl)
+                    canvas.drawText("${sortedItems.size} টি পণ্য (${totalPcs.toIntOrNull() ?: totalPcs} পিছ)", 44f, y + 28f, darkBold)
+
+                    // Total Cost Card
+                    val b2 = Paint().apply { color = Color.rgb(254, 243, 199); style = Paint.Style.FILL }
+                    canvas.drawRoundRect(RectF(306f, y, 561f, y + boxHeight), 5f, 5f, b2)
+                    canvas.drawRoundRect(RectF(306f, y, 561f, y + boxHeight), 5f, 5f, linePaint)
+                    canvas.drawText("আনুমানিক মোট প্রদেয় বিল", 316f, y + 14f, cardLbl)
+                    val amberBold = Paint().apply { isAntiAlias = true; textSize = 11.5f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); color = Color.rgb(180, 83, 9) }
+                    val totalCostStr = if (totalCost % 1.0 == 0.0) totalCost.toInt().toString() else "%.2f".format(totalCost)
+                    canvas.drawText("$currency$totalCostStr", 316f, y + 28f, amberBold)
+                } else {
+                    // Full width Order Count Card
+                    canvas.drawRoundRect(RectF(34f, y, 561f, y + boxHeight), 5f, 5f, b1)
+                    canvas.drawRoundRect(RectF(34f, y, 561f, y + boxHeight), 5f, 5f, linePaint)
+                    canvas.drawText("মোট অর্ডার তালিকা (কোম্পানি ডেলিভারি চালান)", 44f, y + 14f, cardLbl)
+                    canvas.drawText("${sortedItems.size} টি পণ্য | সর্বমোট: ${totalPcs.toIntOrNull() ?: totalPcs} পিছ", 44f, y + 28f, darkBold)
+                }
 
                 if (note.isNotBlank()) {
                     y += 42f
@@ -3045,12 +3057,30 @@ object PdfGenerator {
             val headerBg = Paint().apply { color = Color.rgb(30, 41, 59); style = Paint.Style.FILL }
             canvas.drawRoundRect(RectF(34f, startY - 13f, 561f, startY + 10f), 4f, 4f, headerBg)
             canvas.drawText("#", 45f, startY, centerHeaderPaint)
-            canvas.drawText("পণ্যের নাম ও বিবরণ", 65f, startY, leftHeaderPaint)
-            canvas.drawText("ক্যাটাগরি", 240f, startY, leftHeaderPaint)
-            canvas.drawText("বর্তমান স্টক", 345f, startY, rightHeaderPaint)
-            canvas.drawText("অর্ডার পরিমাণ", 430f, startY, rightHeaderPaint)
-            canvas.drawText("দর ($currency)", 495f, startY, rightHeaderPaint)
-            canvas.drawText("মোট ($currency)", 553f, startY, rightHeaderPaint)
+
+            if (showCurrentStock && showBuyPrice) {
+                canvas.drawText("পণ্যের নাম ও বিবরণ", 65f, startY, leftHeaderPaint)
+                if (showCategory) canvas.drawText("ক্যাটাগরি", 240f, startY, leftHeaderPaint)
+                canvas.drawText("বর্তমান স্টক", 345f, startY, rightHeaderPaint)
+                canvas.drawText("অর্ডার পরিমাণ", 430f, startY, rightHeaderPaint)
+                canvas.drawText("দর ($currency)", 495f, startY, rightHeaderPaint)
+                canvas.drawText("মোট ($currency)", 553f, startY, rightHeaderPaint)
+            } else if (!showCurrentStock && showBuyPrice) {
+                canvas.drawText("পণ্যের নাম ও কোড", 65f, startY, leftHeaderPaint)
+                if (showCategory) canvas.drawText("ক্যাটাগরি", 280f, startY, leftHeaderPaint)
+                canvas.drawText("অর্ডার পরিমাণ", 410f, startY, rightHeaderPaint)
+                canvas.drawText("দর ($currency)", 485f, startY, rightHeaderPaint)
+                canvas.drawText("মোট ($currency)", 553f, startY, rightHeaderPaint)
+            } else if (!showCurrentStock && !showBuyPrice) {
+                canvas.drawText("পণ্যের নাম ও বিবরণ", 65f, startY, leftHeaderPaint)
+                if (showCategory) canvas.drawText("ক্যাটাগরি", 380f, startY, leftHeaderPaint)
+                canvas.drawText("অর্ডার পরিমাণ", 553f, startY, rightHeaderPaint)
+            } else { // showCurrentStock && !showBuyPrice
+                canvas.drawText("পণ্যের নাম ও বিবরণ", 65f, startY, leftHeaderPaint)
+                if (showCategory) canvas.drawText("ক্যাটাগরি", 300f, startY, leftHeaderPaint)
+                canvas.drawText("বর্তমান স্টক", 430f, startY, rightHeaderPaint)
+                canvas.drawText("অর্ডার পরিমাণ", 553f, startY, rightHeaderPaint)
+            }
             return startY + 24f
         }
 
@@ -3083,7 +3113,7 @@ object PdfGenerator {
             val itemCat = item.product.category.trim().ifBlank { "অন্যান্য" }
 
             // When category changes, draw a dedicated category group section header
-            if (itemCat != currentCategory) {
+            if (showCategory && itemCat != currentCategory) {
                 currentCategory = itemCat
 
                 // Check if page break needed for category header + first item
@@ -3124,11 +3154,13 @@ object PdfGenerator {
                 y = drawTableHeader(y)
 
                 // Category continuation banner
-                canvas.drawRoundRect(RectF(34f, y - 11f, 561f, y + 8f), 3f, 3f, catHeaderBg)
-                canvas.drawRoundRect(RectF(34f, y - 11f, 561f, y + 8f), 3f, 3f, catHeaderBorder)
-                canvas.drawRect(RectF(34f, y - 11f, 38f, y + 8f), catAccent)
-                canvas.drawText("📁 ক্যাটাগরি: $itemCat (চলমান)", 44f, y, catTitlePaint)
-                y += 21f
+                if (showCategory) {
+                    canvas.drawRoundRect(RectF(34f, y - 11f, 561f, y + 8f), 3f, 3f, catHeaderBg)
+                    canvas.drawRoundRect(RectF(34f, y - 11f, 561f, y + 8f), 3f, 3f, catHeaderBorder)
+                    canvas.drawRect(RectF(34f, y - 11f, 38f, y + 8f), catAccent)
+                    canvas.drawText("📁 ক্যাটাগরি: $itemCat (চলমান)", 44f, y, catTitlePaint)
+                    y += 21f
+                }
             }
 
             if (index % 2 == 1) {
@@ -3139,18 +3171,37 @@ object PdfGenerator {
             val p = item.product
             val itemTotal = item.orderQuantity * item.unitPrice
             canvas.drawText("${index + 1}", 45f, y, centerTextPaint)
-            val nameStr = if (p.name.length > 24) p.name.take(22) + ".." else p.name
+
+            val codeStr = if (showBarcode && p.barcode.isNotBlank()) " [${p.barcode}]" else ""
+            val fullDisplayName = "${p.name}$codeStr"
+            val maxLen = if (!showCurrentStock && !showBuyPrice) 42 else if (!showCurrentStock) 28 else 22
+            val nameStr = if (fullDisplayName.length > maxLen) fullDisplayName.take(maxLen - 2) + ".." else fullDisplayName
             canvas.drawText(nameStr, 65f, y, boldPaint)
+
             val catStr = if (p.category.length > 15) p.category.take(13) + ".." else p.category
-            canvas.drawText(catStr, 240f, y, textPaint)
-            canvas.drawText("${p.stockQuantity.toIntOrNull() ?: p.stockQuantity} ${p.unit}", 345f, y, rightTextPaint)
-
             val orderQtyStr = "${item.orderQuantity.toIntOrNull() ?: item.orderQuantity} ${p.unit}"
-            canvas.drawText(orderQtyStr, 430f, y, rightBoldPaint)
 
-            canvas.drawText("${item.unitPrice.toIntOrNull() ?: item.unitPrice}", 495f, y, rightTextPaint)
-            val itemTotalStr = if (itemTotal % 1.0 == 0.0) itemTotal.toInt().toString() else "%.1f".format(itemTotal)
-            canvas.drawText(itemTotalStr, 553f, y, rightBoldPaint)
+            if (showCurrentStock && showBuyPrice) {
+                if (showCategory) canvas.drawText(catStr, 240f, y, textPaint)
+                canvas.drawText("${p.stockQuantity.toIntOrNull() ?: p.stockQuantity} ${p.unit}", 345f, y, rightTextPaint)
+                canvas.drawText(orderQtyStr, 430f, y, rightBoldPaint)
+                canvas.drawText("${item.unitPrice.toIntOrNull() ?: item.unitPrice}", 495f, y, rightTextPaint)
+                val itemTotalStr = if (itemTotal % 1.0 == 0.0) itemTotal.toInt().toString() else "%.1f".format(itemTotal)
+                canvas.drawText(itemTotalStr, 553f, y, rightBoldPaint)
+            } else if (!showCurrentStock && showBuyPrice) {
+                if (showCategory) canvas.drawText(catStr, 280f, y, textPaint)
+                canvas.drawText(orderQtyStr, 410f, y, rightBoldPaint)
+                canvas.drawText("${item.unitPrice.toIntOrNull() ?: item.unitPrice}", 485f, y, rightTextPaint)
+                val itemTotalStr = if (itemTotal % 1.0 == 0.0) itemTotal.toInt().toString() else "%.1f".format(itemTotal)
+                canvas.drawText(itemTotalStr, 553f, y, rightBoldPaint)
+            } else if (!showCurrentStock && !showBuyPrice) {
+                if (showCategory) canvas.drawText(catStr, 380f, y, textPaint)
+                canvas.drawText(orderQtyStr, 553f, y, rightBoldPaint)
+            } else { // showCurrentStock && !showBuyPrice
+                if (showCategory) canvas.drawText(catStr, 300f, y, textPaint)
+                canvas.drawText("${p.stockQuantity.toIntOrNull() ?: p.stockQuantity} ${p.unit}", 430f, y, rightTextPaint)
+                canvas.drawText(orderQtyStr, 553f, y, rightBoldPaint)
+            }
 
             y += 22f
         }
@@ -3174,9 +3225,13 @@ object PdfGenerator {
         canvas.drawLine(34f, y - 8f, 561f, y - 8f, doubleLine)
         canvas.drawLine(34f, y + 14f, 561f, y + 14f, doubleLine)
 
-        val totalCostStr = if (totalCost % 1.0 == 0.0) totalCost.toInt().toString() else "%.2f".format(totalCost)
-        canvas.drawText("সর্বমোট অর্ডার: ${totalPcs.toIntOrNull() ?: totalPcs} পিছ (${sortedItems.size} পণ্য)", 65f, y + 5f, boldPaint)
-        canvas.drawText("মোট প্রদেয় বিল: $currency$totalCostStr", 553f, y + 5f, rightBoldPaint)
+        if (showBuyPrice) {
+            val totalCostStr = if (totalCost % 1.0 == 0.0) totalCost.toInt().toString() else "%.2f".format(totalCost)
+            canvas.drawText("সর্বমোট অর্ডার: ${totalPcs.toIntOrNull() ?: totalPcs} পিছ (${sortedItems.size} পণ্য)", 65f, y + 5f, boldPaint)
+            canvas.drawText("মোট প্রদেয় বিল: $currency$totalCostStr", 553f, y + 5f, rightBoldPaint)
+        } else {
+            canvas.drawText("সর্বমোট অর্ডার: ${totalPcs.toIntOrNull() ?: totalPcs} পিছ (${sortedItems.size} টি পণ্য)", 65f, y + 5f, boldPaint)
+        }
         y += 24f
 
         // Signatures Block

@@ -3,6 +3,7 @@ package com.example.ui.screens
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -151,6 +152,32 @@ fun LowStockOrderDialog(
     var itemToEditPrice by remember { mutableStateOf<ReorderItem?>(null) }
     var showWaitingSavedDialog by remember { mutableStateOf(false) }
 
+    // Company Order Visibility & Customization Options (Persisted in SharedPreferences)
+    val orderViewPrefs = remember(context) {
+        context.getSharedPreferences("company_order_view_prefs", android.content.Context.MODE_PRIVATE)
+    }
+
+    var showCurrentStock by remember {
+        mutableStateOf(orderViewPrefs.getBoolean("show_current_stock", false)) // Default false as requested by user!
+    }
+    var showBuyPrice by remember {
+        mutableStateOf(orderViewPrefs.getBoolean("show_buy_price", true))
+    }
+    var showBarcode by remember {
+        mutableStateOf(orderViewPrefs.getBoolean("show_barcode", true))
+    }
+    var showCategoryInOrder by remember {
+        mutableStateOf(orderViewPrefs.getBoolean("show_category_order", true))
+    }
+    var showShopPhoneInOrder by remember {
+        mutableStateOf(orderViewPrefs.getBoolean("show_shop_phone_order", true))
+    }
+    var showCompanyViewOptionsDialog by remember { mutableStateOf(false) }
+
+    fun saveOrderViewPreference(key: String, value: Boolean) {
+        orderViewPrefs.edit().putBoolean(key, value).apply()
+    }
+
     // Strictly restrict active order items to the currently displayed/selected categories, sorted by category
     val activeSelectedItems = remember(displayedItems, selectedProductIds) {
         displayedItems
@@ -172,10 +199,10 @@ fun LowStockOrderDialog(
         val sb = StringBuilder()
         sb.append("🛒 *পণ্য অর্ডার তালিকা (Purchase Order)*\n")
         sb.append("দোকান: $shopName\n")
-        if (shopPhone.isNotBlank()) sb.append("মোবাইল: $shopPhone\n")
+        if (showShopPhoneInOrder && shopPhone.isNotBlank()) sb.append("মোবাইল: $shopPhone\n")
         sb.append("তারিখ: $dateStr\n")
         if (supplierName.isNotBlank()) sb.append("ডিলার/মহাজন: $supplierName\n")
-        if (selectedCategories.isNotEmpty()) {
+        if (showCategoryInOrder && selectedCategories.isNotEmpty()) {
             sb.append("ক্যাটাগরি: *${selectedCategories.joinToString(", ")}*\n")
         }
         sb.append("----------------------------------------\n")
@@ -184,7 +211,7 @@ fun LowStockOrderDialog(
         activeSelectedItems.forEachIndexed { idx, item ->
             val p = item.product
             val cat = p.category.trim().ifBlank { if (language == "bn") "অন্যান্য" else "Others" }
-            if (cat != lastCategory) {
+            if (showCategoryInOrder && cat != lastCategory) {
                 lastCategory = cat
                 sb.append("\n📁 *[$cat]*\n")
             }
@@ -195,16 +222,24 @@ fun LowStockOrderDialog(
             val buyStr = if (item.unitPrice % 1.0 == 0.0) item.unitPrice.toInt().toString() else item.unitPrice.toString()
 
             sb.append("${idx + 1}. *${p.name}*\n")
-            if (p.barcode.isNotBlank()) sb.append("   কোড: ${p.barcode}\n")
-            sb.append("   বর্তমান স্টক: $stockStr ${p.unit}\n")
-            sb.append("   অর্ডার পরিমাণ: *$qtyStr ${p.unit}* (দর: $currency$buyStr, মোট: $currency$itemTotalStr)\n")
+            if (showBarcode && p.barcode.isNotBlank()) sb.append("   কোড: ${p.barcode}\n")
+            if (showCurrentStock) {
+                sb.append("   বর্তমান স্টক: $stockStr ${p.unit}\n")
+            }
+            if (showBuyPrice) {
+                sb.append("   অর্ডার পরিমাণ: *$qtyStr ${p.unit}* (দর: $currency$buyStr, মোট: $currency$itemTotalStr)\n")
+            } else {
+                sb.append("   অর্ডার পরিমাণ: *$qtyStr ${p.unit}*\n")
+            }
         }
 
         sb.append("\n----------------------------------------\n")
         val totalPcsStr = if (totalOrderPcs % 1.0 == 0.0) totalOrderPcs.toInt().toString() else "%.1f".format(totalOrderPcs)
         val costStr = if (estimatedTotalCost % 1.0 == 0.0) estimatedTotalCost.toInt().toString() else "%.2f".format(estimatedTotalCost)
         sb.append("মোট পণ্য: $totalSelectedCount টি | মোট অর্ডার: $totalPcsStr পিছ\n")
-        sb.append("আনুমানিক মোট বিল: $currency$costStr\n")
+        if (showBuyPrice) {
+            sb.append("আনুমানিক মোট বিল: $currency$costStr\n")
+        }
         if (orderNote.isNotBlank()) {
             sb.append("বিশেষ দ্রষ্টব্য: $orderNote\n")
         }
@@ -944,7 +979,91 @@ fun LowStockOrderDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Company View & Privacy Customization Strip
+                Surface(
+                    onClick = { showCompanyViewOptionsDialog = true },
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFFF8FAFC),
+                    border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                Icons.Default.Tune,
+                                contentDescription = null,
+                                tint = if (!showCurrentStock) Color(0xFF059669) else Color(0xFFD97706),
+                                modifier = Modifier.size(17.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = if (language == "bn") "কোম্পানি ভিউ অপশন" else "Company View Options",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = if (!showCurrentStock) Color(0xFFD1FAE5) else Color(0xFFFEF3C7)
+                                    ) {
+                                        Text(
+                                            text = if (!showCurrentStock)
+                                                (if (language == "bn") "বর্তমান স্টক গোপন ✓" else "Stock Hidden ✓")
+                                            else
+                                                (if (language == "bn") "স্টক দৃশ্যমান" else "Stock Shown"),
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (!showCurrentStock) Color(0xFF065F46) else Color(0xFF92400E),
+                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = if (!showCurrentStock)
+                                        (if (language == "bn") "মেসেজ ও PDF-এ দোকানের বর্তমান স্টক গোপন থাকবে" else "Current stock hidden in PDF & message")
+                                    else
+                                        (if (language == "bn") "মেসেজ ও PDF-এ দোকানের স্টক প্রদর্শিত হবে" else "Current stock will be shown in order"),
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                        }
+
+                        // Customize Button Chip
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = if (language == "bn") "পরিবর্তন" else "Change",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
 
                 // Action Buttons Row 1: Order PDF & WhatsApp/Share
                 Row(
@@ -964,7 +1083,7 @@ fun LowStockOrderDialog(
                             }
 
                             val pdfNote = buildString {
-                                if (selectedCategories.isNotEmpty()) {
+                                if (showCategoryInOrder && selectedCategories.isNotEmpty()) {
                                     append("ক্যাটাগরি: ${selectedCategories.joinToString(", ")}")
                                 }
                                 if (orderNote.isNotBlank()) {
@@ -976,11 +1095,15 @@ fun LowStockOrderDialog(
                             val pdfFile = PdfGenerator.generateLowStockOrderPdf(
                                 context = context,
                                 shopName = shopName,
-                                shopPhone = shopPhone,
+                                shopPhone = if (showShopPhoneInOrder) shopPhone else "",
                                 supplierName = supplierName,
                                 note = pdfNote,
                                 items = activeSelectedItems,
-                                currency = currency
+                                currency = currency,
+                                showCurrentStock = showCurrentStock,
+                                showBuyPrice = showBuyPrice,
+                                showBarcode = showBarcode,
+                                showCategory = showCategoryInOrder
                             )
 
                             if (pdfFile != null) {
@@ -1494,6 +1617,316 @@ fun LowStockOrderDialog(
                     }
                 ) {
                     Text(if (language == "bn") "ঠিক আছে" else "OK")
+                }
+            }
+        )
+    }
+
+    // Modal dialog to customize what is shown to the company in Order PDF & Message
+    if (showCompanyViewOptionsDialog) {
+        AlertDialog(
+            onDismissRequest = { showCompanyViewOptionsDialog = false },
+            icon = {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Default.Tune,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+                }
+            },
+            title = {
+                Text(
+                    text = if (language == "bn") "কোম্পানিকে যা যা দেখাবেন (সেটিংস)" else "Company View Settings",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp,
+                    textAlign = TextAlign.Center
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = if (language == "bn") 
+                            "অর্ডার করার সময় কোম্পানি বা মহাজনের মেসেজ ও PDF-এ কোন কোন তথ্য প্রদর্শিত হবে তা নিজের সুবিধামত নিয়ন্ত্রণ করুন:"
+                        else 
+                            "Control what information is visible to the supplier in the order message and PDF:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+
+                    // 1. Current Stock (User's primary request)
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (!showCurrentStock) Color(0xFFF0FDF4) else Color(0xFFFFFBEB),
+                        border = BorderStroke(1.dp, if (!showCurrentStock) Color(0xFF86EFAC) else Color(0xFFFDE68A)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Icon(
+                                    imageVector = if (!showCurrentStock) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = null,
+                                    tint = if (!showCurrentStock) Color(0xFF166534) else Color(0xFFB45309),
+                                    modifier = Modifier.size(20.dp).padding(top = 2.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = if (language == "bn") "দোকানের বর্তমান স্টক দেখান" else "Show Current Stock",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = if (!showCurrentStock) Color(0xFF166534) else Color(0xFF92400E)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = if (!showCurrentStock)
+                                            (if (language == "bn") "গোপন আছে (কোম্পানি বর্তমান স্টক জানতে পারবে না) ✓" else "Hidden (supplier won't see current stock) ✓")
+                                        else
+                                            (if (language == "bn") "দৃশ্যমান (কোম্পানি দোকানে কত মাল আছে দেখতে পাবে)" else "Visible (supplier will see current stock)"),
+                                        fontSize = 11.sp,
+                                        color = if (!showCurrentStock) Color(0xFF15803D) else Color(0xFFB45309)
+                                    )
+                                }
+                            }
+                            Switch(
+                                checked = showCurrentStock,
+                                onCheckedChange = {
+                                    showCurrentStock = it
+                                    saveOrderViewPreference("show_current_stock", it)
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color(0xFFD97706),
+                                    checkedTrackColor = Color(0xFFFEF3C7)
+                                )
+                            )
+                        }
+                    }
+
+                    // 2. Buy Price & Total Cost
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Payments,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp).padding(top = 2.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = if (language == "bn") "ক্রয় দর ও আনুমানিক মোট বিল" else "Show Buy Price & Bill",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = if (language == "bn") "পণ্যের রেট এবং সর্বমোট ক্রয় বাজেট দেখাবে" else "Include rates and total order cost",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                            }
+                            Switch(
+                                checked = showBuyPrice,
+                                onCheckedChange = {
+                                    showBuyPrice = it
+                                    saveOrderViewPreference("show_buy_price", it)
+                                }
+                            )
+                        }
+                    }
+
+                    // 3. Barcode / Item Code
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.QrCode,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp).padding(top = 2.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = if (language == "bn") "পণ্যের বারকোড / কোড দেখান" else "Show Barcode / Code",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = if (language == "bn") "কোম্পানির সুবিধার্থে কোড মেসেজ ও PDF-এ থাকবে" else "Include product barcode/code",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                            }
+                            Switch(
+                                checked = showBarcode,
+                                onCheckedChange = {
+                                    showBarcode = it
+                                    saveOrderViewPreference("show_barcode", it)
+                                }
+                            )
+                        }
+                    }
+
+                    // 4. Category Grouping
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Category,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp).padding(top = 2.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = if (language == "bn") "ক্যাটাগরি ভিত্তিক গ্রুপ সাজান" else "Group by Category",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = if (language == "bn") "ক্যাটাগরি অনুযায়ী আলাদা গ্রুপ হেডার থাকবে" else "Group items under category headers",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                            }
+                            Switch(
+                                checked = showCategoryInOrder,
+                                onCheckedChange = {
+                                    showCategoryInOrder = it
+                                    saveOrderViewPreference("show_category_order", it)
+                                }
+                            )
+                        }
+                    }
+
+                    // 5. Shop Phone Number
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Phone,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp).padding(top = 2.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = if (language == "bn") "দোকানের ফোন নম্বর দেখান" else "Show Shop Phone",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = if (language == "bn") "অর্ডার তালিকার হেডারে মোবাইল নম্বর থাকবে" else "Include phone in order header",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                            }
+                            Switch(
+                                checked = showShopPhoneInOrder,
+                                onCheckedChange = {
+                                    showShopPhoneInOrder = it
+                                    saveOrderViewPreference("show_shop_phone_order", it)
+                                }
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showCompanyViewOptionsDialog = false },
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
+                ) {
+                    Text(if (language == "bn") "সংরক্ষণ ও ঠিক আছে" else "Save & Done")
                 }
             }
         )

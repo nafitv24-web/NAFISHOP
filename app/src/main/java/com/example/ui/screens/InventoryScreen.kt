@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.example.data.model.Product
+import com.example.ui.components.BarcodeCaptureDialog
 import com.example.ui.components.ProductImageViewerDialog
 import com.example.ui.components.toIntOrNull
 import com.example.ui.theme.*
@@ -990,6 +991,7 @@ fun AddEditProductDialog(
     var tempCameraUri by remember { mutableStateOf<Uri?>(null) }
     var showPhotoOptionsDialog by remember { mutableStateOf(false) }
     var showLargeImageViewer by remember { mutableStateOf(false) }
+    var showBarcodeScanner by remember { mutableStateOf(false) }
 
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
@@ -1400,23 +1402,86 @@ fun AddEditProductDialog(
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     OutlinedTextField(
                         value = barcode,
                         onValueChange = { barcode = it },
-                        label = { Text(if (language == "bn") "বারকোড/কোড" else "Barcode/Code") },
+                        label = { Text(if (language == "bn") "বারকোড / পণ্য কোড" else "Barcode / Product Code") },
+                        placeholder = { Text(if (language == "bn") "কোড লিখুন বা স্ক্যান করুন" else "Type code or scan") },
+                        trailingIcon = {
+                            if (barcode.isNotBlank()) {
+                                IconButton(onClick = { barcode = "" }, modifier = Modifier.size(36.dp)) {
+                                    Icon(Icons.Default.Clear, contentDescription = "Clear", modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        },
                         singleLine = true,
                         modifier = Modifier.weight(1f)
                     )
-                    IconButton(
+
+                    // Camera Barcode Scanner Button
+                    FilledTonalIconButton(
+                        onClick = { showBarcodeScanner = true },
+                        modifier = Modifier
+                            .padding(top = 6.dp)
+                            .size(48.dp),
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Icon(
+                            Icons.Default.QrCodeScanner,
+                            contentDescription = if (language == "bn") "ক্যামেরায় বারকোড স্ক্যান করুন" else "Scan Barcode with Camera",
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+
+                    // Auto Code Button
+                    FilledTonalIconButton(
                         onClick = { barcode = (10000000..99999999).random().toString() },
                         modifier = Modifier
-                            .padding(top = 8.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .padding(top = 6.dp)
+                            .size(48.dp),
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     ) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = "Auto Code", tint = MaterialTheme.colorScheme.primary)
+                        Icon(
+                            Icons.Default.AutoAwesome,
+                            contentDescription = if (language == "bn") "অটো কোড তৈরি করুন" else "Auto Generate Code",
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
+
+                // Helpful prompt row to scan barcode via camera
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (language == "bn") "💡 লেখার পাশাপাশি ক্যামেরায় স্ক্যান করে বারকোড যুক্ত করতে পারেন" else "💡 Type or scan barcode using camera",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                    TextButton(
+                        onClick = { showBarcodeScanner = true },
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                    ) {
+                        Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (language == "bn") "স্ক্যান করুন" else "Scan Now",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
 
@@ -1664,6 +1729,24 @@ fun AddEditProductDialog(
             currency = currency,
             language = language,
             onDismiss = { showLargeImageViewer = false }
+        )
+    }
+
+    // Camera Barcode Scanner Dialog
+    if (showBarcodeScanner) {
+        BarcodeCaptureDialog(
+            title = if (language == "bn") "পণ্য বারকোড স্ক্যানার" else "Product Barcode Scanner",
+            language = language,
+            onBarcodeCaptured = { scannedCode ->
+                barcode = scannedCode
+                showBarcodeScanner = false
+                Toast.makeText(
+                    context,
+                    if (language == "bn") "বারকোড স্ক্যান সফল: $scannedCode" else "Barcode scanned: $scannedCode",
+                    Toast.LENGTH_SHORT
+                ).show()
+            },
+            onDismiss = { showBarcodeScanner = false }
         )
     }
 }
