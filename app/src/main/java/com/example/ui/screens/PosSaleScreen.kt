@@ -82,6 +82,34 @@ fun PosSaleScreen(
         }
     }
 
+    val speechSearchLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val spoken = result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+            if (!spoken.isNullOrBlank()) {
+                searchQuery = spoken
+            }
+        }
+    }
+
+    fun launchVoiceSearch() {
+        val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(
+                android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+            )
+            putExtra(
+                android.speech.RecognizerIntent.EXTRA_PROMPT,
+                if (language == "bn") "পণ্যের নাম বলুন..." else "Speak product name..."
+            )
+        }
+        try {
+            speechSearchLauncher.launch(intent)
+        } catch (_: Exception) {
+        }
+    }
+
     fun openCameraScanner() {
         val hasPermission = ContextCompat.checkSelfPermission(
             context,
@@ -95,7 +123,10 @@ fun PosSaleScreen(
     }
 
     val categories = remember(customCategories, language) {
-        listOf(if (language == "bn") "সব" else "All") + customCategories
+        listOf(
+            if (language == "bn") "সব" else "All",
+            if (language == "bn") "বারকোড ছাড়া" else "No Barcode"
+        ) + customCategories
     }
 
     val filteredProducts = remember(products, searchQuery, selectedCategory) {
@@ -103,7 +134,11 @@ fun PosSaleScreen(
             val matchQuery = searchQuery.isBlank() ||
                     p.name.contains(searchQuery, ignoreCase = true) ||
                     p.barcode.contains(searchQuery, ignoreCase = true)
-            val matchCat = selectedCategory == "সব" || p.category == selectedCategory
+            val matchCat = when (selectedCategory) {
+                "সব", "All" -> true
+                "বারকোড ছাড়া", "No Barcode" -> p.barcode.isBlank()
+                else -> p.category == selectedCategory
+            }
             matchQuery && matchCat
         }
     }
@@ -138,17 +173,26 @@ fun PosSaleScreen(
                             placeholder = { Text(if (language == "bn") "পণ্য খুঁজুন বা সিলেক্ট করুন..." else "Search product to add...") },
                             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                             trailingIcon = {
-                                if (searchQuery.isNotEmpty()) {
-                                    IconButton(onClick = { searchQuery = "" }) {
-                                        Icon(Icons.Default.Clear, contentDescription = null)
-                                    }
-                                } else {
-                                    IconButton(onClick = { openCameraScanner() }) {
-                                        Icon(
-                                            Icons.Default.QrCodeScanner,
-                                            contentDescription = "Camera Scanner",
-                                            tint = EmeraldPrimary
-                                        )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (searchQuery.isNotEmpty()) {
+                                        IconButton(onClick = { searchQuery = "" }) {
+                                            Icon(Icons.Default.Clear, contentDescription = null)
+                                        }
+                                    } else {
+                                        IconButton(onClick = { launchVoiceSearch() }) {
+                                            Icon(
+                                                Icons.Default.Mic,
+                                                contentDescription = "Voice Search",
+                                                tint = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                        IconButton(onClick = { openCameraScanner() }) {
+                                            Icon(
+                                                Icons.Default.QrCodeScanner,
+                                                contentDescription = "Camera Scanner",
+                                                tint = EmeraldPrimary
+                                            )
+                                        }
                                     }
                                 }
                             },
