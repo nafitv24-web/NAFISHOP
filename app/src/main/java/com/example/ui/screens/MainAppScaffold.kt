@@ -86,93 +86,95 @@ fun MainAppScaffold(
 
     Scaffold(
         topBar = {
-            Column {
-                TopAppBar(
-                    title = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            NafiShopSmallLogo(size = 36.dp)
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = if (language == "bn") currentScreen.bnTitle else currentScreen.enTitle,
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = shopInfo.shopName,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    },
-                    actions = {
-                        // Dark / Light Mode Toggle Button
-                        IconButton(onClick = { viewModel.toggleDarkMode() }) {
-                            Icon(
-                                imageVector = if (themeMode == "DARK") Icons.Default.LightMode else Icons.Default.DarkMode,
-                                contentDescription = "Toggle Dark/Light Mode",
-                                tint = if (themeMode == "DARK") AmberTertiary else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        // News / Notice action icon
-                        IconButton(onClick = {
-                            if (activeNotice != null) {
-                                showNoticeDetailsDialog = activeNotice
-                            } else {
-                                showAdminPanelFromTop = true
-                            }
-                        }) {
-                            BadgedBox(
-                                badge = {
-                                    if (activeNotice != null && activeNotice!!.isActive) {
-                                        Badge(containerColor = LossRed)
-                                    }
+            if (currentScreen != ShopScreen.ACCOUNTS) {
+                Column {
+                    TopAppBar(
+                        title = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                NafiShopSmallLogo(size = 36.dp)
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = if (language == "bn") currentScreen.bnTitle else currentScreen.enTitle,
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = shopInfo.shopName,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
-                            ) {
+                            }
+                        },
+                        actions = {
+                            // Dark / Light Mode Toggle Button
+                            IconButton(onClick = { viewModel.toggleDarkMode() }) {
                                 Icon(
-                                    Icons.Default.Campaign,
-                                    contentDescription = "News & Notice",
-                                    tint = if (activeNotice != null && activeNotice!!.isActive) LossRed else MaterialTheme.colorScheme.onSurfaceVariant
+                                    imageVector = if (themeMode == "DARK") Icons.Default.LightMode else Icons.Default.DarkMode,
+                                    contentDescription = "Toggle Dark/Light Mode",
+                                    tint = if (themeMode == "DARK") AmberTertiary else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                        }
 
-                        if (currentScreen != ShopScreen.POS) {
-                            FilledTonalButton(
-                                onClick = { currentScreen = ShopScreen.POS },
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = EmeraldPrimary.copy(alpha = 0.15f),
-                                    contentColor = EmeraldPrimary
-                                )
-                            ) {
-                                Icon(Icons.Default.AddShoppingCart, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(if (language == "bn") "বিক্রি" else "Sale", fontWeight = FontWeight.Bold)
+                            // News / Notice action icon
+                            IconButton(onClick = {
+                                if (activeNotice != null) {
+                                    showNoticeDetailsDialog = activeNotice
+                                } else {
+                                    showAdminPanelFromTop = true
+                                }
+                            }) {
+                                BadgedBox(
+                                    badge = {
+                                        if (activeNotice != null && activeNotice!!.isActive) {
+                                            Badge(containerColor = LossRed)
+                                        }
+                                    }
+                                ) {
+                                    Icon(
+                                        Icons.Default.Campaign,
+                                        contentDescription = "News & Notice",
+                                        tint = if (activeNotice != null && activeNotice!!.isActive) LossRed else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
-                            Spacer(modifier = Modifier.width(8.dp))
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        titleContentColor = MaterialTheme.colorScheme.onSurface
+
+                            if (currentScreen != ShopScreen.POS) {
+                                FilledTonalButton(
+                                    onClick = { currentScreen = ShopScreen.POS },
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.filledTonalButtonColors(
+                                        containerColor = EmeraldPrimary.copy(alpha = 0.15f),
+                                        contentColor = EmeraldPrimary
+                                    )
+                                ) {
+                                    Icon(Icons.Default.AddShoppingCart, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(if (language == "bn") "বিক্রি" else "Sale", fontWeight = FontWeight.Bold)
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            titleContentColor = MaterialTheme.colorScheme.onSurface
+                        )
                     )
-                )
 
-                // Top Live Breaking News & Notice Ticker Bar
-                NewsNoticeTickerBar(
-                    activeNotice = activeNotice,
-                    language = language,
-                    onNoticeClick = { notice ->
-                        showNoticeDetailsDialog = notice
-                    },
-                    onOpenAdminPanel = {
-                        showAdminPanelFromTop = true
-                    }
-                )
+                    // Top Live Breaking News & Notice Ticker Bar
+                    NewsNoticeTickerBar(
+                        activeNotice = activeNotice,
+                        language = language,
+                        onNoticeClick = { notice ->
+                            showNoticeDetailsDialog = notice
+                        },
+                        onOpenAdminPanel = {
+                            showAdminPanelFromTop = true
+                        }
+                    )
+                }
             }
         },
         bottomBar = {
@@ -190,140 +192,55 @@ fun MainAppScaffold(
                     horizontalArrangement = Arrangement.SpaceAround,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // 1. Dashboard / Home
+                    // 1. হোম (Home)
                     val isHome = currentScreen == ShopScreen.DASHBOARD
-                    IconButton(
-                        onClick = { currentScreen = ShopScreen.DASHBOARD },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = if (isHome) Icons.Default.Home else Icons.Default.Home,
-                                contentDescription = "Home",
-                                tint = if (isHome) EmeraldPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = if (language == "bn") "হোম" else "Home",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 10.sp,
-                                fontWeight = if (isHome) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isHome) EmeraldPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                            )
-                        }
-                    }
+                    TongBottomNavItem(
+                        title = if (language == "bn") "হোম" else "Home",
+                        icon = Icons.Default.Home,
+                        isSelected = isHome,
+                        modifier = Modifier.weight(1f),
+                        onClick = { currentScreen = ShopScreen.DASHBOARD }
+                    )
 
-                    // 2. Accounts / হিসাব
-                    val isAccounts = currentScreen == ShopScreen.ACCOUNTS
-                    IconButton(
-                        onClick = { currentScreen = ShopScreen.ACCOUNTS },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Calculate,
-                                contentDescription = "Accounts",
-                                tint = if (isAccounts) EmeraldPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = if (language == "bn") "হিসাব" else "Accounts",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 10.sp,
-                                fontWeight = if (isAccounts) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isAccounts) EmeraldPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                            )
-                        }
-                    }
+                    // 2. খাতা (Khata / Due & Customer Ledger)
+                    val isKhata = currentScreen == ShopScreen.DUE_KHATA
+                    TongBottomNavItem(
+                        title = if (language == "bn") "খাতা" else "Khata",
+                        icon = Icons.Default.MenuBook,
+                        isSelected = isKhata,
+                        modifier = Modifier.weight(1f),
+                        onClick = { currentScreen = ShopScreen.DUE_KHATA }
+                    )
 
-                    // 3. Center Elevated Quick Sale / Scanner Button (Iconic Circle)
-                    Box(
-                        modifier = Modifier
-                            .weight(1.1f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Surface(
-                            onClick = { currentScreen = ShopScreen.POS },
-                            shape = CircleShape,
-                            color = TealDarkHeader,
-                            shadowElevation = 6.dp,
-                            modifier = Modifier.size(48.dp)
-                        ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier.fillMaxSize()
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.PointOfSale,
-                                    contentDescription = "POS Sale",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                        }
-                    }
+                    // 3. ঋণ (Loan & Expenses)
+                    val isLoan = currentScreen == ShopScreen.EXPENSES
+                    TongBottomNavItem(
+                        title = if (language == "bn") "ঋণ" else "Loan",
+                        icon = Icons.Default.CreditCard,
+                        isSelected = isLoan,
+                        modifier = Modifier.weight(1f),
+                        onClick = { currentScreen = ShopScreen.EXPENSES }
+                    )
 
-                    // 4. Due Khata / বাকি খাতা
-                    val isDue = currentScreen == ShopScreen.DUE_KHATA
-                    IconButton(
-                        onClick = { currentScreen = ShopScreen.DUE_KHATA },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AccountBalanceWallet,
-                                contentDescription = "Due",
-                                tint = if (isDue) EmeraldPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = if (language == "bn") "বাকি খাতা" else "Due",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 10.sp,
-                                fontWeight = if (isDue) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isDue) EmeraldPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                            )
-                        }
-                    }
+                    // 4. ক্যাশবাক্স (Cashbox) - Active Highlight in Screenshot
+                    val isCashbox = currentScreen == ShopScreen.ACCOUNTS
+                    TongBottomNavItem(
+                        title = if (language == "bn") "ক্যাশবাক্স" else "Cashbox",
+                        icon = Icons.Default.PointOfSale,
+                        isSelected = isCashbox,
+                        modifier = Modifier.weight(1f),
+                        onClick = { currentScreen = ShopScreen.ACCOUNTS }
+                    )
 
-                    // 5. Settings & More / মেনু
+                    // 5. সেটিংস (Settings)
                     val isSettings = currentScreen == ShopScreen.SETTINGS
-                    IconButton(
-                        onClick = { currentScreen = ShopScreen.SETTINGS },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Menu,
-                                contentDescription = "Menu",
-                                tint = if (isSettings) EmeraldPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = if (language == "bn") "মেনু" else "More",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 10.sp,
-                                fontWeight = if (isSettings) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isSettings) EmeraldPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                            )
-                        }
-                    }
+                    TongBottomNavItem(
+                        title = if (language == "bn") "সেটিংস" else "Settings",
+                        icon = Icons.Default.Settings,
+                        isSelected = isSettings,
+                        modifier = Modifier.weight(1f),
+                        onClick = { currentScreen = ShopScreen.SETTINGS }
+                    )
                 }
             }
         }
@@ -356,10 +273,11 @@ fun MainAppScaffold(
                     )
                 }
                 ShopScreen.ACCOUNTS -> {
-                    AccountsScreen(
+                    CashboxTongScreen(
                         viewModel = viewModel,
                         onNavigateToDue = { currentScreen = ShopScreen.DUE_KHATA },
-                        onNavigateToPos = { currentScreen = ShopScreen.POS }
+                        onNavigateToPos = { currentScreen = ShopScreen.POS },
+                        onNavigateToReports = { currentScreen = ShopScreen.REPORTS }
                     )
                 }
                 ShopScreen.INVENTORY -> {
@@ -493,3 +411,49 @@ fun MainAppScaffold(
         )
     }
 }
+
+@Composable
+private fun TongBottomNavItem(
+    title: String,
+    icon: ImageVector,
+    isSelected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = modifier
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = if (isSelected) Color(0xFFFCE7F3) else Color.Transparent,
+                modifier = Modifier.padding(horizontal = 4.dp)
+            ) {
+                Box(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 3.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = title,
+                        tint = if (isSelected) TongRedPrimary else Color(0xFF64748B),
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 10.sp,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                color = if (isSelected) TongRedPrimary else Color(0xFF64748B)
+            )
+        }
+    }
+}
+
