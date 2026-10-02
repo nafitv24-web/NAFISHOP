@@ -21,7 +21,6 @@ class MainActivity : ComponentActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-    handleIntent(intent)
     enableEdgeToEdge()
     setContent {
       val themeMode by viewModel.themeMode.collectAsState()
@@ -37,19 +36,6 @@ class MainActivity : ComponentActivity() {
           MainAppScaffold(viewModel = viewModel)
         }
       }
-    }
-  }
-
-  override fun onNewIntent(intent: android.content.Intent) {
-    super.onNewIntent(intent)
-    setIntent(intent)
-    handleIntent(intent)
-  }
-
-  private fun handleIntent(intent: android.content.Intent?) {
-    if (intent?.getStringExtra("NAV_SCREEN") == "INVENTORY") {
-      val tab = intent.getIntExtra("INVENTORY_TAB", 1)
-      viewModel.navigateToScreen(com.example.ui.screens.ShopScreen.INVENTORY, tab)
     }
   }
 }

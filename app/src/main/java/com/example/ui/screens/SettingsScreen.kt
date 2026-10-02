@@ -9,7 +9,6 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -40,8 +39,6 @@ import com.example.ui.components.NafiShopFullBrandCard
 import com.example.ui.components.NafiShopLogoBadge
 import com.example.ui.components.NafiShopSmallLogo
 import com.example.ui.components.PermissionHelper
-import com.example.ui.components.StockAlertSettingsDialog
-import com.example.util.StockNotificationHelper
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.ShopViewModel
 import kotlinx.coroutines.launch
@@ -65,10 +62,7 @@ fun SettingsScreen(
     val appUpdateInfo by viewModel.appUpdateInfo.collectAsState()
     val isUpdateAvailable by viewModel.isUpdateAvailable.collectAsState()
     val activeNotice by viewModel.activeNotice.collectAsState()
-    val defaultMinStockThreshold by viewModel.defaultMinStockThreshold.collectAsState()
-    val isLowStockNotificationEnabled by viewModel.isLowStockNotificationEnabled.collectAsState()
 
-    var showStockAlertSettingsDialog by remember { mutableStateOf(false) }
     var showAdminPanelDialog by remember { mutableStateOf(false) }
     var showAppUpdateDialog by remember { mutableStateOf(false) }
     var showNoticeDialog by remember { mutableStateOf(false) }
@@ -405,115 +399,6 @@ fun SettingsScreen(
                             fontWeight = FontWeight.ExtraBold,
                             color = MaterialTheme.colorScheme.primary
                         )
-                    }
-                }
-            }
-        }
-
-        // 2.5 Stock Alerts & Automated Push Notifications
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.5f))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = Color(0xFFFEF3C7),
-                                modifier = Modifier.size(38.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        Icons.Default.NotificationsActive,
-                                        contentDescription = null,
-                                        tint = Color(0xFFD97706),
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text(
-                                    text = if (language == "bn") "স্টক সতর্কীকরণ ও নোটিফিকেশন" else "Stock Alerts & Notifications",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = if (language == "bn") "ডিফল্ট সীমা: ${if (defaultMinStockThreshold % 1.0 == 0.0) defaultMinStockThreshold.toInt() else defaultMinStockThreshold} টি" else "Default Threshold: ${if (defaultMinStockThreshold % 1.0 == 0.0) defaultMinStockThreshold.toInt() else defaultMinStockThreshold} items",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color(0xFFB45309)
-                                )
-                            }
-                        }
-
-                        Switch(
-                            checked = isLowStockNotificationEnabled,
-                            onCheckedChange = { enabled ->
-                                viewModel.setLowStockNotificationEnabled(enabled)
-                                if (enabled) {
-                                    StockNotificationHelper.createNotificationChannel(context)
-                                    viewModel.checkAndTriggerLowStockNotifications()
-                                }
-                            }
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Text(
-                        text = if (language == "bn")
-                            "পণ্যের স্টক নির্ধারিত সংখ্যার নিচে নেমে গেলে অ্যাপে তাৎক্ষণিক ওয়ার্নিং এবং ডিভাইসে পুশ নোটিফিকেশন পাঠাবে।"
-                        else
-                            "Automated push alerts and indicators trigger when product quantity drops below minimum threshold.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        FilledTonalButton(
-                            onClick = { showStockAlertSettingsDialog = true },
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.filledTonalButtonColors(
-                                containerColor = Color(0xFFFEF3C7),
-                                contentColor = Color(0xFF92400E)
-                            )
-                        ) {
-                            Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(if (language == "bn") "সীমা পরিবর্তন" else "Change Limits", fontWeight = FontWeight.Bold)
-                        }
-
-                        OutlinedButton(
-                            onClick = {
-                                viewModel.checkAndTriggerLowStockNotifications()
-                                Toast.makeText(
-                                    context,
-                                    if (language == "bn") "স্টক অ্যালার্ট চেক সম্পন্ন হয়েছে!" else "Stock alerts checked!",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            },
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(if (language == "bn") "এখনই চেক করুন" else "Check Now", fontWeight = FontWeight.Bold)
-                        }
                     }
                 }
             }
@@ -1685,26 +1570,6 @@ fun SettingsScreen(
             onDismiss = { showPermissionDialog = false },
             onPermissionsResult = { granted ->
                 showPermissionDialog = false
-            }
-        )
-    }
-
-    // Low Stock Alert & User-defined Threshold Dialog
-    if (showStockAlertSettingsDialog) {
-        StockAlertSettingsDialog(
-            currentThreshold = defaultMinStockThreshold,
-            isNotificationEnabled = isLowStockNotificationEnabled,
-            language = language,
-            onDismiss = { showStockAlertSettingsDialog = false },
-            onSave = { newLimit, enableNotif, applyAll ->
-                viewModel.setLowStockNotificationEnabled(enableNotif)
-                viewModel.setDefaultMinStockThreshold(newLimit, applyAll)
-                showStockAlertSettingsDialog = false
-                Toast.makeText(
-                    context,
-                    if (language == "bn") "স্টক সতর্কীকরণ সীমা সফলভাবে সংরক্ষণ হয়েছে!" else "Stock threshold saved!",
-                    Toast.LENGTH_SHORT
-                ).show()
             }
         )
     }

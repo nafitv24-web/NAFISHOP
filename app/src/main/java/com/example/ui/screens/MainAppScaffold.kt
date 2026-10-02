@@ -1,8 +1,6 @@
 package com.example.ui.screens
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -61,9 +59,7 @@ fun MainAppScaffold(
         return
     }
 
-    val currentScreen by viewModel.currentScreen.collectAsState()
-    val lowStockProducts by viewModel.lowStockProducts.collectAsState()
-    val lowStockAlertNotice by viewModel.lowStockAlertNotice.collectAsState()
+    var currentScreen by remember { mutableStateOf(ShopScreen.DASHBOARD) }
     val language by viewModel.language.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
     val shopInfo by viewModel.shopInfo.collectAsState()
@@ -86,11 +82,6 @@ fun MainAppScaffold(
     val context = LocalContext.current
     var showPermissionDialog by remember {
         mutableStateOf(!PermissionHelper.areAllPermissionsGranted(context))
-    }
-
-    // Handle system back gesture to return to Dashboard if on a sub-screen
-    BackHandler(enabled = currentScreen != ShopScreen.DASHBOARD) {
-        viewModel.navigateToScreen(ShopScreen.DASHBOARD)
     }
 
     Scaffold(
@@ -150,7 +141,7 @@ fun MainAppScaffold(
 
                         if (currentScreen != ShopScreen.POS) {
                             FilledTonalButton(
-                                onClick = { viewModel.navigateToScreen(ShopScreen.POS) },
+                                onClick = { currentScreen = ShopScreen.POS },
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                                 shape = RoundedCornerShape(8.dp),
                                 colors = ButtonDefaults.filledTonalButtonColors(
@@ -202,7 +193,7 @@ fun MainAppScaffold(
                     // 1. Dashboard / Home
                     val isHome = currentScreen == ShopScreen.DASHBOARD
                     IconButton(
-                        onClick = { viewModel.navigateToScreen(ShopScreen.DASHBOARD) },
+                        onClick = { currentScreen = ShopScreen.DASHBOARD },
                         modifier = Modifier.weight(1f)
                     ) {
                         Column(
@@ -210,7 +201,7 @@ fun MainAppScaffold(
                             verticalArrangement = Arrangement.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Home,
+                                imageVector = if (isHome) Icons.Default.Home else Icons.Default.Home,
                                 contentDescription = "Home",
                                 tint = if (isHome) EmeraldPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                 modifier = Modifier.size(24.dp)
@@ -229,7 +220,7 @@ fun MainAppScaffold(
                     // 2. Accounts / হিসাব
                     val isAccounts = currentScreen == ShopScreen.ACCOUNTS
                     IconButton(
-                        onClick = { viewModel.navigateToScreen(ShopScreen.ACCOUNTS) },
+                        onClick = { currentScreen = ShopScreen.ACCOUNTS },
                         modifier = Modifier.weight(1f)
                     ) {
                         Column(
@@ -260,7 +251,7 @@ fun MainAppScaffold(
                         contentAlignment = Alignment.Center
                     ) {
                         Surface(
-                            onClick = { viewModel.navigateToScreen(ShopScreen.POS) },
+                            onClick = { currentScreen = ShopScreen.POS },
                             shape = CircleShape,
                             color = TealDarkHeader,
                             shadowElevation = 6.dp,
@@ -283,7 +274,7 @@ fun MainAppScaffold(
                     // 4. Due Khata / বাকি খাতা
                     val isDue = currentScreen == ShopScreen.DUE_KHATA
                     IconButton(
-                        onClick = { viewModel.navigateToScreen(ShopScreen.DUE_KHATA) },
+                        onClick = { currentScreen = ShopScreen.DUE_KHATA },
                         modifier = Modifier.weight(1f)
                     ) {
                         Column(
@@ -310,30 +301,19 @@ fun MainAppScaffold(
                     // 5. Settings & More / মেনু
                     val isSettings = currentScreen == ShopScreen.SETTINGS
                     IconButton(
-                        onClick = { viewModel.navigateToScreen(ShopScreen.SETTINGS) },
+                        onClick = { currentScreen = ShopScreen.SETTINGS },
                         modifier = Modifier.weight(1f)
                     ) {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center
                         ) {
-                            Box {
-                                Icon(
-                                    imageVector = Icons.Default.Menu,
-                                    contentDescription = "Menu",
-                                    tint = if (isSettings) EmeraldPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                    modifier = Modifier.size(24.dp)
-                                )
-                                if (lowStockProducts.isNotEmpty()) {
-                                    Surface(
-                                        shape = CircleShape,
-                                        color = Color(0xFFEF4444),
-                                        modifier = Modifier
-                                            .align(Alignment.TopEnd)
-                                            .size(9.dp)
-                                    ) {}
-                                }
-                            }
+                            Icon(
+                                imageVector = Icons.Default.Menu,
+                                contentDescription = "Menu",
+                                tint = if (isSettings) EmeraldPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                modifier = Modifier.size(24.dp)
+                            )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = if (language == "bn") "মেনু" else "More",
@@ -348,133 +328,67 @@ fun MainAppScaffold(
             }
         }
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Live Low Stock Notification Banner (স্বয়ংক্রিয় কম স্টক সতর্কবার্তা)
-            AnimatedVisibility(
-                visible = lowStockAlertNotice != null,
-                enter = slideInVertically() + fadeIn(),
-                exit = slideOutVertically() + fadeOut()
-            ) {
-                lowStockAlertNotice?.let { notice ->
-                    Surface(
-                        color = Color(0xFFFEF3C7),
-                        contentColor = Color(0xFF92400E),
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, Color(0xFFF59E0B)),
-                        shadowElevation = 3.dp,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Default.WarningAmber,
-                                contentDescription = null,
-                                tint = Color(0xFFD97706),
-                                modifier = Modifier.size(22.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = notice,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Button(
-                                onClick = {
-                                    viewModel.dismissLowStockNotice()
-                                    viewModel.navigateToScreen(ShopScreen.INVENTORY, 1)
-                                },
-                                shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706)),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                modifier = Modifier.height(30.dp)
-                            ) {
-                                Text(
-                                    text = if (language == "bn") "স্টক দেখুন" else "View",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(4.dp))
-                            IconButton(
-                                onClick = { viewModel.dismissLowStockNotice() },
-                                modifier = Modifier.size(24.dp)
-                            ) {
-                                Icon(Icons.Default.Close, contentDescription = "Close", modifier = Modifier.size(16.dp))
-                            }
-                        }
-                    }
+            when (currentScreen) {
+                ShopScreen.DASHBOARD -> {
+                    DashboardScreen(
+                        viewModel = viewModel,
+                        onNavigateToPos = { currentScreen = ShopScreen.POS },
+                        onNavigateToStock = { currentScreen = ShopScreen.INVENTORY },
+                        onNavigateToDue = { currentScreen = ShopScreen.DUE_KHATA },
+                        onNavigateToExpenses = { currentScreen = ShopScreen.EXPENSES },
+                        onOpenStockInDialog = { showQuickStockInDialog = true },
+                        onOpenAddExpenseDialog = { showQuickAddExpenseDialog = true },
+                        onNavigateToAccounts = { currentScreen = ShopScreen.ACCOUNTS },
+                        onNavigateToReports = { currentScreen = ShopScreen.REPORTS }
+                    )
                 }
-            }
-
-            Box(modifier = Modifier.fillMaxSize().weight(1f)) {
-                when (currentScreen) {
-                    ShopScreen.DASHBOARD -> {
-                        DashboardScreen(
-                            viewModel = viewModel,
-                            onNavigateToPos = { viewModel.navigateToScreen(ShopScreen.POS) },
-                            onNavigateToStock = { viewModel.navigateToScreen(ShopScreen.INVENTORY) },
-                            onNavigateToDue = { viewModel.navigateToScreen(ShopScreen.DUE_KHATA) },
-                            onNavigateToExpenses = { viewModel.navigateToScreen(ShopScreen.EXPENSES) },
-                            onOpenStockInDialog = { showQuickStockInDialog = true },
-                            onOpenAddExpenseDialog = { showQuickAddExpenseDialog = true },
-                            onNavigateToAccounts = { viewModel.navigateToScreen(ShopScreen.ACCOUNTS) },
-                            onNavigateToReports = { viewModel.navigateToScreen(ShopScreen.REPORTS) }
-                        )
-                    }
-                    ShopScreen.POS -> {
-                        PosSaleScreen(
-                            viewModel = viewModel,
-                            onSaleCompleted = {
-                                // Automatically triggers invoiceDetails modal
-                            }
-                        )
-                    }
-                    ShopScreen.ACCOUNTS -> {
-                        AccountsScreen(
-                            viewModel = viewModel,
-                            onNavigateToDue = { viewModel.navigateToScreen(ShopScreen.DUE_KHATA) },
-                            onNavigateToPos = { viewModel.navigateToScreen(ShopScreen.POS) }
-                        )
-                    }
-                    ShopScreen.INVENTORY -> {
-                        InventoryScreen(
-                            viewModel = viewModel,
-                            onNavigateToPos = { viewModel.navigateToScreen(ShopScreen.POS) }
-                        )
-                    }
-                    ShopScreen.DUE_KHATA -> {
-                        DueKhataScreen(
-                            viewModel = viewModel
-                        )
-                    }
-                    ShopScreen.EXPENSES -> {
-                        ExpenseScreen(
-                            viewModel = viewModel
-                        )
-                    }
-                    ShopScreen.REPORTS -> {
-                        ReportsScreen(
-                            viewModel = viewModel
-                        )
-                    }
-                    ShopScreen.SETTINGS -> {
-                        SettingsScreen(
-                            viewModel = viewModel,
-                            onNavigateToAccounts = { viewModel.navigateToScreen(ShopScreen.ACCOUNTS) },
-                            onNavigateToReports = { viewModel.navigateToScreen(ShopScreen.REPORTS) }
-                        )
-                    }
+                ShopScreen.POS -> {
+                    PosSaleScreen(
+                        viewModel = viewModel,
+                        onSaleCompleted = {
+                            // Automatically triggers invoiceDetails modal
+                        }
+                    )
+                }
+                ShopScreen.ACCOUNTS -> {
+                    AccountsScreen(
+                        viewModel = viewModel,
+                        onNavigateToDue = { currentScreen = ShopScreen.DUE_KHATA },
+                        onNavigateToPos = { currentScreen = ShopScreen.POS }
+                    )
+                }
+                ShopScreen.INVENTORY -> {
+                    InventoryScreen(
+                        viewModel = viewModel,
+                        onNavigateToPos = { currentScreen = ShopScreen.POS }
+                    )
+                }
+                ShopScreen.DUE_KHATA -> {
+                    DueKhataScreen(
+                        viewModel = viewModel
+                    )
+                }
+                ShopScreen.EXPENSES -> {
+                    ExpenseScreen(
+                        viewModel = viewModel
+                    )
+                }
+                ShopScreen.REPORTS -> {
+                    ReportsScreen(
+                        viewModel = viewModel
+                    )
+                }
+                ShopScreen.SETTINGS -> {
+                    SettingsScreen(
+                        viewModel = viewModel,
+                        onNavigateToAccounts = { currentScreen = ShopScreen.ACCOUNTS },
+                        onNavigateToReports = { currentScreen = ShopScreen.REPORTS }
+                    )
                 }
             }
         }

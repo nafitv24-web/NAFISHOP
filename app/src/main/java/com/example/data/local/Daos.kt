@@ -45,12 +45,6 @@ interface ProductDao {
     @Query("UPDATE products SET stockQuantity = stockQuantity - :qty WHERE id = :productId")
     suspend fun decreaseStock(productId: Long, qty: Double)
 
-    @Query("UPDATE products SET minStockAlert = :threshold")
-    suspend fun updateAllMinStockAlert(threshold: Double)
-
-    @Query("UPDATE products SET minStockAlert = :threshold WHERE id = :productId")
-    suspend fun updateProductMinStockAlert(productId: Long, threshold: Double)
-
     @Query("SELECT COUNT(*) FROM products")
     suspend fun getCount(): Int
 

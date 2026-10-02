@@ -16,7 +16,6 @@ import com.example.data.model.*
 import com.example.data.repository.ShopRepository
 import com.example.util.CalculationHelper.round2
 import com.example.util.NetworkMonitor
-import com.example.util.StockNotificationHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
@@ -88,91 +87,6 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     // App Theme Mode: "SYSTEM", "LIGHT", "DARK"
     private val _themeMode = MutableStateFlow(prefs.getString("app_theme_mode", "SYSTEM") ?: "SYSTEM")
     val themeMode: StateFlow<String> = _themeMode.asStateFlow()
-
-    // App Navigation & Selected Screen/Tabs
-    private val _currentScreen = MutableStateFlow(com.example.ui.screens.ShopScreen.DASHBOARD)
-    val currentScreen: StateFlow<com.example.ui.screens.ShopScreen> = _currentScreen.asStateFlow()
-
-    private val _inventorySelectedTab = MutableStateFlow(0)
-    val inventorySelectedTab: StateFlow<Int> = _inventorySelectedTab.asStateFlow()
-
-    fun navigateToScreen(screen: com.example.ui.screens.ShopScreen, inventoryTab: Int = 0) {
-        _currentScreen.value = screen
-        if (screen == com.example.ui.screens.ShopScreen.INVENTORY) {
-            _inventorySelectedTab.value = inventoryTab
-        }
-    }
-
-    fun setInventoryTab(tab: Int) {
-        _inventorySelectedTab.value = tab
-    }
-
-    // User-Defined Low Stock Alert Threshold & Automated Notification Preferences
-    private val _defaultMinStockThreshold = MutableStateFlow(
-        prefs.getFloat("default_min_stock_threshold", 5f).toDouble()
-    )
-    val defaultMinStockThreshold: StateFlow<Double> = _defaultMinStockThreshold.asStateFlow()
-
-    private val _isLowStockNotificationEnabled = MutableStateFlow(
-        prefs.getBoolean("is_low_stock_notification_enabled", true)
-    )
-    val isLowStockNotificationEnabled: StateFlow<Boolean> = _isLowStockNotificationEnabled.asStateFlow()
-
-    // Realtime banner / snackbar notice for newly detected low stock items
-    private val _lowStockAlertNotice = MutableStateFlow<String?>(null)
-    val lowStockAlertNotice: StateFlow<String?> = _lowStockAlertNotice.asStateFlow()
-
-    fun dismissLowStockNotice() {
-        _lowStockAlertNotice.value = null
-    }
-
-    fun setDefaultMinStockThreshold(threshold: Double, applyToAllProducts: Boolean) {
-        val clean = round2(threshold.coerceAtLeast(0.0))
-        _defaultMinStockThreshold.value = clean
-        prefs.edit().putFloat("default_min_stock_threshold", clean.toFloat()).apply()
-
-        if (applyToAllProducts) {
-            viewModelScope.launch {
-                repository.updateAllMinStockAlert(clean)
-                checkAndTriggerLowStockNotifications()
-                triggerInstantDriveBackup("সকল পণ্যে সতর্কীকরণ সীমা ($clean) প্রয়োগ")
-            }
-        }
-    }
-
-    fun updateProductThreshold(productId: Long, newThreshold: Double) {
-        val clean = round2(newThreshold.coerceAtLeast(0.0))
-        viewModelScope.launch {
-            repository.updateProductMinStockAlert(productId, clean)
-            val updated = repository.getProductById(productId)
-            if (updated != null && updated.stockQuantity <= clean) {
-                StockNotificationHelper.notifyProductLowStock(getApplication(), updated, clean, force = true)
-            }
-        }
-    }
-
-    fun setLowStockNotificationEnabled(enabled: Boolean) {
-        _isLowStockNotificationEnabled.value = enabled
-        prefs.edit().putBoolean("is_low_stock_notification_enabled", enabled).apply()
-    }
-
-    fun checkAndTriggerLowStockNotifications(force: Boolean = false) {
-        viewModelScope.launch {
-            val low = products.value.filter { it.stockQuantity <= it.minStockAlert }
-            if (low.isNotEmpty()) {
-                if (low.size == 1) {
-                    StockNotificationHelper.notifyProductLowStock(getApplication(), low.first(), low.first().minStockAlert, force)
-                } else {
-                    StockNotificationHelper.notifyMultipleLowStock(getApplication(), low, force)
-                }
-            }
-        }
-    }
-
-    init {
-        StockNotificationHelper.createNotificationChannel(application)
-        loadSavedPendingOrders()
-    }
 
     // Reports Screen Initial Tab (0: Profit & Loss, 1: Stock In-Out)
     private val _reportsScreenInitialTab = MutableStateFlow(0)
@@ -1339,17 +1253,6 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     fun stockOutManual(productId: Long, quantity: Double, reason: String) {
         viewModelScope.launch {
             repository.recordStockOutManual(productId, quantity, reason)
-            val updated = repository.getProductById(productId)
-            if (updated != null && updated.stockQuantity <= updated.minStockAlert) {
-                StockNotificationHelper.notifyProductLowStock(
-                    getApplication(),
-                    updated,
-                    updated.minStockAlert,
-                    force = true
-                )
-                val q = if (updated.stockQuantity % 1.0 == 0.0) updated.stockQuantity.toInt().toString() else updated.stockQuantity.toString()
-                _lowStockAlertNotice.value = "⚠️ সতর্কতা: ${updated.name} এর স্টক কমে মাত্র $q ${updated.unit} এ নেমেছে!"
-            }
             triggerInstantDriveBackup("স্টক আউট")
         }
     }
@@ -1474,26 +1377,6 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             )
             lastCompletedInvoice.value = invoiceDetails
             clearCart()
-
-            // Check if any sold products dropped to or below their low stock threshold
-            val lowAfterSale = mutableListOf<Product>()
-            for (item in items) {
-                val p = repository.getProductById(item.product.id)
-                if (p != null && p.stockQuantity <= p.minStockAlert) {
-                    lowAfterSale.add(p)
-                    StockNotificationHelper.notifyProductLowStock(
-                        getApplication(),
-                        p,
-                        p.minStockAlert,
-                        force = true
-                    )
-                }
-            }
-            if (lowAfterSale.isNotEmpty()) {
-                val names = lowAfterSale.take(2).joinToString(", ") { it.name }
-                _lowStockAlertNotice.value = "⚠️ স্টক সতর্কতা: $names এর স্টক সতর্কীকরণ সীমার নিচে নেমে গেছে!"
-            }
-
             triggerInstantDriveBackup("বিক্রয় সম্পন্ন #$invoiceNo")
             onSuccess(invoiceNo)
         }
