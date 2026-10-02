@@ -17,9 +17,10 @@ import kotlinx.coroutines.launch
         Customer::class,
         DueLog::class,
         Expense::class,
-        CashLog::class
+        CashLog::class,
+        TailorOrder::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -29,6 +30,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun dueLogDao(): DueLogDao
     abstract fun expenseDao(): ExpenseDao
     abstract fun cashLogDao(): CashLogDao
+    abstract fun tailorOrderDao(): TailorOrderDao
 
     companion object {
         @Volatile

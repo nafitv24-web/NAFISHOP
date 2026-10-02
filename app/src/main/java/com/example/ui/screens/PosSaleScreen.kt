@@ -28,17 +28,13 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import android.Manifest
-import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
-import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import com.example.data.model.CartItem
 import com.example.data.model.Customer
 import com.example.data.model.Product
-import com.example.ui.components.PosCameraBarcodeScannerDialog
 import com.example.ui.components.ProductImageViewerDialog
 import com.example.ui.components.toIntOrNull
 import com.example.ui.theme.*
@@ -70,17 +66,8 @@ fun PosSaleScreen(
     var showAddCustomerInPosDialog by remember { mutableStateOf(false) }
     var customerSearchQuery by remember { mutableStateOf("") }
     var viewingProductImage by remember { mutableStateOf<Product?>(null) }
-    var showCameraScanner by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
-
-    val cameraPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            showCameraScanner = true
-        }
-    }
 
     val speechSearchLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -107,18 +94,6 @@ fun PosSaleScreen(
         try {
             speechSearchLauncher.launch(intent)
         } catch (_: Exception) {
-        }
-    }
-
-    fun openCameraScanner() {
-        val hasPermission = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.CAMERA
-        ) == PackageManager.PERMISSION_GRANTED
-        if (hasPermission) {
-            showCameraScanner = true
-        } else {
-            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
     }
 
@@ -186,86 +161,16 @@ fun PosSaleScreen(
                                                 tint = MaterialTheme.colorScheme.primary
                                             )
                                         }
-                                        IconButton(onClick = { openCameraScanner() }) {
-                                            Icon(
-                                                Icons.Default.QrCodeScanner,
-                                                contentDescription = "Camera Scanner",
-                                                tint = EmeraldPrimary
-                                            )
-                                        }
                                     }
                                 }
                             },
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.fillMaxWidth()
                         )
-
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        // Camera Barcode Scanner Button
-                        Button(
-                            onClick = { openCameraScanner() },
-                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
-                            shape = RoundedCornerShape(12.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
-                            modifier = Modifier.height(52.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.CameraAlt,
-                                contentDescription = "Scan",
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(5.dp))
-                            Text(
-                                text = if (language == "bn") "স্ক্যান" else "Scan",
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                fontSize = 13.sp
-                            )
-                        }
                     }
 
                     Spacer(modifier = Modifier.height(6.dp))
-
-                    // Quick Camera Scan Banner
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = EmeraldPrimary.copy(alpha = 0.09f),
-                        border = BorderStroke(0.5.dp, EmeraldPrimary.copy(alpha = 0.3f)),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { openCameraScanner() }
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Default.QrCodeScanner,
-                                contentDescription = null,
-                                tint = EmeraldPrimary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = if (language == "bn") "পণ্য বিক্রি করতে ক্যামেরা অন করুন — বারকোড ধরলেই অটো যোগ হবে" else "Point camera at barcode to auto add to cart",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = EmeraldPrimary,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(
-                                text = if (language == "bn") "চালু করুন ›" else "Open ›",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = EmeraldPrimary,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
 
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         items(categories) { cat ->
@@ -479,33 +384,6 @@ fun PosSaleScreen(
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            // Camera scan button in cart header
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = EmeraldPrimary.copy(alpha = 0.15f),
-                                modifier = Modifier.clickable { openCameraScanner() }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        Icons.Default.QrCodeScanner,
-                                        contentDescription = "Scan",
-                                        tint = EmeraldPrimary,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = if (language == "bn") "ক্যামেরা স্ক্যান" else "Scan",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = EmeraldPrimary,
-                                        fontSize = 11.sp
-                                    )
-                                }
-                            }
                         }
                         if (cartItems.isNotEmpty()) {
                             TextButton(onClick = { viewModel.clearCart() }) {
@@ -541,26 +419,6 @@ fun PosSaleScreen(
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.outline
                                     )
-                                    Spacer(modifier = Modifier.height(10.dp))
-                                    Button(
-                                        onClick = { openCameraScanner() },
-                                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
-                                        shape = RoundedCornerShape(10.dp),
-                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.CameraAlt,
-                                            contentDescription = null,
-                                            tint = Color.White,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            text = if (language == "bn") "ক্যামেরা দিয়ে পণ্য স্ক্যান করুন" else "Scan Products with Camera",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 13.sp
-                                        )
-                                    }
                                 }
                             }
                         }
@@ -1014,20 +872,6 @@ fun PosSaleScreen(
             onAddToCart = {
                 viewModel.addToCart(prod)
             }
-        )
-    }
-
-    // Live Camera Barcode Scanner for POS
-    if (showCameraScanner) {
-        PosCameraBarcodeScannerDialog(
-            products = products,
-            cartItems = cartItems,
-            currency = currency,
-            language = language,
-            onProductScanned = { scannedProd ->
-                viewModel.addToCart(scannedProd)
-            },
-            onDismiss = { showCameraScanner = false }
         )
     }
 }

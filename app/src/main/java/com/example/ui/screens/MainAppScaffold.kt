@@ -1,21 +1,26 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import com.example.data.model.Product
 import com.example.ui.components.AdminPanelDialog
 import com.example.ui.components.AppNoticeDialog
@@ -35,6 +40,7 @@ enum class ShopScreen(
     val icon: ImageVector
 ) {
     DASHBOARD("ড্যাশবোর্ড", "Dashboard", Icons.Default.Dashboard),
+    TAILOR_KHATA("দর্জি ও জামার মাপ", "Tailor & Measurements", Icons.Default.Straighten),
     POS("বিক্রয় POS", "POS Sale", Icons.Default.PointOfSale),
     ACCOUNTS("হিসাব", "Accounts", Icons.Default.Calculate),
     INVENTORY("স্টক ও পণ্য", "Stock & Inventory", Icons.Default.Inventory2),
@@ -84,11 +90,267 @@ fun MainAppScaffold(
         mutableStateOf(!PermissionHelper.areAllPermissionsGranted(context))
     }
 
-    Scaffold(
-        topBar = {
-            Column {
-                TopAppBar(
-                    title = {
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+
+    BackHandler(enabled = currentScreen != ShopScreen.DASHBOARD || drawerState.isOpen) {
+        if (drawerState.isOpen) {
+            scope.launch { drawerState.close() }
+        } else {
+            currentScreen = ShopScreen.DASHBOARD
+        }
+    }
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet(
+                modifier = Modifier.widthIn(max = 320.dp),
+                drawerContainerColor = MaterialTheme.colorScheme.surface
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    // Drawer Header
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(EmeraldPrimary, TealDarkHeader)
+                                )
+                            )
+                            .padding(20.dp)
+                    ) {
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = Color.White,
+                                    modifier = Modifier.size(44.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        NafiShopSmallLogo(size = 32.dp)
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = shopInfo.shopName,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        text = shopInfo.ownerName,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.White.copy(alpha = 0.85f)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = Color.White.copy(alpha = 0.2f)
+                            ) {
+                                Text(
+                                    text = "স্মার্ট দোকান ও দর্জি খাতা",
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "মেনু ও ফিচারসমূহ",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
+                    )
+
+                    // 1. ড্যাশবোর্ড
+                    NavigationDrawerItem(
+                        label = { Text(if (language == "bn") "ড্যাশবোর্ড (হোম)" else "Dashboard") },
+                        icon = { Icon(Icons.Default.Dashboard, contentDescription = null) },
+                        selected = currentScreen == ShopScreen.DASHBOARD,
+                        onClick = {
+                            currentScreen = ShopScreen.DASHBOARD
+                            scope.launch { drawerState.close() }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                    )
+
+                    // 2. ✂️ দর্জি ও জামার মাপ খাতা (Highlighted)
+                    NavigationDrawerItem(
+                        label = {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = if (language == "bn") "দর্জি ও জামার মাপ খাতা" else "Tailor & Measurements",
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (currentScreen == ShopScreen.TAILOR_KHATA) EmeraldPrimary else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "কামিজ, সেলোয়ার, ফ্রক, পেটিকোট, ব্লাউজ",
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = EmeraldPrimary
+                                ) {
+                                    Text(
+                                        text = "নতুন",
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                                        fontSize = 10.sp,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        },
+                        icon = {
+                            Icon(
+                                Icons.Default.Straighten,
+                                contentDescription = null,
+                                tint = EmeraldPrimary
+                            )
+                        },
+                        selected = currentScreen == ShopScreen.TAILOR_KHATA,
+                        onClick = {
+                            currentScreen = ShopScreen.TAILOR_KHATA
+                            scope.launch { drawerState.close() }
+                        },
+                        colors = NavigationDrawerItemDefaults.colors(
+                            selectedContainerColor = EmeraldPrimary.copy(alpha = 0.15f),
+                            unselectedContainerColor = EmeraldPrimary.copy(alpha = 0.06f)
+                        ),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                    )
+
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+
+                    // 3. বিক্রয় POS
+                    NavigationDrawerItem(
+                        label = { Text(if (language == "bn") "বিক্রয় POS (ক্যাশ মেমো)" else "POS Sale") },
+                        icon = { Icon(Icons.Default.PointOfSale, contentDescription = null) },
+                        selected = currentScreen == ShopScreen.POS,
+                        onClick = {
+                            currentScreen = ShopScreen.POS
+                            scope.launch { drawerState.close() }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                    )
+
+                    // 4. হিসাব ও ক্যাশ
+                    NavigationDrawerItem(
+                        label = { Text(if (language == "bn") "হিসাব ও ক্যাশ খাতা" else "Accounts") },
+                        icon = { Icon(Icons.Default.Calculate, contentDescription = null) },
+                        selected = currentScreen == ShopScreen.ACCOUNTS,
+                        onClick = {
+                            currentScreen = ShopScreen.ACCOUNTS
+                            scope.launch { drawerState.close() }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                    )
+
+                    // 5. স্টক ও পণ্য
+                    NavigationDrawerItem(
+                        label = { Text(if (language == "bn") "স্টক ও পণ্য তালিকা" else "Stock & Inventory") },
+                        icon = { Icon(Icons.Default.Inventory2, contentDescription = null) },
+                        selected = currentScreen == ShopScreen.INVENTORY,
+                        onClick = {
+                            currentScreen = ShopScreen.INVENTORY
+                            scope.launch { drawerState.close() }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                    )
+
+                    // 6. বাকি খাতা
+                    NavigationDrawerItem(
+                        label = { Text(if (language == "bn") "বাকি খাতা (কাস্টমার লেজার)" else "Due Khata") },
+                        icon = { Icon(Icons.Default.AccountBalanceWallet, contentDescription = null) },
+                        selected = currentScreen == ShopScreen.DUE_KHATA,
+                        onClick = {
+                            currentScreen = ShopScreen.DUE_KHATA
+                            scope.launch { drawerState.close() }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                    )
+
+                    // 7. খরচ হিসাব
+                    NavigationDrawerItem(
+                        label = { Text(if (language == "bn") "দোকান খরচ হিসাব" else "Expenses") },
+                        icon = { Icon(Icons.Default.ReceiptLong, contentDescription = null) },
+                        selected = currentScreen == ShopScreen.EXPENSES,
+                        onClick = {
+                            currentScreen = ShopScreen.EXPENSES
+                            scope.launch { drawerState.close() }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                    )
+
+                    // 8. রিপোর্ট
+                    NavigationDrawerItem(
+                        label = { Text(if (language == "bn") "রিপোর্ট ও লাভ-ক্ষতি" else "Reports") },
+                        icon = { Icon(Icons.Default.Assessment, contentDescription = null) },
+                        selected = currentScreen == ShopScreen.REPORTS,
+                        onClick = {
+                            currentScreen = ShopScreen.REPORTS
+                            scope.launch { drawerState.close() }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                    )
+
+                    // 9. সেটিংস
+                    NavigationDrawerItem(
+                        label = { Text(if (language == "bn") "সেটিংস ও ব্যাকআপ" else "Settings") },
+                        icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                        selected = currentScreen == ShopScreen.SETTINGS,
+                        onClick = {
+                            currentScreen = ShopScreen.SETTINGS
+                            scope.launch { drawerState.close() }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Text(
+                        text = "নাফি খাতা v2.4.0 • স্মার্ট দোকান ও দর্জি খাতা",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
+                    )
+                }
+            }
+        }
+    ) {
+        Scaffold(
+            topBar = {
+                Column {
+                    TopAppBar(
+                        navigationIcon = {
+                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                Icon(
+                                    Icons.Default.Menu,
+                                    contentDescription = "Open Side Menu",
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        },
+                        title = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             NafiShopSmallLogo(size = 36.dp)
                             Spacer(modifier = Modifier.width(10.dp))
@@ -344,7 +606,13 @@ fun MainAppScaffold(
                         onOpenStockInDialog = { showQuickStockInDialog = true },
                         onOpenAddExpenseDialog = { showQuickAddExpenseDialog = true },
                         onNavigateToAccounts = { currentScreen = ShopScreen.ACCOUNTS },
-                        onNavigateToReports = { currentScreen = ShopScreen.REPORTS }
+                        onNavigateToReports = { currentScreen = ShopScreen.REPORTS },
+                        onNavigateToTailor = { currentScreen = ShopScreen.TAILOR_KHATA }
+                    )
+                }
+                ShopScreen.TAILOR_KHATA -> {
+                    TailorKhataScreen(
+                        viewModel = viewModel
                     )
                 }
                 ShopScreen.POS -> {
@@ -387,11 +655,13 @@ fun MainAppScaffold(
                     SettingsScreen(
                         viewModel = viewModel,
                         onNavigateToAccounts = { currentScreen = ShopScreen.ACCOUNTS },
-                        onNavigateToReports = { currentScreen = ShopScreen.REPORTS }
+                        onNavigateToReports = { currentScreen = ShopScreen.REPORTS },
+                        onNavigateToTailor = { currentScreen = ShopScreen.TAILOR_KHATA }
                     )
                 }
             }
         }
+    }
     }
 
     // Global Digital Cash Memo Dialog (if invoice generated)

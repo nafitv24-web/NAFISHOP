@@ -69,6 +69,9 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     val cashLogs: StateFlow<List<CashLog>> = repository.allCashLogs
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val tailorOrders: StateFlow<List<TailorOrder>> = repository.allTailorOrders
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val firebaseAuth = FirebaseAuthManager(application)
     val firebaseRealtime = FirebaseRealtimeManager()
 
@@ -1166,6 +1169,17 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // Compatibility methods for different versions of InventoryScreen
+    fun updateProduct(product: Product) = saveProduct(product)
+    val inventoryTab = MutableStateFlow(0)
+    fun setInventoryTab(tab: Int) { inventoryTab.value = tab }
+    fun setInventoryFilter(filter: String) { }
+    fun setInventoryCategory(cat: String) { selectedCategory.value = cat }
+    fun setInventoryView(view: String) { }
+    fun setInventorySearchQuery(query: String) { }
+    fun setLowStockThreshold(threshold: Int) { }
+    fun setDefaultUnit(unit: String) { }
+
     fun stockIn(productId: Long, quantity: Double, buyPrice: Double?, sellPrice: Double?, note: String) {
         viewModelScope.launch {
             val totalCost = repository.recordStockIn(productId, quantity, buyPrice, sellPrice, note)
@@ -2258,6 +2272,50 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                 _usersErrorMessage.value = "ইউজার তালিকা লোড করতে সমস্যা: ${e.localizedMessage}"
                 onComplete?.invoke(_registeredUsers.value.size)
             }
+        }
+    }
+
+    // ==========================================
+    // TAILORING & MEASUREMENT OPERATIONS (দর্জি ও জামার মাপ খাতা)
+    // ==========================================
+
+    fun saveTailorOrder(order: TailorOrder, onComplete: ((Long) -> Unit)? = null) {
+        viewModelScope.launch {
+            val id = repository.saveTailorOrder(order)
+            if (order.advancePaid > 0 && order.id == 0L) {
+                repository.recordCashLog(
+                    type = "DEPOSIT",
+                    amount = order.advancePaid,
+                    balanceAfter = shopInfo.value.mainBalance + order.advancePaid,
+                    note = "দর্জি অর্ডার অগ্রিম: ${order.customerName} (${order.orderNumber})"
+                )
+            }
+            onComplete?.invoke(id)
+        }
+    }
+
+    fun updateTailorOrderStatus(orderId: Long, status: String) {
+        viewModelScope.launch {
+            repository.updateTailorOrderStatus(orderId, status)
+        }
+    }
+
+    fun collectTailorPayment(order: TailorOrder, amount: Double, note: String = "দর্জি বিল আদায়") {
+        viewModelScope.launch {
+            if (amount <= 0) return@launch
+            repository.collectTailorPayment(order, amount)
+            repository.recordCashLog(
+                type = "DEPOSIT",
+                amount = amount,
+                balanceAfter = shopInfo.value.mainBalance + amount,
+                note = "দর্জি বাকি আদায়: ${order.customerName} (${order.orderNumber}) • $note"
+            )
+        }
+    }
+
+    fun deleteTailorOrder(order: TailorOrder) {
+        viewModelScope.launch {
+            repository.deleteTailorOrder(order)
         }
     }
 }
