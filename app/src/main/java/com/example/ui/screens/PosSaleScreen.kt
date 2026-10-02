@@ -321,6 +321,7 @@ fun PosSaleScreen(
                             items(if (searchQuery.isNotBlank()) filteredProducts else filteredProducts.take(30)) { prod ->
                                 val inCartQty = cartItems.find { it.product.id == prod.id }?.quantity ?: 0.0
                                 val isOutOfStock = prod.stockQuantity <= 0.0
+                                val isLowStock = !isOutOfStock && prod.stockQuantity <= prod.minStockAlert
 
                                 Card(
                                     modifier = Modifier
@@ -328,7 +329,11 @@ fun PosSaleScreen(
                                         .clickable { viewModel.addToCart(prod) },
                                     shape = RoundedCornerShape(12.dp),
                                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                                    border = CardDefaults.outlinedCardBorder()
+                                    border = when {
+                                        isOutOfStock -> BorderStroke(1.dp, LossRed.copy(alpha = 0.6f))
+                                        isLowStock -> BorderStroke(1.dp, DueOrange.copy(alpha = 0.8f))
+                                        else -> CardDefaults.outlinedCardBorder()
+                                    }
                                 ) {
                                     Column {
                                         // Product Image Box with Zoom and Badges
@@ -380,7 +385,7 @@ fun PosSaleScreen(
                                                 }
                                             }
 
-                                            // In-Cart or Out-of-Stock Badge
+                                            // In-Cart, Out-of-Stock, or Low Stock Alert Badge
                                             if (inCartQty > 0) {
                                                 Surface(
                                                     shape = RoundedCornerShape(bottomEnd = 8.dp),
@@ -404,6 +409,21 @@ fun PosSaleScreen(
                                                 ) {
                                                     Text(
                                                         text = if (language == "bn") "স্টক শেষ" else "Out",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = Color.White,
+                                                        fontWeight = FontWeight.Bold,
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                        fontSize = 10.sp
+                                                    )
+                                                }
+                                            } else if (isLowStock) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(bottomEnd = 8.dp),
+                                                    color = DueOrange.copy(alpha = 0.95f),
+                                                    modifier = Modifier.align(Alignment.TopStart)
+                                                ) {
+                                                    Text(
+                                                        text = if (language == "bn") "⚠️ কম স্টক" else "⚠️ Low",
                                                         style = MaterialTheme.typography.labelSmall,
                                                         color = Color.White,
                                                         fontWeight = FontWeight.Bold,
@@ -442,7 +462,12 @@ fun PosSaleScreen(
                                                 Text(
                                                     text = "${prod.stockQuantity.toIntOrNull() ?: prod.stockQuantity} ${prod.unit}",
                                                     style = MaterialTheme.typography.labelSmall,
-                                                    color = if (prod.stockQuantity <= 3) LossRed else MaterialTheme.colorScheme.outline
+                                                    fontWeight = if (isOutOfStock || isLowStock) FontWeight.Bold else FontWeight.Normal,
+                                                    color = when {
+                                                        isOutOfStock -> LossRed
+                                                        isLowStock -> DueOrange
+                                                        else -> MaterialTheme.colorScheme.outline
+                                                    }
                                                 )
                                                 Surface(
                                                     shape = CircleShape,
@@ -1159,6 +1184,29 @@ fun PosCartItemRow(
                         color = MaterialTheme.colorScheme.outline,
                         textDecoration = TextDecoration.LineThrough
                     )
+                }
+
+                // Remaining stock indicator
+                val remainingStock = item.product.stockQuantity - item.quantity
+                val willBeLowStock = remainingStock <= item.product.minStockAlert
+                Spacer(modifier = Modifier.height(2.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "${if (language == "bn") "বাকি স্টক: " else "Rem: "}${remainingStock.toIntOrNull() ?: remainingStock}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 10.sp,
+                        color = if (willBeLowStock) DueOrange else MaterialTheme.colorScheme.outline,
+                        fontWeight = if (willBeLowStock) FontWeight.Bold else FontWeight.Normal
+                    )
+                    if (willBeLowStock) {
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            text = if (remainingStock <= 0) "⚠️ শেষ" else "⚠️ কম",
+                            fontSize = 9.sp,
+                            color = if (remainingStock <= 0) LossRed else DueOrange,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
                 }
             }
 

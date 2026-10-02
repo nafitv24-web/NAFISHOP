@@ -119,6 +119,18 @@ class ShopRepository(private val database: AppDatabase) {
         productDao.deleteProduct(product)
     }
 
+    suspend fun getProductById(id: Long): Product? = withContext(Dispatchers.IO) {
+        productDao.getProductById(id)
+    }
+
+    suspend fun updateAllMinStockAlert(threshold: Double) = withContext(Dispatchers.IO) {
+        productDao.updateAllMinStockAlert(round2(threshold))
+    }
+
+    suspend fun updateProductMinStockAlert(productId: Long, threshold: Double) = withContext(Dispatchers.IO) {
+        productDao.updateProductMinStockAlert(productId, round2(threshold))
+    }
+
     suspend fun recordStockIn(
         productId: Long,
         quantity: Double,

@@ -26,4 +26,26 @@ val DueOrange = Color(0xFFEA580C)
 val StockBlue = Color(0xFF2563EB)
 val CardBorder = Color(0xFFE2E8F0)
 
+// Authentic Tong Khata / Cashbox Design Palette
+val TongRedPrimary = Color(0xFFE11D48) // Vibrant Crimson Rose Red
+val TongRedDeep = Color(0xFFBE123C)
+val TongRedDark = Color(0xFF881337)
+val TongRedSurface = Color(0xFFFFF1F2)
+val TongRedBorder = Color(0xFFFECDD3)
+
+val TongGreenPrimary = Color(0xFF059669)
+val TongGreenSurface = Color(0xFFECFDF5)
+val TongGreenBorder = Color(0xFFA7F3D0)
+
+val TongBluePrimary = Color(0xFF2563EB)
+val TongBlueSurface = Color(0xFFEFF6FF)
+val TongBlueBorder = Color(0xFFBFDBFE)
+
+val TongAmberPrimary = Color(0xFFD97706)
+val TongAmberSurface = Color(0xFFFFFBEB)
+val TongAmberBorder = Color(0xFFFDE68A)
+
+val TongCardBackground = Color(0xFFFFFFFF)
+val TongAppBackground = Color(0xFFF8F9FA)
+
 
