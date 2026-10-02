@@ -106,7 +106,7 @@ fun LoginScreen(
     var shopName by remember {
         mutableStateOf(
             if (shopInfo.shopName.isNotBlank() && shopInfo.shopName != "আমার দোকান") shopInfo.shopName
-            else "টং খাতা"
+            else if (isBn) "নাফি খাতা" else "NAFI KHATA"
         )
     }
     var ownerName by remember {
@@ -255,7 +255,7 @@ fun LoginScreen(
                         Spacer(modifier = Modifier.height(6.dp))
 
                         Text(
-                            text = "টং খাতা",
+                            text = if (isBn) "নাফি খাতা" else "NAFI KHATA",
                             style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Black,
                             color = Color.White,
@@ -731,7 +731,7 @@ fun LoginScreen(
 
                                 if (inputMode == LoginInputMode.REGISTER) {
                                     // Sign Up with Gmail
-                                    val sName = shopName.ifBlank { "টং খাতা" }
+                                    val sName = shopName.ifBlank { if (isBn) "নাফি খাতা" else "NAFI KHATA" }
                                     val oName = ownerName.ifBlank { "দোকানদার" }
                                     viewModel.firebaseSignUp(cleanEmail, cleanPass, sName, oName) { res ->
                                         isLoading = false
@@ -939,9 +939,9 @@ fun LoginScreen(
                         // -------------------------------------------------
                         Text(
                             text = if (isBn)
-                                "এগিয়ে যাওয়ার মাধ্যমে আপনি টং খাতার ব্যবহারের শর্তাবলী ও গোপনীয়তা নীতিতে সম্মতি দিচ্ছেন।"
+                                "এগিয়ে যাওয়ার মাধ্যমে আপনি নাফি খাতার ব্যবহারের শর্তাবলী ও গোপনীয়তা নীতিতে সম্মতি দিচ্ছেন।"
                             else
-                                "By continuing you agree to the Tong Khata Terms of Service & Privacy Policy.",
+                                "By continuing you agree to the Nafi Khata Terms of Service & Privacy Policy.",
                             style = MaterialTheme.typography.labelSmall,
                             color = if (isDark) Color(0xFF64748B) else Color(0xFF94A3B8),
                             textAlign = TextAlign.Center,
@@ -1003,7 +1003,7 @@ fun LoginScreen(
             },
             title = {
                 Text(
-                    text = if (isBn) "টং খাতা গ্রাহক সহায়তা" else "Tong Khata Customer Care",
+                    text = if (isBn) "নাফি খাতা গ্রাহক সহায়তা" else "Nafi Khata Customer Care",
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center
                 )
