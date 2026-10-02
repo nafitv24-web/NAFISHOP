@@ -40,6 +40,10 @@ jobs:
             keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           fi
 
+      - name: Accept Android SDK Licenses
+        run: |
+          yes | sdkmanager --licenses 2>/dev/null || true
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
         with:
@@ -48,11 +52,10 @@ jobs:
 
       - name: Build Debug APK
         run: |
-          gradle :app:assembleDebug --stacktrace --no-daemon \
-            -Dorg.gradle.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=1024m" \
+          gradle :app:assembleDebug --no-daemon \
+            -Dorg.gradle.jvmargs="-Xmx4096m -XX:+UseG1GC" \
+            -Dorg.gradle.parallel=false \
             -Dorg.gradle.workers.max=2 \
-            -Dkotlin.compiler.execution.strategy=in-process \
-            -Dorg.gradle.configuration-cache=false \
             -Djava.awt.headless=true
 
       - name: Upload APK Artifact
