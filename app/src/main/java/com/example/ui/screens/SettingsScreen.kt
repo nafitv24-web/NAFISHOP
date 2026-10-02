@@ -49,7 +49,8 @@ import java.util.*
 fun SettingsScreen(
     viewModel: ShopViewModel,
     onNavigateToAccounts: (() -> Unit)? = null,
-    onNavigateToReports: (() -> Unit)? = null
+    onNavigateToReports: (() -> Unit)? = null,
+    onNavigateToTailor: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -193,6 +194,62 @@ fun SettingsScreen(
                     )
 
                     Spacer(modifier = Modifier.height(10.dp))
+
+                    // Tailor Khata Shortcut
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { onNavigateToTailor?.invoke() }
+                            .background(Color(0xFFF0FDF4))
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(EmeraldPrimary, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Straighten, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = if (language == "bn") "দর্জি ও জামার মাপ খাতা" else "Tailor & Measurements",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF065F46)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = EmeraldPrimary
+                                    ) {
+                                        Text(
+                                            text = if (language == "bn") "নতুন" else "NEW",
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                                            fontSize = 9.sp,
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = if (language == "bn") "কামিজ, সেলোয়ার, ফ্রক, পেটিকোট, ব্লাউজ ইত্যাদির মাপ ও অর্ডার" else "Kamiz, Salwar, Frock, Petticoat, Blouse & orders",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF047857),
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = EmeraldPrimary)
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     Row(
                         modifier = Modifier

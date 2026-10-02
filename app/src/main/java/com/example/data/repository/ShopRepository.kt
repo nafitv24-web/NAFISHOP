@@ -25,6 +25,7 @@ class ShopRepository(private val database: AppDatabase) {
     private val dueLogDao = database.dueLogDao()
     private val expenseDao = database.expenseDao()
     private val cashLogDao = database.cashLogDao()
+    private val tailorOrderDao = database.tailorOrderDao()
 
     val allProducts: Flow<List<Product>> = productDao.getAllProducts()
     val lowStockProducts: Flow<List<Product>> = productDao.getLowStockProducts()
@@ -34,6 +35,7 @@ class ShopRepository(private val database: AppDatabase) {
     val allDueLogs: Flow<List<DueLog>> = dueLogDao.getAllDueLogs()
     val allExpenses: Flow<List<Expense>> = expenseDao.getAllExpenses()
     val allCashLogs: Flow<List<CashLog>> = cashLogDao.getAllCashLogs()
+    val allTailorOrders: Flow<List<TailorOrder>> = tailorOrderDao.getAllOrders()
 
     suspend fun getAllProductsDirect(): List<Product> = withContext(Dispatchers.IO) {
         productDao.getAllProductsDirect()
@@ -866,6 +868,36 @@ class ShopRepository(private val database: AppDatabase) {
                 timestamp = timestamp
             )
         )
+    }
+
+    suspend fun saveTailorOrder(order: TailorOrder): Long = withContext(Dispatchers.IO) {
+        val cleanTotal = round2(order.totalAmount)
+        val cleanAdvance = round2(order.advancePaid.coerceIn(0.0, cleanTotal))
+        val cleanDue = round2((cleanTotal - cleanAdvance).coerceAtLeast(0.0))
+        val sanitized = order.copy(
+            totalAmount = cleanTotal,
+            advancePaid = cleanAdvance,
+            dueAmount = cleanDue
+        )
+        if (sanitized.id == 0L) {
+            tailorOrderDao.insertOrder(sanitized)
+        } else {
+            tailorOrderDao.updateOrder(sanitized)
+            sanitized.id
+        }
+    }
+
+    suspend fun deleteTailorOrder(order: TailorOrder) = withContext(Dispatchers.IO) {
+        tailorOrderDao.deleteOrder(order)
+    }
+
+    suspend fun updateTailorOrderStatus(orderId: Long, status: String) = withContext(Dispatchers.IO) {
+        tailorOrderDao.updateOrderStatus(orderId, status)
+    }
+
+    suspend fun collectTailorPayment(order: TailorOrder, amount: Double) = withContext(Dispatchers.IO) {
+        val cleanAmount = round2(amount)
+        tailorOrderDao.collectPayment(order.id, cleanAmount)
     }
 
     suspend fun exportDataAsJson(

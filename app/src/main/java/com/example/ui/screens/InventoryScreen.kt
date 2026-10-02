@@ -44,6 +44,8 @@ import coil.compose.AsyncImage
 import com.example.data.model.Product
 import com.example.ui.components.BarcodeCaptureDialog
 import com.example.ui.components.ProductImageViewerDialog
+import com.example.ui.components.SingleProductThresholdDialog
+import com.example.ui.components.StockAlertSettingsDialog
 import com.example.ui.components.toIntOrNull
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.ShopViewModel
@@ -68,9 +70,14 @@ fun InventoryScreen(
     val shopInfo by viewModel.shopInfo.collectAsState()
     val language by viewModel.language.collectAsState()
     val pendingOrders by viewModel.pendingOrders.collectAsState()
+    val inventorySelectedTab by viewModel.inventorySelectedTab.collectAsState()
+    val defaultMinStockThreshold by viewModel.defaultMinStockThreshold.collectAsState()
+    val isLowStockNotificationEnabled by viewModel.isLowStockNotificationEnabled.collectAsState()
     val currency = shopInfo.currency
 
-    var currentViewTab by remember { mutableStateOf(0) } // 0: All Products, 1: Low Stock, 2: Expiring & Expired
+    var currentViewTab by remember(inventorySelectedTab) { mutableStateOf(inventorySelectedTab) } // 0: All Products, 1: Low Stock, 2: Expiring & Expired
+    var showStockAlertSettingsDialog by remember { mutableStateOf(false) }
+    var singleProductToEditThreshold by remember { mutableStateOf<Product?>(null) }
 
     var showAddEditDialog by remember { mutableStateOf(false) }
     var editingProduct by remember { mutableStateOf<Product?>(null) }
@@ -191,7 +198,10 @@ fun InventoryScreen(
                     ) {
                         Tab(
                             selected = currentViewTab == 0,
-                            onClick = { currentViewTab = 0 },
+                            onClick = {
+                                currentViewTab = 0
+                                viewModel.setInventoryTab(0)
+                            },
                             text = {
                                 Text(
                                     text = if (language == "bn") "সব পণ্য (${allProducts.size})" else "All (${allProducts.size})",
@@ -201,18 +211,34 @@ fun InventoryScreen(
                         )
                         Tab(
                             selected = currentViewTab == 1,
-                            onClick = { currentViewTab = 1 },
+                            onClick = {
+                                currentViewTab = 1
+                                viewModel.setInventoryTab(1)
+                            },
                             text = {
-                                Text(
-                                    text = if (language == "bn") "কম স্টক (${lowStockProducts.size})" else "Low Stock (${lowStockProducts.size})",
-                                    color = if (lowStockProducts.isNotEmpty()) DueOrange else MaterialTheme.colorScheme.onSurface,
-                                    fontWeight = if (currentViewTab == 1) FontWeight.Bold else FontWeight.Normal
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (lowStockProducts.isNotEmpty()) {
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = DueOrange,
+                                            modifier = Modifier.size(8.dp)
+                                        ) {}
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                    }
+                                    Text(
+                                        text = if (language == "bn") "কম স্টক (${lowStockProducts.size})" else "Low Stock (${lowStockProducts.size})",
+                                        color = if (lowStockProducts.isNotEmpty()) DueOrange else MaterialTheme.colorScheme.onSurface,
+                                        fontWeight = if (currentViewTab == 1) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                }
                             }
                         )
                         Tab(
                             selected = currentViewTab == 2,
-                            onClick = { currentViewTab = 2 },
+                            onClick = {
+                                currentViewTab = 2
+                                viewModel.setInventoryTab(2)
+                            },
                             text = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
@@ -343,6 +369,32 @@ fun InventoryScreen(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // Stock Alert Limits button (স্টক সতর্কীকরণ সীমা ও সেটিংস)
+                        FilledTonalButton(
+                            onClick = {
+                                showStockAlertSettingsDialog = true
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = if (lowStockProducts.isNotEmpty()) Color(0xFFFEF3C7) else MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = if (lowStockProducts.isNotEmpty()) Color(0xFF92400E) else MaterialTheme.colorScheme.onSecondaryContainer
+                            ),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.NotificationsActive,
+                                contentDescription = "Alert Limit",
+                                modifier = Modifier.size(15.dp),
+                                tint = if (lowStockProducts.isNotEmpty()) Color(0xFFD97706) else MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = if (language == "bn") "অ্যালার্ট সীমা" else "Limits",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
                         // Order low stock / stock order button (পণ্য অর্ডার)
                         FilledTonalButton(
                             onClick = {
@@ -453,6 +505,86 @@ fun InventoryScreen(
                 }
             }
 
+            // High-visibility Alert Card when Low Stock products exist
+            if (lowStockProducts.isNotEmpty() && currentViewTab != 2) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7)),
+                    border = BorderStroke(1.5.dp, Color(0xFFF59E0B))
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = Color(0xFFD97706),
+                                    modifier = Modifier.size(26.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            Icons.Default.WarningAmber,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = if (language == "bn") "⚠️ ${lowStockProducts.size}টি পণ্যের স্টক নির্ধারিত সীমার নিচে!" else "⚠️ ${lowStockProducts.size} items below alert threshold!",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF92400E)
+                                    )
+                                    Text(
+                                        text = if (language == "bn") "স্টক ব্যবহারকারী নির্ধারিত সীমার নিচে নেমে গেছে" else "Stock dropped below user minimum threshold",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFFB45309)
+                                    )
+                                }
+                            }
+
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                if (currentViewTab != 1) {
+                                    Button(
+                                        onClick = {
+                                            currentViewTab = 1
+                                            viewModel.setInventoryTab(1)
+                                        },
+                                        shape = RoundedCornerShape(6.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706)),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                        modifier = Modifier.height(28.dp)
+                                    ) {
+                                        Text(if (language == "bn") "কম স্টক দেখুন" else "View Low", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                                OutlinedButton(
+                                    onClick = { showStockAlertSettingsDialog = true },
+                                    shape = RoundedCornerShape(6.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF92400E)),
+                                    border = BorderStroke(1.dp, Color(0xFFD97706)),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(28.dp)
+                                ) {
+                                    Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(12.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(if (language == "bn") "সীমা" else "Limits", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Product List
             if (displayedProducts.isEmpty()) {
                 Box(
@@ -516,6 +648,9 @@ fun InventoryScreen(
                             },
                             onImageClick = {
                                 viewingImageProduct = product
+                            },
+                            onChangeThreshold = {
+                                singleProductToEditThreshold = product
                             }
                         )
                     }
@@ -670,6 +805,44 @@ fun InventoryScreen(
             }
         )
     }
+
+    // Global Low Stock Alert Settings Dialog (ব্যবহারকারী নির্ধারিত স্টক সীমা সেটিংস)
+    if (showStockAlertSettingsDialog) {
+        StockAlertSettingsDialog(
+            currentThreshold = defaultMinStockThreshold,
+            isNotificationEnabled = isLowStockNotificationEnabled,
+            language = language,
+            onDismiss = { showStockAlertSettingsDialog = false },
+            onSave = { newThreshold, enableNotification, applyToAll ->
+                viewModel.setLowStockNotificationEnabled(enableNotification)
+                viewModel.setDefaultMinStockThreshold(newThreshold, applyToAll)
+                showStockAlertSettingsDialog = false
+                Toast.makeText(
+                    context,
+                    if (language == "bn") "স্টক সতর্কীকরণ সীমা সফলভাবে সংরক্ষণ হয়েছে!" else "Stock alert threshold saved!",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        )
+    }
+
+    // Single Product Threshold Quick Dialog
+    singleProductToEditThreshold?.let { prod ->
+        SingleProductThresholdDialog(
+            product = prod,
+            language = language,
+            onDismiss = { singleProductToEditThreshold = null },
+            onSave = { newLimit ->
+                viewModel.updateProductThreshold(prod.id, newLimit)
+                singleProductToEditThreshold = null
+                Toast.makeText(
+                    context,
+                    if (language == "bn") "'${prod.name}' এর সতর্কীকরণ সীমা $newLimit এ আপডেট করা হয়েছে!" else "Threshold updated for ${prod.name}!",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        )
+    }
 }
 
 @Composable
@@ -682,7 +855,8 @@ fun ProductItemCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onAddToCart: () -> Unit,
-    onImageClick: () -> Unit = {}
+    onImageClick: () -> Unit = {},
+    onChangeThreshold: () -> Unit = {}
 ) {
     var expandedMenu by remember { mutableStateOf(false) }
 
@@ -702,10 +876,97 @@ fun ProductItemCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = CardDefaults.outlinedCardBorder()
+        colors = CardDefaults.cardColors(
+            containerColor = when {
+                isOutOfStock -> Color(0xFFFEF2F2)
+                isLowStock -> Color(0xFFFFFBEB)
+                else -> MaterialTheme.colorScheme.surface
+            }
+        ),
+        border = when {
+            isOutOfStock -> BorderStroke(2.dp, Color(0xFFEF4444))
+            isLowStock -> BorderStroke(2.dp, Color(0xFFF59E0B))
+            else -> CardDefaults.outlinedCardBorder()
+        }
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
+            // High-visibility Alert Ribbon when Out of Stock or Low Stock
+            if (isOutOfStock) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFFFEE2E2),
+                    border = BorderStroke(1.dp, Color(0xFFFECACA)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.ErrorOutline,
+                            contentDescription = null,
+                            tint = LossRed,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (language == "bn") "🚨 স্টক সম্পূর্ণ শেষ! অবিলম্বে নতুন স্টক-ইন করুন" else "🚨 Out of Stock! Urgent stock-in required",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = LossRed
+                        )
+                    }
+                }
+            } else if (isLowStock) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFFFEF3C7),
+                    border = BorderStroke(1.dp, Color(0xFFFDE68A)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(
+                                Icons.Default.WarningAmber,
+                                contentDescription = null,
+                                tint = Color(0xFFD97706),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            val q = product.stockQuantity.toIntOrNull() ?: product.stockQuantity
+                            val lim = product.minStockAlert.toIntOrNull() ?: product.minStockAlert
+                            Text(
+                                text = if (language == "bn") "⚠️ কম স্টক সংকট! বাকি: $q ${product.unit} (সতর্কতা সীমা: $lim)" else "⚠️ Low Stock! Left: $q ${product.unit} (Min Limit: $lim)",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFB45309)
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = Color(0xFFFDE68A),
+                            modifier = Modifier.clickable { onChangeThreshold() }
+                        ) {
+                            Text(
+                                text = if (language == "bn") "সীমা বদলান" else "Edit Min",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF92400E),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -802,19 +1063,33 @@ fun ProductItemCard(
                         isOutOfStock -> Color(0xFFFEE2E2)
                         isLowStock -> Color(0xFFFEF3C7)
                         else -> Color(0xFFDCFCE7)
-                    }
+                    },
+                    border = if (isLowStock || isOutOfStock) BorderStroke(1.dp, if (isOutOfStock) Color(0xFFFCA5A5) else Color(0xFFFCD34D)) else null
                 ) {
-                    Text(
-                        text = "${if (language == "bn") "স্টক: " else "Stock: "}${product.stockQuantity.toIntOrNull() ?: product.stockQuantity} ${product.unit}",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = when {
-                            isOutOfStock -> LossRed
-                            isLowStock -> DueOrange
-                            else -> ProfitGreen
-                        },
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (isOutOfStock || isLowStock) {
+                            Icon(
+                                if (isOutOfStock) Icons.Default.Error else Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = if (isOutOfStock) LossRed else DueOrange,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                        }
+                        Text(
+                            text = "${if (language == "bn") "স্টক: " else "Stock: "}${product.stockQuantity.toIntOrNull() ?: product.stockQuantity} ${product.unit}",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = when {
+                                isOutOfStock -> LossRed
+                                isLowStock -> DueOrange
+                                else -> ProfitGreen
+                            }
+                        )
+                    }
                 }
 
                 // Options Menu
@@ -838,6 +1113,14 @@ fun ProductItemCard(
                             }
                         )
                         DropdownMenuItem(
+                            text = { Text(if (language == "bn") "সতর্কীকরণ সীমা নির্ধারণ" else "Set Alert Threshold") },
+                            leadingIcon = { Icon(Icons.Default.Tune, contentDescription = null, tint = DueOrange) },
+                            onClick = {
+                                expandedMenu = false
+                                onChangeThreshold()
+                            }
+                        )
+                        DropdownMenuItem(
                             text = { Text(if (language == "bn") "স্টক বাদ/নষ্ট" else "Stock Out / Damage") },
                             leadingIcon = { Icon(Icons.Default.RemoveCircleOutline, contentDescription = null) },
                             onClick = {
@@ -855,6 +1138,37 @@ fun ProductItemCard(
                         )
                     }
                 }
+            }
+
+            // Stock Health Level Progress Bar (ব্যবহারকারী নির্ধারিত সীমার তুলনায় বর্তমান স্টক লেভেল)
+            val maxReference = if (product.minStockAlert > 0) product.minStockAlert * 2.0 else 10.0
+            val stockRatio = (product.stockQuantity / maxReference).coerceIn(0.0, 1.0).toFloat()
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                LinearProgressIndicator(
+                    progress = { stockRatio },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(5.dp)
+                        .clip(RoundedCornerShape(3.dp)),
+                    color = when {
+                        isOutOfStock -> LossRed
+                        isLowStock -> Color(0xFFF59E0B)
+                        else -> EmeraldPrimary
+                    },
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "${if (language == "bn") "সতর্কতা সীমা: " else "Min Limit: "}${product.minStockAlert.toIntOrNull() ?: product.minStockAlert} ${product.unit}",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 10.sp,
+                    fontWeight = if (isLowStock) FontWeight.Bold else FontWeight.Normal,
+                    color = if (isLowStock) Color(0xFFB45309) else MaterialTheme.colorScheme.outline
+                )
             }
 
             // Expiry Date Badge if configured

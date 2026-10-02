@@ -63,7 +63,8 @@ fun DashboardScreen(
     onOpenStockInDialog: () -> Unit,
     onOpenAddExpenseDialog: () -> Unit,
     onNavigateToAccounts: () -> Unit = {},
-    onNavigateToReports: () -> Unit = {}
+    onNavigateToReports: () -> Unit = {},
+    onNavigateToTailor: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val summary by viewModel.dashboardSummary.collectAsState()
@@ -957,6 +958,86 @@ fun DashboardScreen(
                         iconTint = Color(0xFF7C3AED),
                         modifier = Modifier.weight(1f),
                         onClick = { showBusinessSummaryDetailDialog = true }
+                    )
+                }
+            }
+        }
+
+        // Tailor Measurement Khata Banner Card (কামিজ, সেলোয়ার, ফ্রক, পেটিকোট, ব্লাউজ ইত্যাদি)
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .clickable { onNavigateToTailor() },
+                colors = CardDefaults.cardColors(
+                    containerColor = EmeraldPrimary.copy(alpha = 0.08f)
+                ),
+                border = BorderStroke(1.dp, EmeraldPrimary.copy(alpha = 0.35f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = EmeraldPrimary,
+                            modifier = Modifier.size(42.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.Straighten,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = if (language == "bn") "দর্জি ও জামার মাপ খাতা" else "Tailor & Measurements",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = EmeraldPrimary
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = EmeraldPrimary
+                                ) {
+                                    Text(
+                                        text = if (language == "bn") "নতুন" else "NEW",
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                                        fontSize = 10.sp,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (language == "bn") "কামিজ, সেলোয়ার, ফ্রক, পেটিকোট, ব্লাউজ ইত্যাদি" else "Kamiz, Salwar, Frock, Petticoat, Blouse",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                    Icon(
+                        Icons.Default.ChevronRight,
+                        contentDescription = null,
+                        tint = EmeraldPrimary
                     )
                 }
             }
