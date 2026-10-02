@@ -1169,6 +1169,17 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // Compatibility methods for different versions of InventoryScreen
+    fun updateProduct(product: Product) = saveProduct(product)
+    val inventoryTab = MutableStateFlow(0)
+    fun setInventoryTab(tab: Int) { inventoryTab.value = tab }
+    fun setInventoryFilter(filter: String) { }
+    fun setInventoryCategory(cat: String) { selectedCategory.value = cat }
+    fun setInventoryView(view: String) { }
+    fun setInventorySearchQuery(query: String) { }
+    fun setLowStockThreshold(threshold: Int) { }
+    fun setDefaultUnit(unit: String) { }
+
     fun stockIn(productId: Long, quantity: Double, buyPrice: Double?, sellPrice: Double?, note: String) {
         viewModelScope.launch {
             val totalCost = repository.recordStockIn(productId, quantity, buyPrice, sellPrice, note)
