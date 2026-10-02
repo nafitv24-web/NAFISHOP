@@ -15,7 +15,7 @@ android {
 
   defaultConfig {
     applicationId = "com.nft.nafishop.nft"
-    minSdk = 24
+    minSdk = 25
     targetSdk = 36
     versionCode = 1
     versionName = "2.4.0"
