@@ -16,16 +16,19 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '21'
           distribution: 'temurin'
+          cache: 'gradle'
 
       - name: Setup Secrets & Debug Keystore
         run: |
-          # Create .env from template
-          cp .env.example .env
+          # Create .env from template if missing
+          if [ ! -f ".env" ]; then
+            cp .env.example .env
+          fi
           
           # Restore debug.keystore from base64 if present
           if [ -f "debug.keystore.base64" ]; then
@@ -41,10 +44,16 @@ jobs:
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '9.3.1'
+          cache-disabled: false
 
       - name: Build Debug APK
         run: |
-          gradle :app:assembleDebug --stacktrace --no-daemon -Djava.awt.headless=true
+          gradle :app:assembleDebug --stacktrace --no-daemon \
+            -Dorg.gradle.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=1024m" \
+            -Dorg.gradle.workers.max=2 \
+            -Dkotlin.compiler.execution.strategy=in-process \
+            -Dorg.gradle.configuration-cache=false \
+            -Djava.awt.headless=true
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
