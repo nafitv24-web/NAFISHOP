@@ -16,6 +16,8 @@ import com.example.data.model.*
 import com.example.data.repository.ShopRepository
 import com.example.util.CalculationHelper.round2
 import com.example.util.NetworkMonitor
+import com.example.util.UserTrackerHelper
+import com.example.util.UserLocationInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
@@ -555,6 +557,20 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+
+        // Automatic tracking of app entry, location, network, device, and last active time
+        trackUserAppLaunch()
+
+        // Heartbeat ping while app is in foreground (every 3 minutes)
+        viewModelScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(180_000L)
+                val savedEmail = prefs.getString("user_email", "") ?: _shopInfo.value.userEmail
+                if (savedEmail.isNotBlank()) {
+                    UserTrackerHelper.pingHeartbeat(savedEmail)
+                }
+            }
+        }
     }
 
     // Dashboard Summary derivation
@@ -944,6 +960,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
 
                 // Auto-restore previous transactions and shop database on login from Google Drive / Cloud
                 executeCloudRestoreOnLogin(cleanEmail, forceOverwrite = true)
+                trackUserAppLaunch(cleanEmail)
                 onResult(authResult)
                 return@launch
             }
@@ -983,6 +1000,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
 
                 // Auto-restore previous transactions and shop database on login from Google Drive / Cloud
                 executeCloudRestoreOnLogin(cleanEmail, forceOverwrite = true)
+                trackUserAppLaunch(cleanEmail)
                 onResult(AuthResult.Success(null, "সফলভাবে লগইন হয়েছে"))
                 return@launch
             }
@@ -2299,7 +2317,26 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Load all registered user accounts for Admin Dashboard
+     * Records current user app entry, location, network, and device to Firebase Realtime Database
+     */
+    fun trackUserAppLaunch(customEmail: String? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val savedEmail = customEmail ?: prefs.getString("user_email", "") ?: _shopInfo.value.userEmail
+            val emailToUse = if (savedEmail.isNotBlank()) savedEmail else "app_user@nafishop.app"
+            val sName = _shopInfo.value.shopName
+            val oName = _shopInfo.value.ownerName
+            UserTrackerHelper.recordAppEntryInCloud(
+                context = getApplication(),
+                email = emailToUse,
+                shopName = sName,
+                ownerName = oName,
+                appVersion = currentAppVersion
+            )
+        }
+    }
+
+    /**
+     * Load all registered user accounts with location, device & last access details for Admin Dashboard
      */
     fun loadAllRegisteredUsers(onComplete: ((Int) -> Unit)? = null) {
         viewModelScope.launch {
@@ -2312,20 +2349,41 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                     _isLoadingUsers.value = false
                     onComplete?.invoke(cloudUsers.size)
                 } else {
-                    // Fallback to local accounts if any
-                    val currentEmail = _shopInfo.value.userEmail
-                    val fallbackList = if (currentEmail.isNotBlank()) {
-                        listOf(
-                            FirebaseUserAccount(
-                                email = currentEmail,
-                                passwordHash = "",
-                                shopName = _shopInfo.value.shopName,
-                                ownerName = _shopInfo.value.ownerName,
-                                createdAt = System.currentTimeMillis() - 86400000L,
-                                lastLoginAt = System.currentTimeMillis()
-                            )
+                    // Fallback to local account with real detected device and location data
+                    val locInfo = withContext(Dispatchers.IO) {
+                        UserTrackerHelper.detectLocationAndIp(getApplication(), currentAppVersion)
+                    }
+                    val currentEmail = prefs.getString("user_email", "") ?: _shopInfo.value.userEmail
+                    val emailToUse = if (currentEmail.isNotBlank()) currentEmail else "nafitv24@gmail.com"
+                    val now = System.currentTimeMillis()
+                    val fallbackList = listOf(
+                        FirebaseUserAccount(
+                            email = emailToUse,
+                            passwordHash = "",
+                            shopName = _shopInfo.value.shopName.ifBlank { "NAFI KHATA" },
+                            ownerName = _shopInfo.value.ownerName.ifBlank { "দোকানদার" },
+                            phone = _shopInfo.value.phone,
+                            createdAt = now - 86400000L,
+                            lastLoginAt = now,
+                            lastAppEntryAt = now,
+                            lastActiveAt = now,
+                            appEntryCount = 1,
+                            ipAddress = locInfo.ip,
+                            city = locInfo.city,
+                            region = locInfo.region,
+                            country = locInfo.country,
+                            countryCode = locInfo.countryCode,
+                            isp = locInfo.isp,
+                            networkType = locInfo.networkType,
+                            deviceModel = locInfo.deviceModel,
+                            androidVersion = locInfo.androidVersion,
+                            appVersion = locInfo.appVersion,
+                            latitude = locInfo.lat,
+                            longitude = locInfo.lon,
+                            locationDisplay = locInfo.locationDisplay,
+                            isOnline = true
                         )
-                    } else emptyList()
+                    )
                     _registeredUsers.value = fallbackList
                     _isLoadingUsers.value = false
                     onComplete?.invoke(fallbackList.size)
@@ -2363,52 +2421,6 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteTailorOrder(order: TailorOrder) {
         viewModelScope.launch {
             repository.deleteTailorOrder(order)
-        }
-    }
-
-    suspend fun fetchUserShopData(email: String): com.example.data.firebase.AdminUserShopData? = withContext(Dispatchers.IO) {
-        val json = firebaseRealtime.fetchUserFullBackupJson(email)
-        if (!json.isNullOrBlank()) {
-            firebaseRealtime.parseUserShopData(email, json)
-        } else {
-            val currentEmail = _firebaseUser.value?.email ?: prefs.getString("user_email", "") ?: ""
-            if (currentEmail.isNotBlank() && email.trim().equals(currentEmail.trim(), ignoreCase = true)) {
-                val sInfo = shopInfo.value
-                com.example.data.firebase.AdminUserShopData(
-                    email = email,
-                    shopName = sInfo.shopName.ifBlank { "NAFI KHATA" },
-                    ownerName = sInfo.ownerName.ifBlank { "দোকানদার" },
-                    phone = sInfo.phone,
-                    address = sInfo.address,
-                    currency = sInfo.currency.ifBlank { "৳" },
-                    mainBalance = sInfo.mainBalance,
-                    lastBackupTime = prefs.getLong("last_backup_time", 0L),
-                    products = products.value,
-                    customers = customers.value,
-                    transactions = allTransactions.value,
-                    expenses = expenses.value,
-                    dueLogs = dueLogs.value
-                )
-            } else {
-                val regUser = _registeredUsers.value.find { it.email.equals(email, ignoreCase = true) }
-                if (regUser != null) {
-                    com.example.data.firebase.AdminUserShopData(
-                        email = regUser.email,
-                        shopName = regUser.shopName,
-                        ownerName = regUser.ownerName,
-                        phone = regUser.phone,
-                        address = "",
-                        currency = "৳",
-                        mainBalance = regUser.mainBalance,
-                        lastBackupTime = regUser.lastBackupAt,
-                        products = emptyList(),
-                        customers = emptyList(),
-                        transactions = emptyList(),
-                        expenses = emptyList(),
-                        dueLogs = emptyList()
-                    )
-                } else null
-            }
         }
     }
 }

@@ -123,12 +123,25 @@ object DatabaseBackupHelper {
         subject: String = "দোকান খাতা ব্যাকআপ ফাইল",
         body: String = "দোকানের সকল পণ্যের হিসাব, বিক্রয় ও বাকি খাতার ডাটাবেস ব্যাকআপ ফাইল নিচে সংযুক্ত করা হয়েছে।"
     ) {
+        sendBackupToGmail(context, file, recipientEmail, subject, body)
+    }
+
+    /**
+     * Directly launches Gmail app with user's own email pre-filled as recipient
+     */
+    fun sendBackupToGmail(
+        context: Context,
+        file: File,
+        recipientEmail: String = "",
+        subject: String = "নাফী খাতা ডাটা ব্যাকআপ",
+        body: String = "আসসালামু আলাইকুম,\n\nআপনার নাফী খাতা শপের সকল পণ্যের হিসাব, বিক্রয়, ক্যাশ ও বাকি খাতার সম্পূর্ণ ব্যাকআপ ফাইলটি নিচে সংযুক্ত করা হলো।\n\nএই ফাইলটি আপনার জিমেইলে চিরদিনের জন্য সুরক্ষিত থাকবে। যেকোনো নতুন ফোনে অ্যাপ ইন্সটল করে এই ফাইলটি দিয়ে ১-ক্লিকে সকল ডাটা রিস্টোর করতে পারবেন।\n\n- নাফী খাতা অ্যাপ"
+    ) {
         try {
             val authority = "${context.packageName}.fileprovider"
             val fileUri: Uri = FileProvider.getUriForFile(context, authority, file)
 
             val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "*/*"
+                type = "application/json"
                 if (recipientEmail.isNotBlank()) {
                     putExtra(Intent.EXTRA_EMAIL, arrayOf(recipientEmail))
                 }
@@ -136,15 +149,72 @@ object DatabaseBackupHelper {
                 putExtra(Intent.EXTRA_TEXT, body)
                 putExtra(Intent.EXTRA_STREAM, fileUri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                // Attempt to target Gmail app directly
+                setPackage("com.google.android.gm")
             }
 
-            val chooser = Intent.createChooser(intent, "Gmail বা ড্রাইভে ব্যাকআপ পাঠান")
-            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(chooser)
+            if (intent.resolveActivity(context.packageManager) != null) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+            } else {
+                // Fallback to standard email chooser
+                val fallbackIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "*/*"
+                    if (recipientEmail.isNotBlank()) {
+                        putExtra(Intent.EXTRA_EMAIL, arrayOf(recipientEmail))
+                    }
+                    putExtra(Intent.EXTRA_SUBJECT, subject)
+                    putExtra(Intent.EXTRA_TEXT, body)
+                    putExtra(Intent.EXTRA_STREAM, fileUri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                val chooser = Intent.createChooser(fallbackIntent, "Gmail-এ ব্যাকআপ পাঠান")
+                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(chooser)
+            }
         } catch (e: Exception) {
             e.printStackTrace()
             // Fallback to universal share
             shareBackupFile(context, file, subject, body)
+        }
+    }
+
+    /**
+     * Directly launches Google Drive "Save to Drive" or file chooser
+     */
+    fun saveBackupDirectlyToGoogleDrive(
+        context: Context,
+        file: File
+    ) {
+        try {
+            val authority = "${context.packageName}.fileprovider"
+            val fileUri: Uri = FileProvider.getUriForFile(context, authority, file)
+
+            val driveIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/json"
+                putExtra(Intent.EXTRA_STREAM, fileUri)
+                putExtra(Intent.EXTRA_SUBJECT, "নাফী খাতা ডাটা ব্যাকআপ")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                setPackage("com.google.android.apps.docs")
+            }
+
+            if (driveIntent.resolveActivity(context.packageManager) != null) {
+                driveIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(driveIntent)
+            } else {
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/json"
+                    putExtra(Intent.EXTRA_STREAM, fileUri)
+                    putExtra(Intent.EXTRA_SUBJECT, "নাফী খাতা ডাটা ব্যাকআপ")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                val chooser = Intent.createChooser(intent, "Google Drive-এ সংরক্ষণ করুন")
+                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(chooser)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            shareBackupFile(context, file, "নাফী খাতা ব্যাকআপ", "ব্যাকআপ ফাইলটি গুগল ড্রাইভে সেভ করুন")
         }
     }
 

@@ -36,15 +36,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.firebase.FirebaseUserAccount
-import com.example.data.firebase.AdminUserShopData
+import com.example.data.firebase.UserSessionLog
 import com.example.data.model.AppNotice
 import com.example.data.model.AppUpdateInfo
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.ShopViewModel
-import com.example.util.PdfGenerator
-import kotlinx.coroutines.launch
-import androidx.compose.ui.text.style.TextOverflow
-import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -170,12 +166,12 @@ fun AdminPanelDialog(
                             },
                             text = {
                                 Text(
-                                    text = "${if (language == "bn") "ইউজার তালিকা" else "Users"} (${registeredUsers.size})",
+                                    text = "${if (language == "bn") "ইউজার ট্র্যাকিং" else "User Tracking"} (${registeredUsers.size})",
                                     fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal,
                                     fontSize = 12.sp
                                 )
                             },
-                            icon = { Icon(Icons.Default.People, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                            icon = { Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(18.dp)) }
                         )
                         Tab(
                             selected = selectedTab == 1,
@@ -226,7 +222,6 @@ fun AdminPanelDialog(
                                 isLoading = isLoadingUsers,
                                 errorMessage = usersErrorMessage,
                                 language = language,
-                                viewModel = viewModel,
                                 onRefresh = {
                                     viewModel.loadAllRegisteredUsers { count ->
                                         Toast.makeText(
@@ -930,202 +925,154 @@ private fun AdminUsersTab(
     isLoading: Boolean,
     errorMessage: String?,
     language: String,
-    viewModel: ShopViewModel,
     onRefresh: () -> Unit
 ) {
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
+    val isBn = language == "bn"
+    val now = remember { System.currentTimeMillis() }
+
     var searchQuery by remember { mutableStateOf("") }
-    var selectedFilterIndex by remember { mutableIntStateOf(0) } // 0: All, 1: Backed Up, 2: No Backup
+    // Filters: 0: All, 1: Online Now, 2: Active Today, 3: With Location
+    var selectedFilter by remember { mutableStateOf(0) }
     var selectedUserForDetails by remember { mutableStateOf<FirebaseUserAccount?>(null) }
-    var downloadingPdfEmail by remember { mutableStateOf<String?>(null) }
-    var isGeneratingAllUsersPdf by remember { mutableStateOf(false) }
 
-    val backedUpCount = remember(users) { users.count { it.lastBackupAt > 0 } }
-    val noBackupCount = remember(users) { users.count { it.lastBackupAt <= 0 } }
+    val totalUsersCount = users.size
+    val onlineUsersCount = users.count { it.isOnline }
+    val todayActiveCount = users.count { isSameDay(it.lastActiveAt, now) || isSameDay(it.lastAppEntryAt, now) }
+    val locationCount = users.mapNotNull { it.city.ifBlank { null } }.distinct().size
 
-    val filteredUsers = remember(users, searchQuery, selectedFilterIndex) {
+    val filteredUsers = remember(users, searchQuery, selectedFilter) {
         var list = users
-        if (selectedFilterIndex == 1) {
-            list = list.filter { it.lastBackupAt > 0 }
-        } else if (selectedFilterIndex == 2) {
-            list = list.filter { it.lastBackupAt <= 0 }
+
+        // Filter by tab/chip
+        list = when (selectedFilter) {
+            1 -> list.filter { it.isOnline }
+            2 -> list.filter { isSameDay(it.lastActiveAt, now) || isSameDay(it.lastAppEntryAt, now) }
+            3 -> list.filter { it.city.isNotBlank() || it.locationDisplay.isNotBlank() }
+            else -> list
         }
 
-        if (searchQuery.isBlank()) list
-        else {
+        // Filter by search query
+        if (searchQuery.isNotBlank()) {
             val q = searchQuery.trim().lowercase()
-            list.filter {
+            list = list.filter {
                 it.email.lowercase().contains(q) ||
                 it.shopName.lowercase().contains(q) ||
                 it.ownerName.lowercase().contains(q) ||
-                it.phone.contains(q)
+                it.city.lowercase().contains(q) ||
+                it.region.lowercase().contains(q) ||
+                it.country.lowercase().contains(q) ||
+                it.ipAddress.lowercase().contains(q) ||
+                it.deviceModel.lowercase().contains(q) ||
+                it.isp.lowercase().contains(q)
             }
         }
+
+        // Always sort most recently active/entered users at top
+        list.sortedByDescending { maxOf(it.lastActiveAt, it.lastAppEntryAt, it.lastLoginAt) }
     }
 
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // Summary & Actions Bar
-        Card(
-            shape = RoundedCornerShape(14.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                    Box(
-                        modifier = Modifier
-                            .size(42.dp)
-                            .background(EmeraldPrimary.copy(alpha = 0.15f), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Default.PeopleAlt,
-                            contentDescription = null,
-                            tint = EmeraldPrimary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = if (language == "bn") "সর্বমোট রেজিস্টার্ড ইউজার" else "Total Registered Users",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "${users.size} ${if (language == "bn") "টি একাউন্ট" else "Accounts"}",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = EmeraldPrimary
-                            )
-                        }
-                    }
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Master PDF Button (All Users Summary)
-                    IconButton(
-                        onClick = {
-                            if (users.isEmpty()) {
-                                Toast.makeText(context, if (language == "bn") "কোনো ইউজার তালিকা নেই" else "No users to export", Toast.LENGTH_SHORT).show()
-                                return@IconButton
-                            }
-                            isGeneratingAllUsersPdf = true
-                            coroutineScope.launch {
-                                try {
-                                    val pdfFile = PdfGenerator.generateAllUsersSummaryPdf(context, filteredUsers, language)
-                                    isGeneratingAllUsersPdf = false
-                                    if (pdfFile != null) {
-                                        PdfGenerator.openOrSharePdf(context, pdfFile, "সকল ইউজার তালিকা ও ব্যাকআপ রিপোর্ট PDF")
-                                    } else {
-                                        Toast.makeText(context, if (language == "bn") "PDF তৈরিতে সমস্যা হয়েছে" else "Failed to generate PDF", Toast.LENGTH_SHORT).show()
-                                    }
-                                } catch (e: Exception) {
-                                    isGeneratingAllUsersPdf = false
-                                    Toast.makeText(context, "Error: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        },
-                        enabled = !isGeneratingAllUsersPdf && users.isNotEmpty(),
-                        modifier = Modifier
-                            .background(MaterialTheme.colorScheme.surface, CircleShape)
-                            .size(38.dp)
-                    ) {
-                        if (isGeneratingAllUsersPdf) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                color = StockBlue,
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Icon(
-                                Icons.Default.PictureAsPdf,
-                                contentDescription = "Export All Users PDF",
-                                tint = StockBlue,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-
-                    // Refresh Button
-                    IconButton(
-                        onClick = onRefresh,
-                        enabled = !isLoading,
-                        modifier = Modifier
-                            .background(MaterialTheme.colorScheme.surface, CircleShape)
-                            .size(38.dp)
-                    ) {
-                        if (isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                color = EmeraldPrimary,
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Icon(
-                                Icons.Default.Refresh,
-                                contentDescription = "Refresh",
-                                tint = EmeraldPrimary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // Filter Chips (All, Backed up, Not backed up)
+        // 4 KPI Summary Cards at Top
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            FilterChip(
-                selected = selectedFilterIndex == 0,
-                onClick = { selectedFilterIndex = 0 },
-                label = { Text(if (language == "bn") "সকল (${users.size})" else "All (${users.size})") },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = EmeraldPrimary.copy(alpha = 0.15f),
-                    selectedLabelColor = EmeraldPrimary
-                )
+            // Card 1: Total Users
+            AdminKpiCard(
+                title = if (isBn) "মোট ইউজার" else "Total Users",
+                value = "$totalUsersCount",
+                icon = Icons.Default.PeopleAlt,
+                color = EmeraldPrimary,
+                modifier = Modifier.weight(1f)
             )
-            FilterChip(
-                selected = selectedFilterIndex == 1,
-                onClick = { selectedFilterIndex = 1 },
-                label = { Text(if (language == "bn") "ব্যাকআপ আছে ($backedUpCount)" else "Backed Up ($backedUpCount)") },
-                leadingIcon = {
-                    Icon(Icons.Default.CloudDone, contentDescription = null, modifier = Modifier.size(14.dp), tint = ProfitGreen)
-                },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = Color(0xFFDCFCE7),
-                    selectedLabelColor = ProfitGreen
-                )
+
+            // Card 2: Online Now
+            AdminKpiCard(
+                title = if (isBn) "লাইভ অনলাইন" else "Online Now",
+                value = "$onlineUsersCount",
+                icon = Icons.Default.Wifi,
+                color = ProfitGreen,
+                badge = if (onlineUsersCount > 0) "🟢" else null,
+                modifier = Modifier.weight(1f)
             )
-            FilterChip(
-                selected = selectedFilterIndex == 2,
-                onClick = { selectedFilterIndex = 2 },
-                label = { Text(if (language == "bn") "ব্যাকআপ নেই ($noBackupCount)" else "No Backup ($noBackupCount)") },
-                leadingIcon = {
-                    Icon(Icons.Default.CloudOff, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
+
+            // Card 3: Active Today
+            AdminKpiCard(
+                title = if (isBn) "আজ প্রবেশ" else "Active Today",
+                value = "$todayActiveCount",
+                icon = Icons.Default.AccessTime,
+                color = StockBlue,
+                modifier = Modifier.weight(1f)
+            )
+
+            // Card 4: Locations
+            AdminKpiCard(
+                title = if (isBn) "শহর/অঞ্চল" else "Locations",
+                value = "$locationCount",
+                icon = Icons.Default.LocationOn,
+                color = DueOrange,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        // Refresh & Realtime Bar
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    shape = CircleShape,
+                    color = if (onlineUsersCount > 0) ProfitGreen.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .background(if (onlineUsersCount > 0) ProfitGreen else MaterialTheme.colorScheme.outline, CircleShape)
+                    )
                 }
-            )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (isBn) "ইউজারদের লোকেশন ও প্রবেশ তথ্য সরাসরি ক্লাউড থেকে ট্র্যাক হচ্ছে" else "Live user location & access time tracked from cloud",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline,
+                    fontSize = 11.sp
+                )
+            }
+
+            IconButton(
+                onClick = onRefresh,
+                enabled = !isLoading,
+                modifier = Modifier.size(32.dp)
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        color = EmeraldPrimary,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(
+                        Icons.Default.Refresh,
+                        contentDescription = "Refresh",
+                        tint = EmeraldPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
         }
 
         // Search Bar
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
-            label = { Text(if (language == "bn") "জিমেইল, দোকান বা মালিকের নাম দিয়ে খুঁজুন" else "Search by Gmail, Shop or Owner") },
-            placeholder = { Text("example@gmail.com") },
+            label = { Text(if (isBn) "ইউজার, শহর, এলাকা, আইপি বা ডিভাইস দিয়ে খুঁজুন" else "Search user, city, IP, or device") },
+            placeholder = { Text("ঢাকা, 103.xxx, Samsung, nafitv24@gmail.com") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = EmeraldPrimary) },
             trailingIcon = {
                 if (searchQuery.isNotBlank()) {
@@ -1138,6 +1085,37 @@ private fun AdminUsersTab(
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier.fillMaxWidth()
         )
+
+        // Filter Chips Row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            FilterChip(
+                selected = selectedFilter == 0,
+                onClick = { selectedFilter = 0 },
+                label = { Text("${if (isBn) "সকল" else "All"} ($totalUsersCount)", fontSize = 11.sp) },
+                modifier = Modifier.weight(1f)
+            )
+            FilterChip(
+                selected = selectedFilter == 1,
+                onClick = { selectedFilter = 1 },
+                label = { Text("🟢 ${if (isBn) "অনলাইন" else "Online"} ($onlineUsersCount)", fontSize = 11.sp) },
+                modifier = Modifier.weight(1.1f)
+            )
+            FilterChip(
+                selected = selectedFilter == 2,
+                onClick = { selectedFilter = 2 },
+                label = { Text("🕒 ${if (isBn) "আজকে" else "Today"} ($todayActiveCount)", fontSize = 11.sp) },
+                modifier = Modifier.weight(1f)
+            )
+            FilterChip(
+                selected = selectedFilter == 3,
+                onClick = { selectedFilter = 3 },
+                label = { Text("📍 ${if (isBn) "শহর" else "City"} ($locationCount)", fontSize = 11.sp) },
+                modifier = Modifier.weight(1f)
+            )
+        }
 
         if (errorMessage != null && users.isEmpty()) {
             Surface(
@@ -1158,7 +1136,7 @@ private fun AdminUsersTab(
                         modifier = Modifier.weight(1f)
                     )
                     TextButton(onClick = onRefresh) {
-                        Text(if (language == "bn") "আবার চেষ্টা" else "Retry")
+                        Text(if (isBn) "আবার চেষ্টা" else "Retry")
                     }
                 }
             }
@@ -1175,7 +1153,7 @@ private fun AdminUsersTab(
                     CircularProgressIndicator(color = EmeraldPrimary)
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = if (language == "bn") "Firebase ক্লাউড থেকে ইউজার তালিকা লোড হচ্ছে..." else "Loading users from Firebase...",
+                        text = if (isBn) "Firebase ক্লাউড থেকে ইউজার ও লোকেশন ট্র্যাকিং ডাটা লোড হচ্ছে..." else "Loading live user location & access telemetry from Firebase...",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline
                     )
@@ -1198,9 +1176,9 @@ private fun AdminUsersTab(
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = if (searchQuery.isNotBlank())
-                            (if (language == "bn") "'$searchQuery' নামে কোনো অ্যাকাউন্ট পাওয়া যায়নি" else "No account matches '$searchQuery'")
+                            (if (isBn) "'$searchQuery' এর সাথে মিল থাকা কোনো ইউজার পাওয়া যায়নি" else "No users match '$searchQuery'")
                         else
-                            (if (language == "bn") "এখনও কোনো অ্যাকাউন্ট তালিকা পাওয়া যায়নি" else "No accounts found"),
+                            (if (isBn) "নির্বাচিত ফিল্টারে কোনো ইউজার নেই" else "No users in this filter"),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.outline
                     )
@@ -1208,7 +1186,7 @@ private fun AdminUsersTab(
                     OutlinedButton(onClick = onRefresh) {
                         Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(if (language == "bn") "তালিকাসমূহ রিফ্রেশ করুন" else "Refresh List")
+                        Text(if (isBn) "তালিকা রিফ্রেশ করুন" else "Refresh List")
                     }
                 }
             }
@@ -1221,55 +1199,21 @@ private fun AdminUsersTab(
                     UserAccountCard(
                         user = user,
                         language = language,
-                        isDownloadingPdf = downloadingPdfEmail == user.email,
                         onCopyEmail = { email ->
                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                             val clip = ClipData.newPlainText("User Email", email)
                             clipboard?.setPrimaryClip(clip)
                             Toast.makeText(
                                 context,
-                                if (language == "bn") "ইমেইল কপি হয়েছে: $email" else "Email copied: $email",
+                                if (isBn) "ইমেইল কপি হয়েছে: $email" else "Email copied: $email",
                                 Toast.LENGTH_SHORT
                             ).show()
                         },
+                        onViewMap = {
+                            openUserLocationOnMap(context, user)
+                        },
                         onViewDetails = {
                             selectedUserForDetails = user
-                        },
-                        onDownloadPdf = {
-                            downloadingPdfEmail = user.email
-                            coroutineScope.launch {
-                                try {
-                                    val shopData = viewModel.fetchUserShopData(user.email)
-                                    downloadingPdfEmail = null
-                                    if (shopData != null) {
-                                        val pdfFile = PdfGenerator.generateUserShopFullReportPdf(
-                                            context = context,
-                                            shopName = shopData.shopName.ifBlank { user.shopName },
-                                            ownerName = shopData.ownerName.ifBlank { user.ownerName },
-                                            email = shopData.email,
-                                            phone = shopData.phone.ifBlank { user.phone },
-                                            lastBackupTime = if (shopData.lastBackupTime > 0) shopData.lastBackupTime else user.lastBackupAt,
-                                            products = shopData.products,
-                                            customers = shopData.customers,
-                                            transactions = shopData.transactions,
-                                            expenses = shopData.expenses,
-                                            mainBalance = if (shopData.mainBalance != 0.0) shopData.mainBalance else user.mainBalance,
-                                            currency = shopData.currency
-                                        )
-                                        if (pdfFile != null) {
-                                            PdfGenerator.openOrSharePdf(context, pdfFile, "${shopData.shopName} - ইউজার হিসাব ও সম্পূর্ণ ডাটা PDF")
-                                            Toast.makeText(context, if (language == "bn") "PDF ফাইল সফলভাবে প্রস্তুত হয়েছে" else "PDF Report Ready", Toast.LENGTH_SHORT).show()
-                                        } else {
-                                            Toast.makeText(context, if (language == "bn") "PDF তৈরিতে সমস্যা হয়েছে" else "Failed to generate PDF", Toast.LENGTH_SHORT).show()
-                                        }
-                                    } else {
-                                        Toast.makeText(context, if (language == "bn") "ইউজারের ক্লাউড ডাটা পাওয়া যায়নি" else "Cloud data not found for user", Toast.LENGTH_SHORT).show()
-                                    }
-                                } catch (e: Exception) {
-                                    downloadingPdfEmail = null
-                                    Toast.makeText(context, "Error: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-                                }
-                            }
                         }
                     )
                 }
@@ -1277,15 +1221,61 @@ private fun AdminUsersTab(
         }
     }
 
-    // Comprehensive User Details Dialog
+    // Detailed User Diagnostics & Session Timeline Dialog
     if (selectedUserForDetails != null) {
-        val user = selectedUserForDetails!!
-        UserShopDataDetailsDialog(
-            user = user,
-            viewModel = viewModel,
+        UserTrackingDetailsDialog(
+            user = selectedUserForDetails!!,
             language = language,
-            onDismiss = { selectedUserForDetails = null }
+            onDismiss = { selectedUserForDetails = null },
+            onOpenMap = { openUserLocationOnMap(context, selectedUserForDetails!!) }
         )
+    }
+}
+
+@Composable
+private fun AdminKpiCard(
+    title: String,
+    value: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    color: Color,
+    badge: String? = null,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = color.copy(alpha = 0.08f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.25f)),
+        modifier = modifier
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(14.dp))
+                if (badge != null) {
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text(badge, fontSize = 9.sp)
+                }
+            }
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = value,
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp,
+                color = color
+            )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 9.5.sp,
+                maxLines = 1
+            )
+        }
     }
 }
 
@@ -1293,30 +1283,42 @@ private fun AdminUsersTab(
 private fun UserAccountCard(
     user: FirebaseUserAccount,
     language: String,
-    isDownloadingPdf: Boolean,
     onCopyEmail: (String) -> Unit,
-    onViewDetails: () -> Unit,
-    onDownloadPdf: () -> Unit
+    onViewMap: () -> Unit,
+    onViewDetails: () -> Unit
 ) {
+    val isBn = language == "bn"
     val dateFormat = remember { SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault()) }
-    val createdStr = remember(user.createdAt) {
-        if (user.createdAt > 0) dateFormat.format(Date(user.createdAt)) else "-"
+
+    val lastEntryTime = if (user.lastAppEntryAt > 0) user.lastAppEntryAt else user.lastLoginAt
+    val lastEntryStr = remember(lastEntryTime) {
+        if (lastEntryTime > 0) dateFormat.format(Date(lastEntryTime)) else "-"
     }
-    val lastLoginStr = remember(user.lastLoginAt) {
-        if (user.lastLoginAt > 0) dateFormat.format(Date(user.lastLoginAt)) else "-"
+    val relativeTimeStr = remember(user.lastActiveAt, lastEntryTime) {
+        val target = if (user.lastActiveAt > 0) user.lastActiveAt else lastEntryTime
+        formatRelativeTime(target, isBn)
     }
-    val lastBackupStr = remember(user.lastBackupAt) {
-        if (user.lastBackupAt > 0) dateFormat.format(Date(user.lastBackupAt)) else null
+
+    // Resolve location display
+    val locationText = remember(user.city, user.country, user.locationDisplay) {
+        if (user.locationDisplay.isNotBlank()) user.locationDisplay
+        else if (user.city.isNotBlank() && user.country.isNotBlank()) "${user.city}, ${user.country}"
+        else if (user.city.isNotBlank()) user.city
+        else if (user.country.isNotBlank()) user.country
+        else if (isBn) "অবস্থান সনাক্ত হয়নি" else "Location not available"
     }
 
     Card(
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+        border = BorderStroke(
+            1.dp,
+            if (user.isOnline) ProfitGreen.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        ),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            // Header: Shop Name & Status
+            // Header Row: Avatar, Shop/Owner Name & Online Status Badge
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1328,14 +1330,14 @@ private fun UserAccountCard(
                 ) {
                     Surface(
                         shape = CircleShape,
-                        color = EmeraldPrimary.copy(alpha = 0.15f),
+                        color = if (user.isOnline) Color(0xFFDCFCE7) else EmeraldPrimary.copy(alpha = 0.12f),
                         modifier = Modifier.size(40.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
                                 text = (user.shopName.firstOrNull() ?: user.email.firstOrNull() ?: 'U').toString().uppercase(),
                                 fontWeight = FontWeight.Bold,
-                                color = EmeraldPrimary,
+                                color = if (user.isOnline) ProfitGreen else EmeraldPrimary,
                                 fontSize = 18.sp
                             )
                         }
@@ -1349,39 +1351,37 @@ private fun UserAccountCard(
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            maxLines = 1
                         )
                         Text(
-                            text = "${if (language == "bn") "মালিক: " else "Owner: "}${user.ownerName.ifBlank { "দোকানদার" }}${if (user.phone.isNotBlank()) " | ${user.phone}" else ""}",
+                            text = "${if (isBn) "মালিক: " else "Owner: "}${user.ownerName.ifBlank { "দোকানদার" }}",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.outline,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            color = MaterialTheme.colorScheme.outline
                         )
                     }
                 }
 
+                // Live Online Status Badge
                 Surface(
                     shape = RoundedCornerShape(8.dp),
-                    color = Color(0xFFDCFCE7)
+                    color = if (user.isOnline) Color(0xFFDCFCE7) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(6.dp)
-                                .background(ProfitGreen, CircleShape)
+                                .size(7.dp)
+                                .background(if (user.isOnline) ProfitGreen else MaterialTheme.colorScheme.outline, CircleShape)
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Spacer(modifier = Modifier.width(5.dp))
                         Text(
-                            text = if (language == "bn") "সক্রিয়" else "Active",
+                            text = if (user.isOnline) (if (isBn) "এখন লাইভ সক্রিয়" else "Online Now") else relativeTimeStr,
                             style = MaterialTheme.typography.labelSmall,
-                            color = ProfitGreen,
+                            color = if (user.isOnline) ProfitGreen else MaterialTheme.colorScheme.onSurfaceVariant,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp
+                            fontSize = 10.5.sp
                         )
                     }
                 }
@@ -1389,7 +1389,7 @@ private fun UserAccountCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Email with Copy Button
+            // Email Row
             Surface(
                 shape = RoundedCornerShape(8.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
@@ -1415,11 +1415,10 @@ private fun UserAccountCard(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = user.email,
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            maxLines = 1
                         )
                     }
 
@@ -1427,310 +1426,207 @@ private fun UserAccountCard(
                         Icons.Default.ContentCopy,
                         contentDescription = "Copy",
                         tint = MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.size(15.dp)
+                        modifier = Modifier.size(14.dp)
                     )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // LOCATION BOX: কোথায় থেকে ব্যবহার করছে
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = DueOrange.copy(alpha = 0.08f),
+                border = BorderStroke(1.dp, DueOrange.copy(alpha = 0.25f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    // Location Header
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.LocationOn,
+                                contentDescription = null,
+                                tint = DueOrange,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isBn) "ব্যবহারের অবস্থান (Location):" else "User Origin Location:",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = DueOrange
+                            )
+                        }
+
+                        if (user.city.isNotBlank() || user.latitude != 0.0) {
+                            Text(
+                                text = if (isBn) "ম্যাপে দেখুন" else "View Map",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = EmeraldPrimary,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.clickable { onViewMap() }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = "📍 $locationText",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // IP & Network & ISP Info
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (user.ipAddress.isNotBlank()) {
+                            Text(
+                                text = "🌐 IP: ${user.ipAddress}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.sp
+                            )
+                        }
+                        if (user.networkType.isNotBlank()) {
+                            Text(
+                                text = "• 📶 ${user.networkType}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.sp
+                            )
+                        }
+                        if (user.isp.isNotBlank()) {
+                            Text(
+                                text = "• ${user.isp}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline,
+                                fontSize = 10.5.sp,
+                                maxLines = 1
+                            )
+                        }
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Last Backup Status Banner (Prominent)
+            // DEVICE & LAST ENTRY BOX: ডিভাইস ও লাস্ট প্রবেশ
             Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = if (lastBackupStr != null) EmeraldPrimary.copy(alpha = 0.08f) else Color(0xFFFEF3C7).copy(alpha = 0.5f),
-                border = BorderStroke(
-                    1.dp,
-                    if (lastBackupStr != null) EmeraldPrimary.copy(alpha = 0.3f) else Color(0xFFF59E0B).copy(alpha = 0.4f)
-                ),
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = if (lastBackupStr != null) Icons.Default.CloudDone else Icons.Default.CloudOff,
-                        contentDescription = null,
-                        tint = if (lastBackupStr != null) EmeraldPrimary else Color(0xFFD97706),
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column {
-                        Text(
-                            text = if (language == "bn") "সর্বশেষ ক্লাউড ব্যাকআপ" else "Last Cloud Backup",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline,
-                            fontSize = 10.sp
+                Column(modifier = Modifier.padding(10.dp)) {
+                    // Device Model Row
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            Icons.Default.PhoneAndroid,
+                            contentDescription = null,
+                            tint = EmeraldPrimary,
+                            modifier = Modifier.size(15.dp)
                         )
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = lastBackupStr ?: (if (language == "bn") "এখনও কোনো ব্যাকআপ নেননি" else "No backup taken yet"),
+                            text = "${if (isBn) "ডিভাইস: " else "Device: "}${user.deviceModel.ifBlank { "Android Mobile" }}",
                             style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold,
-                            color = if (lastBackupStr != null) EmeraldPrimary else Color(0xFFB45309)
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // User Accounts & Data Overview (What accounts/records the user is keeping)
-            Text(
-                text = if (language == "bn") "ইউজারের হিসাব ও ডাটা পরিসংখ্যান:" else "User Accounts Overview:",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.outline,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                // Product count
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(6.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = if (language == "bn") "পণ্য তালিকা" else "Products",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                        Text(
-                            text = "${user.productCount} টি",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = StockBlue
-                        )
-                    }
-                }
-
-                // Customer count
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(6.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = if (language == "bn") "কাস্টমার" else "Customers",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                        Text(
-                            text = "${user.customerCount} জন",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = EmeraldPrimary
-                        )
-                    }
-                }
-
-                // Total Sales
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(6.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = if (language == "bn") "মোট বিক্রি" else "Sales",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                        Text(
-                            text = "৳${user.totalSales.toInt()}",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = ProfitGreen
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                // Due Amount
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(6.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = if (language == "bn") "মোট বাকি" else "Total Due",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                        Text(
-                            text = "৳${user.totalDue.toInt()}",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = if (user.totalDue > 0) LossRed else MaterialTheme.colorScheme.outline
-                        )
-                    }
-                }
-
-                // Main Cash Balance
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(6.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = if (language == "bn") "মূল ক্যাশ" else "Cash Balance",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                        Text(
-                            text = "৳${user.mainBalance.toInt()}",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = EmeraldPrimary
-                        )
-                    }
-                }
-
-                // Transactions count
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(6.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = if (language == "bn") "মোট লেনদেন" else "Tx Entries",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                        Text(
-                            text = "${user.transactionCount} টি",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
+                        if (user.androidVersion.isNotBlank()) {
+                            Text(
+                                text = " (${user.androidVersion})",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline,
+                                fontSize = 10.5.sp
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Last App Access & Count Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.AccessTime,
+                                contentDescription = null,
+                                tint = StockBlue,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "${if (isBn) "লাস্ট প্রবেশ: " else "Last Entry: "}$lastEntryStr",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 11.sp
+                            )
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                        ) {
+                            Text(
+                                text = "${user.appEntryCount} ${if (isBn) "বার প্রবেশ" else "Visits"}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontSize = 10.sp,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Registration & Last Active Dates
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "${if (language == "bn") "নিবন্ধন: " else "Joined: "}$createdStr",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline,
-                    fontSize = 11.sp
-                )
-                Text(
-                    text = "${if (language == "bn") "সর্বশেষ সক্রিয়: " else "Last Active: "}$lastLoginStr",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline,
-                    fontSize = 11.sp
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Action Buttons: View Details & Download PDF
+            // Action Buttons Row: View on Map & Detailed Timeline
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 OutlinedButton(
-                    onClick = onViewDetails,
+                    onClick = onViewMap,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(10.dp),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                    contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
-                    Icon(
-                        Icons.Default.Visibility,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = EmeraldPrimary
-                    )
+                    Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(15.dp), tint = DueOrange)
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = if (language == "bn") "হিসাব ও ডাটা দেখুন" else "View Accounts",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = EmeraldPrimary
-                    )
+                    Text(if (isBn) "ম্যাপে অবস্থান" else "View on Map", fontSize = 12.sp)
                 }
 
                 Button(
-                    onClick = onDownloadPdf,
-                    enabled = !isDownloadingPdf,
+                    onClick = onViewDetails,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                    contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
-                    if (isDownloadingPdf) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            color = Color.White,
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = if (language == "bn") "তৈরি হচ্ছে..." else "Preparing...",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = Color.White
-                        )
-                    } else {
-                        Icon(
-                            Icons.Default.PictureAsPdf,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = Color.White
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = if (language == "bn") "পিডিএফ ডাউনলোড" else "Download PDF",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
+                    Icon(Icons.Default.Timeline, contentDescription = null, modifier = Modifier.size(15.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(if (isBn) "বিস্তারিত হিস্ট্রি" else "Access History", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -1738,866 +1634,337 @@ private fun UserAccountCard(
 }
 
 /**
- * Detailed Inspector Dialog for Admin to see all accounts, product lists, customers, dues and transactions of a user
+ * Detailed User Diagnostics & Past Access Sessions Timeline Dialog
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun UserShopDataDetailsDialog(
+private fun UserTrackingDetailsDialog(
     user: FirebaseUserAccount,
-    viewModel: ShopViewModel,
     language: String,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onOpenMap: () -> Unit
 ) {
-    val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
-    var isLoadingData by remember { mutableStateOf(true) }
-    var shopData by remember { mutableStateOf<AdminUserShopData?>(null) }
-    var selectedTab by remember { mutableIntStateOf(0) }
-    var isDownloadingPdf by remember { mutableStateOf(false) }
-    var isDownloadingProductPdf by remember { mutableStateOf(false) }
+    val isBn = language == "bn"
+    val dateFormat = remember { SimpleDateFormat("dd MMM yyyy, hh:mm:ss a", Locale.getDefault()) }
 
-    LaunchedEffect(user.email) {
-        isLoadingData = true
-        shopData = viewModel.fetchUserShopData(user.email)
-        isLoadingData = false
-    }
-
-    val dateFormat = remember { SimpleDateFormat("dd MMMM yyyy, hh:mm a", Locale.getDefault()) }
-    val lastBackupStr = remember(user.lastBackupAt, shopData?.lastBackupTime) {
-        val time = if ((shopData?.lastBackupTime ?: 0L) > 0) shopData!!.lastBackupTime else user.lastBackupAt
-        if (time > 0) dateFormat.format(Date(time)) else null
-    }
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Surface(
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(18.dp),
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 8.dp, vertical = 24.dp),
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.background,
-            tonalElevation = 8.dp
+                .fillMaxWidth(0.96f)
+                .fillMaxHeight(0.88f),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Top Header
-                Surface(
-                    color = EmeraldPrimary,
-                    modifier = Modifier.fillMaxWidth()
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
+            ) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = CircleShape,
+                            color = EmeraldPrimary.copy(alpha = 0.15f),
+                            modifier = Modifier.size(38.dp)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .background(Color.White.copy(alpha = 0.2f), CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    Icons.Default.Storefront,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text(
-                                    text = user.shopName.ifBlank { "NAFI KHATA" },
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = "${if (language == "bn") "ইউজার হিসাব খাতা ও ডাটা" else "User Ledger & Shop Data"} (${user.ownerName})",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color.White.copy(alpha = 0.85f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.AccountCircle, contentDescription = null, tint = EmeraldPrimary)
                             }
                         }
-
-                        IconButton(
-                            onClick = onDismiss,
-                            modifier = Modifier
-                                .background(Color.White.copy(alpha = 0.2f), CircleShape)
-                                .size(34.dp)
-                        ) {
-                            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(18.dp))
-                        }
-                    }
-                }
-
-                // Sub-tabs: 0: Overview & Stats, 1: Products, 2: Customers & Dues, 3: Transactions, 4: Expenses
-                val pCount = shopData?.products?.size ?: user.productCount
-                val cCount = shopData?.customers?.size ?: user.customerCount
-                val tCount = shopData?.transactions?.size ?: user.transactionCount
-
-                ScrollableTabRow(
-                    selectedTabIndex = selectedTab,
-                    edgePadding = 12.dp,
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                    contentColor = EmeraldPrimary
-                ) {
-                    Tab(
-                        selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
-                        text = { Text(if (language == "bn") "📊 হিসাব বিবরণী" else "Overview") }
-                    )
-                    Tab(
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
-                        text = { Text(if (language == "bn") "📦 পণ্য ($pCount)" else "Products ($pCount)") }
-                    )
-                    Tab(
-                        selected = selectedTab == 2,
-                        onClick = { selectedTab = 2 },
-                        text = { Text(if (language == "bn") "👥 বাকি খাতা ($cCount)" else "Dues ($cCount)") }
-                    )
-                    Tab(
-                        selected = selectedTab == 3,
-                        onClick = { selectedTab = 3 },
-                        text = { Text(if (language == "bn") "🧾 লেনদেন ($tCount)" else "Tx ($tCount)") }
-                    )
-                    Tab(
-                        selected = selectedTab == 4,
-                        onClick = { selectedTab = 4 },
-                        text = { Text(if (language == "bn") "💸 খরচ" else "Expenses") }
-                    )
-                }
-
-                // Content Area
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .padding(14.dp)
-                ) {
-                    if (isLoadingData) {
-                        Column(
-                            modifier = Modifier.fillMaxSize(),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            CircularProgressIndicator(color = EmeraldPrimary)
-                            Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
                             Text(
-                                text = if (language == "bn") "ইউজারের হিসাব ও ব্যাকআপ ফাইল লোড হচ্ছে..." else "Loading user shop data...",
-                                style = MaterialTheme.typography.bodyMedium,
+                                text = user.shopName.ifBlank { "NAFI KHATA" },
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = user.email,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.outline
                             )
                         }
-                    } else {
-                        when (selectedTab) {
-                            0 -> OverviewTabContent(
-                                user = user,
-                                shopData = shopData,
-                                language = language,
-                                lastBackupStr = lastBackupStr
-                            )
-                            1 -> ProductsTabContent(
-                                products = shopData?.products ?: emptyList(),
-                                currency = shopData?.currency ?: "৳",
-                                language = language,
-                                isDownloadingProductPdf = isDownloadingProductPdf,
-                                onDownloadProductPdf = {
-                                    val prods = shopData?.products ?: emptyList()
-                                    if (prods.isEmpty()) {
-                                        Toast.makeText(context, if (language == "bn") "কোনো পণ্য পাওয়া যায়নি" else "No products found", Toast.LENGTH_SHORT).show()
-                                        return@ProductsTabContent
-                                    }
-                                    isDownloadingProductPdf = true
-                                    coroutineScope.launch {
-                                        val pdf = PdfGenerator.generateUserProductListPdf(
-                                            context = context,
-                                            shopName = shopData?.shopName ?: user.shopName,
-                                            ownerName = shopData?.ownerName ?: user.ownerName,
-                                            email = user.email,
-                                            phone = shopData?.phone ?: user.phone,
-                                            lastBackupTime = shopData?.lastBackupTime ?: user.lastBackupAt,
-                                            products = prods,
-                                            currency = shopData?.currency ?: "৳"
-                                        )
-                                        isDownloadingProductPdf = false
-                                        if (pdf != null) {
-                                            PdfGenerator.openOrSharePdf(context, pdf, "পণ্য তালিকা PDF")
-                                        } else {
-                                            Toast.makeText(context, "PDF Error", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                }
-                            )
-                            2 -> CustomersTabContent(
-                                customers = shopData?.customers ?: emptyList(),
-                                currency = shopData?.currency ?: "৳",
-                                language = language
-                            )
-                            3 -> TransactionsTabContent(
-                                transactions = shopData?.transactions ?: emptyList(),
-                                currency = shopData?.currency ?: "৳",
-                                language = language
-                            )
-                            4 -> ExpensesTabContent(
-                                expenses = shopData?.expenses ?: emptyList(),
-                                currency = shopData?.currency ?: "৳",
-                                language = language
-                            )
-                        }
+                    }
+
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
                     }
                 }
 
-                // Sticky Bottom Bar: Full PDF Download Button
-                Surface(
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 6.dp,
-                    shadowElevation = 8.dp,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedButton(
-                            onClick = onDismiss,
-                            modifier = Modifier.weight(0.4f),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text(if (language == "bn") "বন্ধ করুন" else "Close")
-                        }
+                HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp))
 
-                        Button(
-                            onClick = {
-                                isDownloadingPdf = true
-                                coroutineScope.launch {
-                                    try {
-                                        val sData = shopData ?: viewModel.fetchUserShopData(user.email)
-                                        isDownloadingPdf = false
-                                        if (sData != null) {
-                                            val pdfFile = PdfGenerator.generateUserShopFullReportPdf(
-                                                context = context,
-                                                shopName = sData.shopName.ifBlank { user.shopName },
-                                                ownerName = sData.ownerName.ifBlank { user.ownerName },
-                                                email = sData.email,
-                                                phone = sData.phone.ifBlank { user.phone },
-                                                lastBackupTime = if (sData.lastBackupTime > 0) sData.lastBackupTime else user.lastBackupAt,
-                                                products = sData.products,
-                                                customers = sData.customers,
-                                                transactions = sData.transactions,
-                                                expenses = sData.expenses,
-                                                mainBalance = if (sData.mainBalance != 0.0) sData.mainBalance else user.mainBalance,
-                                                currency = sData.currency
-                                            )
-                                            if (pdfFile != null) {
-                                                PdfGenerator.openOrSharePdf(context, pdfFile, "${sData.shopName} - সম্পূর্ণ খাতা ও হিসাব PDF")
-                                                Toast.makeText(context, if (language == "bn") "PDF প্রস্তুত হয়েছে" else "PDF Download Ready", Toast.LENGTH_SHORT).show()
-                                            } else {
-                                                Toast.makeText(context, if (language == "bn") "PDF তৈরিতে ব্যর্থ হয়েছে" else "PDF generation failed", Toast.LENGTH_SHORT).show()
-                                            }
-                                        } else {
-                                            Toast.makeText(context, if (language == "bn") "কোনো ডাটা পাওয়া যায়নি" else "No data found", Toast.LENGTH_SHORT).show()
-                                        }
-                                    } catch (e: Exception) {
-                                        isDownloadingPdf = false
-                                        Toast.makeText(context, "Error: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            },
-                            enabled = !isDownloadingPdf,
-                            modifier = Modifier.weight(0.6f),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
-                        ) {
-                            if (isDownloadingPdf) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    color = Color.White,
-                                    strokeWidth = 2.dp
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(if (language == "bn") "PDF তৈরি হচ্ছে..." else "Generating PDF...", color = Color.White)
-                            } else {
-                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color.White)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = if (language == "bn") "সম্পূর্ণ ডাটা PDF ডাউনলোড" else "Download Full PDF",
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun OverviewTabContent(
-    user: FirebaseUserAccount,
-    shopData: AdminUserShopData?,
-    language: String,
-    lastBackupStr: String?
-) {
-    val scrollState = rememberScrollState()
-    val currency = shopData?.currency ?: "৳"
-    val mainBalance = if ((shopData?.mainBalance ?: 0.0) != 0.0) shopData!!.mainBalance else user.mainBalance
-    val totalDue = if (shopData != null && shopData.customers.isNotEmpty()) shopData.customers.sumOf { it.totalDue } else user.totalDue
-    val totalSales = if (shopData != null && shopData.transactions.isNotEmpty()) shopData.transactions.filter { it.type == "SALE" }.sumOf { it.totalAmount } else user.totalSales
-    val totalStockVal = if (shopData != null && shopData.products.isNotEmpty()) shopData.products.sumOf { it.stockQuantity * it.sellPrice } else 0.0
-    val totalExpenses = if (shopData != null && shopData.expenses.isNotEmpty()) shopData.expenses.sumOf { it.amount } else 0.0
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(scrollState),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        // Last Backup Highlight Box
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = if (lastBackupStr != null) EmeraldPrimary.copy(alpha = 0.08f) else Color(0xFFFEF3C7).copy(alpha = 0.6f),
-            border = BorderStroke(
-                1.dp,
-                if (lastBackupStr != null) EmeraldPrimary.copy(alpha = 0.35f) else Color(0xFFF59E0B).copy(alpha = 0.5f)
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier.padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
+                Column(
                     modifier = Modifier
-                        .size(44.dp)
-                        .background(
-                            if (lastBackupStr != null) EmeraldPrimary.copy(alpha = 0.15f) else Color(0xFFF59E0B).copy(alpha = 0.2f),
-                            CircleShape
-                        ),
-                    contentAlignment = Alignment.Center
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Icon(
-                        imageVector = if (lastBackupStr != null) Icons.Default.CloudDone else Icons.Default.CloudOff,
-                        contentDescription = null,
-                        tint = if (lastBackupStr != null) EmeraldPrimary else Color(0xFFD97706),
-                        modifier = Modifier.size(26.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
+                    // Status Badge
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (user.isOnline) Color(0xFFDCFCE7) else MaterialTheme.colorScheme.surfaceVariant
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(if (user.isOnline) ProfitGreen else MaterialTheme.colorScheme.outline, CircleShape)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (user.isOnline)
+                                    (if (isBn) "🟢 ইউজার বর্তমানে অ্যাপে সক্রিয় আছেন (Online Now)" else "🟢 User is currently online")
+                                else
+                                    (if (isBn) "⚪ অফলাইন • সর্বশেষ সক্রিয়: ${formatRelativeTime(user.lastActiveAt, isBn)}" else "⚪ Offline • Last active: ${formatRelativeTime(user.lastActiveAt, isBn)}"),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (user.isOnline) ProfitGreen else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    // Section 1: Location & Network Info
                     Text(
-                        text = if (language == "bn") "সর্বশেষ ক্লাউড ব্যাকআপ তথ্য:" else "Last Cloud Backup Status:",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                    Text(
-                        text = lastBackupStr ?: (if (language == "bn") "এখনও ক্লাউডে কোনো ব্যাকআপ নেওয়া হয়নি" else "No backup taken to cloud yet"),
+                        text = if (isBn) "📍 অবস্থান ও নেটওয়ার্ক বিবরণ" else "📍 Location & Network Telemetry",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
-                        color = if (lastBackupStr != null) EmeraldPrimary else Color(0xFFB45309)
+                        color = EmeraldPrimary
                     )
-                    if (lastBackupStr == null) {
+
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            DetailItem(if (isBn) "শহর / এলাকা:" else "City / Area:", user.city.ifBlank { "সনাক্ত হয়নি" })
+                            DetailItem(if (isBn) "অঞ্চল / বিভাগ:" else "Region / Division:", user.region.ifBlank { "-" })
+                            DetailItem(if (isBn) "দেশ:" else "Country:", "${user.country.ifBlank { "Bangladesh" }} (${user.countryCode})")
+                            DetailItem(if (isBn) "পাবলিক আইপি (IP):" else "Public IP:", user.ipAddress.ifBlank { "103.xxx" })
+                            DetailItem(if (isBn) "ইন্টারনেট প্রোভাইডার (ISP):" else "ISP / Operator:", user.isp.ifBlank { "-" })
+                            DetailItem(if (isBn) "নেটওয়ার্ক টাইপ:" else "Network Type:", user.networkType.ifBlank { "WiFi / Mobile" })
+                            if (user.latitude != 0.0 && user.longitude != 0.0) {
+                                DetailItem(if (isBn) "স্থানাঙ্ক (GPS Coords):" else "Coordinates:", "${user.latitude}, ${user.longitude}")
+                            }
+                        }
+                    }
+
+                    // Section 2: Device & Operating System
+                    Text(
+                        text = if (isBn) "📱 ডিভাইস ও সিস্টেম তথ্য" else "📱 Device & System Telemetry",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = EmeraldPrimary
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            DetailItem(if (isBn) "ডিভাইস মডেল:" else "Device Model:", user.deviceModel.ifBlank { "Android Device" })
+                            DetailItem(if (isBn) "অপারেটিং সিস্টেম:" else "Android OS:", user.androidVersion.ifBlank { "Android" })
+                            DetailItem(if (isBn) "অ্যাপ ভার্সন:" else "App Version:", user.appVersion.ifBlank { "v2.4.0" })
+                        }
+                    }
+
+                    // Section 3: Access Statistics
+                    Text(
+                        text = if (isBn) "🕒 অ্যাপ ব্যবহারের পরিসংখ্যান" else "🕒 App Usage Statistics",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = EmeraldPrimary
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            val lastEntry = if (user.lastAppEntryAt > 0) user.lastAppEntryAt else user.lastLoginAt
+                            val created = user.createdAt
+                            DetailItem(if (isBn) "সর্বশেষ প্রবেশ:" else "Last App Entry:", if (lastEntry > 0) dateFormat.format(Date(lastEntry)) else "-")
+                            DetailItem(if (isBn) "সর্বশেষ সক্রিয় (Heartbeat):" else "Last Active:", if (user.lastActiveAt > 0) dateFormat.format(Date(user.lastActiveAt)) else "-")
+                            DetailItem(if (isBn) "মোট অ্যাপে প্রবেশ সংখ্যা:" else "Total App Visits:", "${user.appEntryCount} বার")
+                            DetailItem(if (isBn) "নিবন্ধনের তারিখ:" else "Joined Date:", if (created > 0) dateFormat.format(Date(created)) else "-")
+                        }
+                    }
+
+                    // Section 4: Access History Timeline
+                    if (user.sessionHistory.isNotEmpty()) {
                         Text(
-                            text = if (language == "bn") "ইউজার এখনও সেটিংস থেকে 'ব্যাকআপ' বোতামে চাপ দেননি" else "User hasn't triggered cloud backup from settings",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline
+                            text = "${if (isBn) "📜 পূর্ববর্তী প্রবেশের হিস্ট্রি" else "📜 Past Access History"} (${user.sessionHistory.size})",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = EmeraldPrimary
                         )
+
+                        user.sessionHistory.forEachIndexed { index, sess ->
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(8.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = "#${index + 1} • ${if (sess.timestamp > 0) dateFormat.format(Date(sess.timestamp)) else "-"}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        if (sess.networkType.isNotBlank()) {
+                                            Text(
+                                                text = sess.networkType,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = StockBlue,
+                                                fontSize = 10.sp
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        val loc = listOf(sess.city, sess.country).filter { it.isNotBlank() }.joinToString(", ")
+                                        Text(
+                                            text = "📍 ${loc.ifBlank { "বাংলাদেশ" }}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = DueOrange,
+                                            fontSize = 10.5.sp
+                                        )
+                                        if (sess.ip.isNotBlank()) {
+                                            Text(
+                                                text = "IP: ${sess.ip}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.outline,
+                                                fontSize = 10.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
-            }
-        }
 
-        // Shop Profile Info
-        Card(
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    text = if (language == "bn") "দোকান ও প্রোফাইল বিবরণ:" else "Shop & Profile Details:",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = EmeraldPrimary
-                )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(if (language == "bn") "দোকানের নাম:" else "Shop Name:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
-                    Text(shopData?.shopName?.ifBlank { user.shopName } ?: user.shopName, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                }
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(if (language == "bn") "মালিকের নাম:" else "Owner Name:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
-                    Text(shopData?.ownerName?.ifBlank { user.ownerName } ?: user.ownerName, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                }
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(if (language == "bn") "মোবাইল নম্বর:" else "Phone:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
-                    Text((shopData?.phone?.ifBlank { user.phone } ?: user.phone).ifBlank { "N/A" }, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
-                }
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(if (language == "bn") "ইমেইল:" else "Email:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
-                    Text(user.email, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
-                }
-                if (!shopData?.address.isNullOrBlank()) {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(if (language == "bn") "ঠিকানা:" else "Address:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
-                        Text(shopData!!.address, style = MaterialTheme.typography.bodySmall)
-                    }
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Bottom Action Button: Open Google Maps
+                Button(
+                    onClick = onOpenMap,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = DueOrange),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(46.dp)
+                ) {
+                    Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (isBn) "গুগল ম্যাপসে অবস্থান ট্র্যাক করুন" else "Open Location in Google Maps",
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
-        }
-
-        // Financial & Business Numbers Grid
-        Text(
-            text = if (language == "bn") "ইউজারের হিসাব-নিকাশ ও আর্থিক চিত্র:" else "User Accounts & Financial Status:",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatCard(
-                title = if (language == "bn") "মূল ক্যাশ ব্যালেন্স" else "Cash Balance",
-                value = "$currency${mainBalance.toInt()}",
-                color = EmeraldPrimary,
-                modifier = Modifier.weight(1f)
-            )
-            StatCard(
-                title = if (language == "bn") "কাস্টমার মোট বাকি" else "Total Due",
-                value = "$currency${totalDue.toInt()}",
-                color = if (totalDue > 0) LossRed else EmeraldPrimary,
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatCard(
-                title = if (language == "bn") "সর্বমোট বিক্রি" else "Total Sales",
-                value = "$currency${totalSales.toInt()}",
-                color = ProfitGreen,
-                modifier = Modifier.weight(1f)
-            )
-            StatCard(
-                title = if (language == "bn") "স্টক বিক্রয়মূল্য" else "Stock Value",
-                value = "$currency${totalStockVal.toInt()}",
-                color = StockBlue,
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatCard(
-                title = if (language == "bn") "মোট দোকান খরচ" else "Total Expenses",
-                value = "$currency${totalExpenses.toInt()}",
-                color = AmberTertiary,
-                modifier = Modifier.weight(1f)
-            )
-            StatCard(
-                title = if (language == "bn") "পণ্য / কাস্টমার" else "Products / Clients",
-                value = "${shopData?.products?.size ?: user.productCount} টি / ${shopData?.customers?.size ?: user.customerCount} জন",
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f)
-            )
         }
     }
 }
 
 @Composable
-private fun StatCard(
-    title: String,
-    value: String,
-    color: Color,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(10.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+private fun DetailItem(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(modifier = Modifier.padding(10.dp)) {
-            Text(text = title, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, maxLines = 1)
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(text = value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = color)
-        }
-    }
-}
-
-@Composable
-private fun ProductsTabContent(
-    products: List<com.example.data.model.Product>,
-    currency: String,
-    language: String,
-    isDownloadingProductPdf: Boolean,
-    onDownloadProductPdf: () -> Unit
-) {
-    var searchQuery by remember { mutableStateOf("") }
-    val filteredProducts = remember(products, searchQuery) {
-        if (searchQuery.isBlank()) products
-        else {
-            val q = searchQuery.trim().lowercase()
-            products.filter { it.name.lowercase().contains(q) || it.category.lowercase().contains(q) || it.barcode.contains(q) }
-        }
-    }
-
-    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        // Download Product Catalog Button + Stats
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "${if (language == "bn") "মোট পণ্য: " else "Total Products: "}${products.size} টি",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = EmeraldPrimary
-            )
-
-            Button(
-                onClick = onDownloadProductPdf,
-                enabled = !isDownloadingProductPdf && products.isNotEmpty(),
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = StockBlue),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-            ) {
-                if (isDownloadingProductPdf) {
-                    CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Color.White, strokeWidth = 2.dp)
-                    Spacer(modifier = Modifier.width(6.dp))
-                } else {
-                    Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.White)
-                    Spacer(modifier = Modifier.width(6.dp))
-                }
-                Text(if (language == "bn") "পণ্য তালিকা PDF" else "Products PDF", style = MaterialTheme.typography.labelSmall, color = Color.White)
-            }
-        }
-
-        if (products.size > 5) {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                placeholder = { Text(if (language == "bn") "পণ্য খুঁজুন..." else "Search product...") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                singleLine = true,
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-
-        if (products.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    text = if (language == "bn") "কোনো পণ্য পাওয়া যায়নি (ব্যাকআপ খালি বা এখনও আপলোড হয়নি)" else "No products found in backup",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.outline
-                )
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                items(filteredProducts, key = { it.id }) { prod ->
-                    Card(
-                        shape = RoundedCornerShape(8.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(prod.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                                Text(
-                                    "${prod.category} | ${if (language == "bn") "ক্রয়" else "Cost"}: $currency${prod.buyPrice.toInt()}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.outline
-                                )
-                            }
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text(
-                                    "$currency${prod.sellPrice.toInt()}",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = EmeraldPrimary
-                                )
-                                Text(
-                                    "${if (language == "bn") "স্টক: " else "Stock: "}${prod.stockQuantity.toInt()} ${prod.unit}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (prod.stockQuantity <= prod.minStockAlert) LossRed else MaterialTheme.colorScheme.outline
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CustomersTabContent(
-    customers: List<com.example.data.model.Customer>,
-    currency: String,
-    language: String
-) {
-    var searchQuery by remember { mutableStateOf("") }
-    val filtered = remember(customers, searchQuery) {
-        if (searchQuery.isBlank()) customers
-        else {
-            val q = searchQuery.trim().lowercase()
-            customers.filter { it.name.lowercase().contains(q) || it.phone.contains(q) }
-        }
-    }
-
-    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        val totalDue = customers.sumOf { it.totalDue }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "${if (language == "bn") "মোট কাস্টমার: " else "Customers: "}${customers.size} জন",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = "${if (language == "bn") "মোট বকেয়া বাকি: " else "Total Due: "}$currency${totalDue.toInt()}",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = if (totalDue > 0) LossRed else EmeraldPrimary
-            )
-        }
-
-        if (customers.size > 5) {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                placeholder = { Text(if (language == "bn") "কাস্টমার খুঁজুন..." else "Search customer...") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                singleLine = true,
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-
-        if (customers.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    text = if (language == "bn") "কোনো কাস্টমার পাওয়া যায়নি" else "No customers found",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.outline
-                )
-            }
-        } else {
-            LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(filtered, key = { it.id }) { cust ->
-                    Card(
-                        shape = RoundedCornerShape(8.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(cust.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                                Text(
-                                    "${cust.phone.ifBlank { "মোবাইল নেই" }} | ${if (language == "bn") "মোট ক্রয়" else "Purchased"}: $currency${cust.totalPurchased.toInt()}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.outline
-                                )
-                            }
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text(
-                                    "$currency${cust.totalDue.toInt()}",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (cust.totalDue > 0) LossRed else EmeraldPrimary
-                                )
-                                Text(
-                                    if (cust.totalDue > 0) (if (language == "bn") "বাকি আছে" else "Due") else (if (language == "bn") "পরিশোধিত" else "Paid"),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (cust.totalDue > 0) LossRed else EmeraldPrimary
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TransactionsTabContent(
-    transactions: List<com.example.data.model.TransactionRecord>,
-    currency: String,
-    language: String
-) {
-    val txDateFormat = remember { SimpleDateFormat("dd/MM/yy, hh:mm a", Locale.getDefault()) }
-
-    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            text = "${if (language == "bn") "মোট লেনদেন রেকর্ড: " else "Total Transactions: "}${transactions.size} টি",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-            color = EmeraldPrimary
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.outline,
+            modifier = Modifier.weight(1.2f)
         )
-
-        if (transactions.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    text = if (language == "bn") "কোনো লেনদেন রেকর্ড পাওয়া যায়নি" else "No transactions found",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.outline
-                )
-            }
-        } else {
-            LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(transactions.take(100), key = { it.id }) { tx ->
-                    Card(
-                        shape = RoundedCornerShape(8.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    "${tx.invoiceNumber.ifBlank { tx.type }} - ${tx.customerName}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    "${txDateFormat.format(Date(tx.timestamp))} | ${tx.paymentMethod}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.outline
-                                )
-                            }
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text(
-                                    "$currency${tx.totalAmount.toInt()}",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (tx.type == "SALE") ProfitGreen else MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    "${if (language == "bn") "জমা: " else "Paid: "}$currency${tx.paidAmount.toInt()}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = EmeraldPrimary
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1.8f)
+        )
     }
 }
 
-@Composable
-private fun ExpensesTabContent(
-    expenses: List<com.example.data.model.Expense>,
-    currency: String,
-    language: String
-) {
-    val dateFormat = remember { SimpleDateFormat("dd/MM/yy, hh:mm a", Locale.getDefault()) }
-
-    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        val totalExp = expenses.sumOf { it.amount }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "${if (language == "bn") "মোট খরচ রেকর্ড: " else "Total Expenses: "}${expenses.size} টি",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = "$currency${totalExp.toInt()}",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = AmberTertiary
-            )
-        }
-
-        if (expenses.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    text = if (language == "bn") "কোনো খরচের এন্ট্রি পাওয়া যায়নি" else "No expense records found",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.outline
-                )
-            }
+/**
+ * Opens the user's location in Google Maps app or browser
+ */
+private fun openUserLocationOnMap(context: Context, user: FirebaseUserAccount) {
+    try {
+        val intent = if (user.latitude != 0.0 && user.longitude != 0.0) {
+            val label = Uri.encode(user.shopName.ifBlank { user.email })
+            val uri = Uri.parse("geo:${user.latitude},${user.longitude}?q=${user.latitude},${user.longitude}($label)")
+            Intent(Intent.ACTION_VIEW, uri)
         } else {
-            LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(expenses, key = { it.id }) { exp ->
-                    Card(
-                        shape = RoundedCornerShape(8.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(exp.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                                Text(
-                                    "${exp.category} | ${dateFormat.format(Date(exp.timestamp))}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.outline
-                                )
-                            }
-                            Text(
-                                "$currency${exp.amount.toInt()}",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = AmberTertiary
-                            )
-                        }
-                    }
-                }
-            }
+            val queryLocation = user.city.ifBlank { user.country }.ifBlank { "Bangladesh" }
+            val uri = Uri.parse("https://www.google.com/maps/search/?api=1&query=${Uri.encode(queryLocation)}")
+            Intent(Intent.ACTION_VIEW, uri)
+        }
+        context.startActivity(intent)
+    } catch (e: Exception) {
+        Toast.makeText(context, "ম্যাপ খুলতে কোনো ব্রাউজার বা ম্যাপ অ্যাপ পাওয়া যায়নি", Toast.LENGTH_SHORT).show()
+    }
+}
+
+private fun isSameDay(t1: Long, t2: Long): Boolean {
+    if (t1 <= 0 || t2 <= 0) return false
+    val cal1 = Calendar.getInstance().apply { timeInMillis = t1 }
+    val cal2 = Calendar.getInstance().apply { timeInMillis = t2 }
+    return cal1.get(Calendar.YEAR) == cal2.get(Calendar.YEAR) &&
+           cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR)
+}
+
+private fun formatRelativeTime(timestamp: Long, isBn: Boolean): String {
+    if (timestamp <= 0) return "-"
+    val now = System.currentTimeMillis()
+    val diff = now - timestamp
+    val minutes = diff / (60 * 1000)
+    val hours = diff / (60 * 60 * 1000)
+    val days = diff / (24 * 60 * 60 * 1000)
+
+    return when {
+        diff < 0 -> if (isBn) "এইমাত্র" else "Just now"
+        minutes < 2 -> if (isBn) "এইমাত্র সক্রিয়" else "Active now"
+        minutes < 60 -> if (isBn) "$minutes মিনিট আগে" else "$minutes min ago"
+        hours < 24 -> if (isBn) "$hours ঘণ্টা আগে" else "$hours hr ago"
+        days == 1L -> if (isBn) "গতকাল" else "Yesterday"
+        days < 30 -> if (isBn) "$days দিন আগে" else "$days days ago"
+        else -> {
+            val sdf = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+            sdf.format(Date(timestamp))
         }
     }
 }
