@@ -31,6 +31,23 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     private val database = AppDatabase.getDatabase(application, viewModelScope)
     private val repository = ShopRepository(database)
 
+    // Current Active Navigation Screen
+    private val _currentScreen = MutableStateFlow(com.example.ui.screens.ShopScreen.DASHBOARD)
+    val currentScreen: StateFlow<com.example.ui.screens.ShopScreen> = _currentScreen.asStateFlow()
+
+    fun navigateToScreen(screen: com.example.ui.screens.ShopScreen) {
+        _currentScreen.value = screen
+    }
+
+    fun navigateToScreen(screenName: String) {
+        val target = com.example.ui.screens.ShopScreen.entries.firstOrNull {
+            it.name.equals(screenName, ignoreCase = true) ||
+            it.bnTitle.equals(screenName, ignoreCase = true) ||
+            it.enTitle.equals(screenName, ignoreCase = true)
+        } ?: com.example.ui.screens.ShopScreen.DASHBOARD
+        _currentScreen.value = target
+    }
+
     // Data streams
     val products: StateFlow<List<Product>> = repository.allProducts
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -1169,17 +1186,6 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // Compatibility methods for different versions of InventoryScreen
-    fun updateProduct(product: Product) = saveProduct(product)
-    val inventoryTab = MutableStateFlow(0)
-    fun setInventoryTab(tab: Int) { inventoryTab.value = tab }
-    fun setInventoryFilter(filter: String) { }
-    fun setInventoryCategory(cat: String) { selectedCategory.value = cat }
-    fun setInventoryView(view: String) { }
-    fun setInventorySearchQuery(query: String) { }
-    fun setLowStockThreshold(threshold: Int) { }
-    fun setDefaultUnit(unit: String) { }
-
     fun stockIn(productId: Long, quantity: Double, buyPrice: Double?, sellPrice: Double?, note: String) {
         viewModelScope.launch {
             val totalCost = repository.recordStockIn(productId, quantity, buyPrice, sellPrice, note)
@@ -2275,22 +2281,13 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // ==========================================
-    // TAILORING & MEASUREMENT OPERATIONS (দর্জি ও জামার মাপ খাতা)
-    // ==========================================
-
-    fun saveTailorOrder(order: TailorOrder, onComplete: ((Long) -> Unit)? = null) {
+    // Tailor Order Operations
+    fun saveTailorOrder(order: TailorOrder, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
-            val id = repository.saveTailorOrder(order)
-            if (order.advancePaid > 0 && order.id == 0L) {
-                repository.recordCashLog(
-                    type = "DEPOSIT",
-                    amount = order.advancePaid,
-                    balanceAfter = shopInfo.value.mainBalance + order.advancePaid,
-                    note = "দর্জি অর্ডার অগ্রিম: ${order.customerName} (${order.orderNumber})"
-                )
+            repository.saveTailorOrder(order)
+            withContext(Dispatchers.Main) {
+                onComplete()
             }
-            onComplete?.invoke(id)
         }
     }
 
@@ -2300,16 +2297,9 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun collectTailorPayment(order: TailorOrder, amount: Double, note: String = "দর্জি বিল আদায়") {
+    fun collectTailorPayment(order: TailorOrder, amount: Double) {
         viewModelScope.launch {
-            if (amount <= 0) return@launch
             repository.collectTailorPayment(order, amount)
-            repository.recordCashLog(
-                type = "DEPOSIT",
-                amount = amount,
-                balanceAfter = shopInfo.value.mainBalance + amount,
-                note = "দর্জি বাকি আদায়: ${order.customerName} (${order.orderNumber}) • $note"
-            )
         }
     }
 

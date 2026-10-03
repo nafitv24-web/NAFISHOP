@@ -1,5 +1,6 @@
 package com.example
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -12,6 +13,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import com.example.ui.screens.MainAppScaffold
+import com.example.ui.screens.ShopScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.viewmodel.ShopViewModel
 
@@ -21,8 +23,8 @@ class MainActivity : ComponentActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-    handleIntent(intent)
     enableEdgeToEdge()
+    handleIntent(intent)
     setContent {
       val themeMode by viewModel.themeMode.collectAsState()
       val systemInDark = isSystemInDarkTheme()
@@ -40,17 +42,30 @@ class MainActivity : ComponentActivity() {
     }
   }
 
-  override fun onNewIntent(intent: android.content.Intent) {
+  override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
     setIntent(intent)
     handleIntent(intent)
   }
 
-  private fun handleIntent(intent: android.content.Intent?) {
-    if (intent?.getStringExtra("NAV_SCREEN") == "INVENTORY") {
-      val tab = intent.getIntExtra("INVENTORY_TAB", 1)
-      viewModel.navigateToScreen(com.example.ui.screens.ShopScreen.INVENTORY, tab)
+  private fun handleIntent(intent: Intent?) {
+    val target = intent?.getStringExtra("screen")
+    if (!target.isNullOrBlank()) {
+      navigateToScreen(target)
     }
   }
-}
 
+  /**
+   * Navigate to a specific screen tab in the app.
+   */
+  fun navigateToScreen(screen: ShopScreen) {
+    viewModel.navigateToScreen(screen)
+  }
+
+  /**
+   * Navigate to a screen by name (e.g. "POS", "INVENTORY", "DASHBOARD").
+   */
+  fun navigateToScreen(screenName: String) {
+    viewModel.navigateToScreen(screenName)
+  }
+}

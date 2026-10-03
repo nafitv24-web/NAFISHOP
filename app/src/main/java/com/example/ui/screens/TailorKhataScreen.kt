@@ -3,6 +3,7 @@ package com.example.ui.screens
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -41,6 +42,10 @@ import java.util.*
 fun TailorKhataScreen(
     viewModel: ShopViewModel
 ) {
+    BackHandler {
+        viewModel.navigateToScreen(ShopScreen.DASHBOARD)
+    }
+
     val context = LocalContext.current
     val tailorOrders by viewModel.tailorOrders.collectAsState()
     val shopInfo by viewModel.shopInfo.collectAsState()
