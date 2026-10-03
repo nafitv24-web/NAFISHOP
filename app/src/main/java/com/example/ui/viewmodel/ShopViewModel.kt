@@ -1941,6 +1941,57 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Backward-compatible alias for saving backup to Google Drive
+     */
+    fun saveBackupToGoogleDrive(
+        context: Context,
+        onComplete: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        exportToGoogleDriveCloud(context, onComplete)
+    }
+
+    fun saveBackupToGoogleDrive(
+        context: Context,
+        customEmail: String,
+        onComplete: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        exportToGoogleDriveCloud(context, onComplete)
+    }
+
+    fun saveBackupToGoogleDrive(
+        onComplete: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        exportToGoogleDriveCloud(getApplication(), onComplete)
+    }
+
+    /**
+     * Backward-compatible method for sending backup to user's Gmail
+     */
+    fun sendBackupToUserGmail(
+        context: Context,
+        recipientEmail: String? = null,
+        onComplete: ((Boolean, String) -> Unit)? = null
+    ) {
+        val email = recipientEmail ?: prefs.getString("user_email", "") ?: _shopInfo.value.userEmail
+        exportAndShareJsonBackup(context, viaEmail = true)
+        onComplete?.invoke(true, "ব্যাকআপ জিমেইলে পাঠানো হয়েছে: $email")
+    }
+
+    fun sendBackupToUserGmail(
+        context: Context,
+        onComplete: ((Boolean, String) -> Unit)? = null
+    ) {
+        exportAndShareJsonBackup(context, viaEmail = true)
+        onComplete?.invoke(true, "ব্যাকআপ জিমেইলে পাঠানো হয়েছে")
+    }
+
+    fun sendBackupToUserGmail(
+        recipientEmail: String? = null
+    ) {
+        exportAndShareJsonBackup(getApplication(), viaEmail = true)
+    }
+
     fun exportToGoogleDriveCloud(context: Context, onComplete: (Boolean, String) -> Unit) {
         viewModelScope.launch {
             if (!NetworkMonitor.isOnline(context)) {
