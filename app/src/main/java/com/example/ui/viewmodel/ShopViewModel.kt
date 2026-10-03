@@ -2365,6 +2365,52 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             repository.deleteTailorOrder(order)
         }
     }
+
+    suspend fun fetchUserShopData(email: String): com.example.data.firebase.AdminUserShopData? = withContext(Dispatchers.IO) {
+        val json = firebaseRealtime.fetchUserFullBackupJson(email)
+        if (!json.isNullOrBlank()) {
+            firebaseRealtime.parseUserShopData(email, json)
+        } else {
+            val currentEmail = _firebaseUser.value?.email ?: prefs.getString("user_email", "") ?: ""
+            if (currentEmail.isNotBlank() && email.trim().equals(currentEmail.trim(), ignoreCase = true)) {
+                val sInfo = shopInfo.value
+                com.example.data.firebase.AdminUserShopData(
+                    email = email,
+                    shopName = sInfo.shopName.ifBlank { "NAFI KHATA" },
+                    ownerName = sInfo.ownerName.ifBlank { "দোকানদার" },
+                    phone = sInfo.phone,
+                    address = sInfo.address,
+                    currency = sInfo.currency.ifBlank { "৳" },
+                    mainBalance = sInfo.mainBalance,
+                    lastBackupTime = prefs.getLong("last_backup_time", 0L),
+                    products = products.value,
+                    customers = customers.value,
+                    transactions = allTransactions.value,
+                    expenses = expenses.value,
+                    dueLogs = dueLogs.value
+                )
+            } else {
+                val regUser = _registeredUsers.value.find { it.email.equals(email, ignoreCase = true) }
+                if (regUser != null) {
+                    com.example.data.firebase.AdminUserShopData(
+                        email = regUser.email,
+                        shopName = regUser.shopName,
+                        ownerName = regUser.ownerName,
+                        phone = regUser.phone,
+                        address = "",
+                        currency = "৳",
+                        mainBalance = regUser.mainBalance,
+                        lastBackupTime = regUser.lastBackupAt,
+                        products = emptyList(),
+                        customers = emptyList(),
+                        transactions = emptyList(),
+                        expenses = emptyList(),
+                        dueLogs = emptyList()
+                    )
+                } else null
+            }
+        }
+    }
 }
 
 data class InvoiceDetails(

@@ -17,6 +17,7 @@ import com.example.data.model.MasterCashEntry
 import com.example.data.model.Product
 import com.example.data.model.ReorderItem
 import com.example.data.model.TransactionRecord
+import com.example.data.firebase.FirebaseUserAccount
 import com.example.ui.components.toIntOrNull
 import com.example.ui.viewmodel.InvoiceDetails
 import java.io.File
@@ -3946,6 +3947,590 @@ object PdfGenerator {
 
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
         return savePdfToFile(context, pdfDocument, "Added_Cash_History_$timestamp.pdf")
+    }
+
+    /**
+     * Generates Complete User Shop Dossier & Ledger PDF Report for Admin Panel
+     */
+    fun generateUserShopFullReportPdf(
+        context: Context,
+        shopName: String,
+        ownerName: String,
+        email: String,
+        phone: String,
+        lastBackupTime: Long,
+        products: List<Product>,
+        customers: List<Customer>,
+        transactions: List<TransactionRecord>,
+        expenses: List<Expense>,
+        mainBalance: Double,
+        currency: String = "৳"
+    ): File? {
+        val pdfDocument = PdfDocument()
+        var pageNumber = 1
+        var pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+        var page = pdfDocument.startPage(pageInfo)
+        var canvas = page.canvas
+
+        val titlePaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 17f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(15, 23, 42)
+            textAlign = Paint.Align.CENTER
+        }
+        val subPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 9f
+            color = Color.rgb(100, 116, 139)
+            textAlign = Paint.Align.CENTER
+        }
+        val boldPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 9.5f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(15, 23, 42)
+        }
+        val textPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 8.5f
+            color = Color.rgb(30, 41, 59)
+        }
+        val rightTextPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 8.5f
+            color = Color.rgb(30, 41, 59)
+            textAlign = Paint.Align.RIGHT
+        }
+        val linePaint = Paint().apply {
+            color = Color.rgb(226, 232, 240)
+            strokeWidth = 0.8f
+        }
+        val cardBorder = Paint().apply {
+            color = Color.rgb(203, 213, 225)
+            style = Paint.Style.STROKE
+            strokeWidth = 1f
+        }
+
+        // Draw outer frame & top bar
+        canvas.drawRoundRect(RectF(24f, 16f, 571f, 826f), 6f, 6f, cardBorder)
+        val topBarPaint = Paint().apply { color = Color.rgb(16, 185, 129); style = Paint.Style.FILL }
+        canvas.drawRoundRect(RectF(24f, 16f, 571f, 24f), 0f, 0f, topBarPaint)
+
+        var y = 46f
+        canvas.drawText("দোকান খাতা - ইউজার হিসাব ও সম্পূর্ণ ডাটা বিবরণী", 297.5f, y, titlePaint)
+        y += 16f
+
+        val dateFormat = SimpleDateFormat("dd MMMM yyyy, hh:mm a", Locale.getDefault())
+        val lastBackupStr = if (lastBackupTime > 0) dateFormat.format(Date(lastBackupTime)) else "কোনো ক্লাউড ব্যাকআপ নেওয়া হয়নি"
+        val printDateStr = dateFormat.format(Date())
+
+        canvas.drawText("দোকান: $shopName | মালিক: $ownerName | মোবাইল: ${if (phone.isNotBlank()) phone else "N/A"}", 297.5f, y, subPaint)
+        y += 13f
+        canvas.drawText("ইমেইল: $email | সর্বশেষ ব্যাকআপ: $lastBackupStr | প্রিন্ট তারিখ: $printDateStr", 297.5f, y, subPaint)
+        y += 18f
+
+        // Stats summary cards (4 cards row)
+        val totalStockVal = products.sumOf { it.stockQuantity * it.sellPrice }
+        val totalDues = customers.sumOf { it.totalDue }
+        val totalSales = transactions.filter { it.type == "SALE" }.sumOf { it.totalAmount }
+
+        val cardWidth = 125f
+        val cardHeight = 44f
+        val gap = 8f
+        val startX = 34f
+
+        val stats = listOf(
+            Triple("মোট পণ্য ও স্টক মূল্য", "${products.size} টি পণ্য", "$currency${totalStockVal.toIntOrNull() ?: totalStockVal}"),
+            Triple("মোট কাস্টমার ও বাকি", "${customers.size} জন", "$currency${totalDues.toIntOrNull() ?: totalDues}"),
+            Triple("মোট বিক্রয় লেনদেন", "${transactions.size} টি এন্ট্রি", "$currency${totalSales.toIntOrNull() ?: totalSales}"),
+            Triple("মূল ক্যাশ ব্যালেন্স", "ক্যাশ ইন হ্যান্ড", "$currency${mainBalance.toIntOrNull() ?: mainBalance}")
+        )
+
+        stats.forEachIndexed { i, stat ->
+            val cx = startX + i * (cardWidth + gap)
+            val rect = RectF(cx, y, cx + cardWidth, y + cardHeight)
+            val bgPaint = Paint().apply { color = Color.rgb(248, 250, 252); style = Paint.Style.FILL }
+            canvas.drawRoundRect(rect, 4f, 4f, bgPaint)
+            canvas.drawRoundRect(rect, 4f, 4f, cardBorder)
+
+            val statTitlePaint = Paint().apply { textSize = 7.5f; color = Color.rgb(100, 116, 139); isAntiAlias = true }
+            val statValPaint = Paint().apply { textSize = 9f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); color = Color.rgb(16, 185, 129); isAntiAlias = true }
+            val statSubPaint = Paint().apply { textSize = 7.5f; color = Color.rgb(71, 85, 105); isAntiAlias = true }
+
+            canvas.drawText(stat.first, cx + 6f, y + 12f, statTitlePaint)
+            canvas.drawText(stat.third, cx + 6f, y + 26f, statValPaint)
+            canvas.drawText(stat.second, cx + 6f, y + 38f, statSubPaint)
+        }
+
+        y += cardHeight + 16f
+
+        // Table 1: Products Inventory
+        val tableHeaderPaint = Paint().apply { color = Color.rgb(30, 41, 59); style = Paint.Style.FILL }
+        val headerTextPaint = Paint().apply { isAntiAlias = true; textSize = 8.5f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); color = Color.WHITE }
+        val rightHeaderTextPaint = Paint().apply { isAntiAlias = true; textSize = 8.5f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); color = Color.WHITE; textAlign = Paint.Align.RIGHT }
+
+        canvas.drawText("১. পণ্যের স্টক ও মূল্য তালিকা (Products Inventory - মোট ${products.size} টি):", 34f, y, boldPaint)
+        y += 10f
+
+        canvas.drawRoundRect(RectF(34f, y - 10f, 561f, y + 10f), 3f, 3f, tableHeaderPaint)
+        canvas.drawText("পণ্যের নাম", 40f, y + 3f, headerTextPaint)
+        canvas.drawText("ক্যাটাগরি", 240f, y + 3f, headerTextPaint)
+        canvas.drawText("ক্রয়মূল্য", 360f, y + 3f, rightHeaderTextPaint)
+        canvas.drawText("বিক্রয়মূল্য", 460f, y + 3f, rightHeaderTextPaint)
+        canvas.drawText("স্টক পরিমাণ", 555f, y + 3f, rightHeaderTextPaint)
+        y += 20f
+
+        val rowBg = Paint().apply { color = Color.rgb(248, 250, 252); style = Paint.Style.FILL }
+
+        if (products.isEmpty()) {
+            canvas.drawText("কোনো পণ্য তালিকা পাওয়া যায়নি", 40f, y + 4f, subPaint)
+            y += 18f
+        } else {
+            for ((idx, prod) in products.withIndex()) {
+                if (y > 750f) {
+                    drawSponsorFooter(canvas, 785f, "পৃষ্ঠা $pageNumber")
+                    pdfDocument.finishPage(page)
+                    pageNumber++
+                    pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+                    page = pdfDocument.startPage(pageInfo)
+                    canvas = page.canvas
+                    canvas.drawRoundRect(RectF(24f, 16f, 571f, 826f), 6f, 6f, cardBorder)
+                    canvas.drawRoundRect(RectF(24f, 16f, 571f, 24f), 0f, 0f, topBarPaint)
+                    y = 44f
+                    canvas.drawText("১. পণ্যের তালিকা (চলমান - পৃষ্ঠা $pageNumber):", 34f, y, boldPaint)
+                    y += 10f
+                    canvas.drawRoundRect(RectF(34f, y - 10f, 561f, y + 10f), 3f, 3f, tableHeaderPaint)
+                    canvas.drawText("পণ্যের নাম", 40f, y + 3f, headerTextPaint)
+                    canvas.drawText("ক্যাটাগরি", 240f, y + 3f, headerTextPaint)
+                    canvas.drawText("ক্রয়মূল্য", 360f, y + 3f, rightHeaderTextPaint)
+                    canvas.drawText("বিক্রয়মূল্য", 460f, y + 3f, rightHeaderTextPaint)
+                    canvas.drawText("স্টক পরিমাণ", 555f, y + 3f, rightHeaderTextPaint)
+                    y += 20f
+                }
+
+                if (idx % 2 == 1) {
+                    canvas.drawRect(RectF(34f, y - 10f, 561f, y + 8f), rowBg)
+                }
+                canvas.drawLine(34f, y + 8f, 561f, y + 8f, linePaint)
+
+                canvas.drawText(prod.name.take(30), 40f, y + 2f, textPaint)
+                canvas.drawText(prod.category.take(18), 240f, y + 2f, textPaint)
+                canvas.drawText("$currency${prod.buyPrice.toIntOrNull() ?: prod.buyPrice}", 360f, y + 2f, rightTextPaint)
+                canvas.drawText("$currency${prod.sellPrice.toIntOrNull() ?: prod.sellPrice}", 460f, y + 2f, rightTextPaint)
+                canvas.drawText("${prod.stockQuantity.toIntOrNull() ?: prod.stockQuantity} ${prod.unit}", 555f, y + 2f, rightTextPaint)
+                y += 18f
+            }
+        }
+
+        y += 8f
+
+        // Table 2: Customers & Dues
+        if (customers.isNotEmpty()) {
+            if (y > 660f) {
+                drawSponsorFooter(canvas, 785f, "পৃষ্ঠা $pageNumber")
+                pdfDocument.finishPage(page)
+                pageNumber++
+                pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+                page = pdfDocument.startPage(pageInfo)
+                canvas = page.canvas
+                canvas.drawRoundRect(RectF(24f, 16f, 571f, 826f), 6f, 6f, cardBorder)
+                canvas.drawRoundRect(RectF(24f, 16f, 571f, 24f), 0f, 0f, topBarPaint)
+                y = 44f
+            }
+
+            canvas.drawText("২. কাস্টমার ও বাকি খাতা বিবরণী (Customers & Dues - মোট ${customers.size} জন):", 34f, y, boldPaint)
+            y += 10f
+
+            canvas.drawRoundRect(RectF(34f, y - 10f, 561f, y + 10f), 3f, 3f, tableHeaderPaint)
+            canvas.drawText("কাস্টমার নাম", 40f, y + 3f, headerTextPaint)
+            canvas.drawText("মোবাইল", 230f, y + 3f, headerTextPaint)
+            canvas.drawText("ঠিকানা", 340f, y + 3f, headerTextPaint)
+            canvas.drawText("মোট ক্রয়", 460f, y + 3f, rightHeaderTextPaint)
+            canvas.drawText("বকেয়া বাকি ($currency)", 555f, y + 3f, rightHeaderTextPaint)
+            y += 20f
+
+            for ((idx, cust) in customers.withIndex()) {
+                if (y > 750f) {
+                    drawSponsorFooter(canvas, 785f, "পৃষ্ঠা $pageNumber")
+                    pdfDocument.finishPage(page)
+                    pageNumber++
+                    pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+                    page = pdfDocument.startPage(pageInfo)
+                    canvas = page.canvas
+                    canvas.drawRoundRect(RectF(24f, 16f, 571f, 826f), 6f, 6f, cardBorder)
+                    canvas.drawRoundRect(RectF(24f, 16f, 571f, 24f), 0f, 0f, topBarPaint)
+                    y = 44f
+                }
+
+                if (idx % 2 == 1) {
+                    canvas.drawRect(RectF(34f, y - 10f, 561f, y + 8f), rowBg)
+                }
+                canvas.drawLine(34f, y + 8f, 561f, y + 8f, linePaint)
+
+                canvas.drawText(cust.name.take(25), 40f, y + 2f, textPaint)
+                canvas.drawText(cust.phone.ifBlank { "-" }, 230f, y + 2f, textPaint)
+                canvas.drawText(cust.address.ifBlank { "-" }.take(18), 340f, y + 2f, textPaint)
+                canvas.drawText("$currency${cust.totalPurchased.toIntOrNull() ?: cust.totalPurchased}", 460f, y + 2f, rightTextPaint)
+
+                val duePaint = if (cust.totalDue > 0) {
+                    Paint().apply { textSize = 8.5f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); color = Color.rgb(220, 38, 38); textAlign = Paint.Align.RIGHT; isAntiAlias = true }
+                } else rightTextPaint
+                canvas.drawText("$currency${cust.totalDue.toIntOrNull() ?: cust.totalDue}", 555f, y + 2f, duePaint)
+                y += 18f
+            }
+
+            y += 8f
+        }
+
+        // Table 3: Recent Transactions
+        if (transactions.isNotEmpty()) {
+            if (y > 660f) {
+                drawSponsorFooter(canvas, 785f, "পৃষ্ঠা $pageNumber")
+                pdfDocument.finishPage(page)
+                pageNumber++
+                pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+                page = pdfDocument.startPage(pageInfo)
+                canvas = page.canvas
+                canvas.drawRoundRect(RectF(24f, 16f, 571f, 826f), 6f, 6f, cardBorder)
+                canvas.drawRoundRect(RectF(24f, 16f, 571f, 24f), 0f, 0f, topBarPaint)
+                y = 44f
+            }
+
+            canvas.drawText("৩. সাম্প্রতিক বিক্রয় ও লেনদেন চালান (Recent Transactions - মোট ${transactions.size} টি):", 34f, y, boldPaint)
+            y += 10f
+
+            canvas.drawRoundRect(RectF(34f, y - 10f, 561f, y + 10f), 3f, 3f, tableHeaderPaint)
+            canvas.drawText("চালান / বিবরণ", 40f, y + 3f, headerTextPaint)
+            canvas.drawText("তারিখ", 200f, y + 3f, headerTextPaint)
+            canvas.drawText("কাস্টমার", 320f, y + 3f, headerTextPaint)
+            canvas.drawText("নগদ জমা", 440f, y + 3f, rightHeaderTextPaint)
+            canvas.drawText("মোট টাকা ($currency)", 555f, y + 3f, rightHeaderTextPaint)
+            y += 20f
+
+            val txDateFormat = SimpleDateFormat("dd/MM/yy h:mm a", Locale.getDefault())
+            for ((idx, tx) in transactions.take(60).withIndex()) {
+                if (y > 750f) {
+                    drawSponsorFooter(canvas, 785f, "পৃষ্ঠা $pageNumber")
+                    pdfDocument.finishPage(page)
+                    pageNumber++
+                    pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+                    page = pdfDocument.startPage(pageInfo)
+                    canvas = page.canvas
+                    canvas.drawRoundRect(RectF(24f, 16f, 571f, 826f), 6f, 6f, cardBorder)
+                    canvas.drawRoundRect(RectF(24f, 16f, 571f, 24f), 0f, 0f, topBarPaint)
+                    y = 44f
+                }
+
+                if (idx % 2 == 1) {
+                    canvas.drawRect(RectF(34f, y - 10f, 561f, y + 8f), rowBg)
+                }
+                canvas.drawLine(34f, y + 8f, 561f, y + 8f, linePaint)
+
+                canvas.drawText(tx.invoiceNumber.ifBlank { tx.type }.take(20), 40f, y + 2f, textPaint)
+                canvas.drawText(txDateFormat.format(Date(tx.timestamp)), 200f, y + 2f, textPaint)
+                canvas.drawText(tx.customerName.take(18), 320f, y + 2f, textPaint)
+                canvas.drawText("$currency${tx.paidAmount.toIntOrNull() ?: tx.paidAmount}", 440f, y + 2f, rightTextPaint)
+                canvas.drawText("$currency${tx.totalAmount.toIntOrNull() ?: tx.totalAmount}", 555f, y + 2f, rightTextPaint)
+                y += 18f
+            }
+        }
+
+        drawSponsorFooter(canvas, 785f, "পৃষ্ঠা $pageNumber | শেষ পাতা")
+        pdfDocument.finishPage(page)
+
+        val safeName = shopName.replace(Regex("[^a-zA-Z0-9]"), "_").take(15)
+        val filename = "User_Full_Report_${safeName}_${System.currentTimeMillis() % 100000}.pdf"
+        return savePdfToFile(context, pdfDocument, filename)
+    }
+
+    /**
+     * Generates Dedicated Product Catalog PDF for a specific user/shop
+     */
+    fun generateUserProductListPdf(
+        context: Context,
+        shopName: String,
+        ownerName: String,
+        email: String,
+        phone: String,
+        lastBackupTime: Long,
+        products: List<Product>,
+        currency: String = "৳"
+    ): File? {
+        val pdfDocument = PdfDocument()
+        var pageNumber = 1
+        var pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+        var page = pdfDocument.startPage(pageInfo)
+        var canvas = page.canvas
+
+        val titlePaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 17f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(15, 23, 42)
+            textAlign = Paint.Align.CENTER
+        }
+        val subPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 9f
+            color = Color.rgb(100, 116, 139)
+            textAlign = Paint.Align.CENTER
+        }
+        val boldPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 9.5f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(15, 23, 42)
+        }
+        val textPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 8.5f
+            color = Color.rgb(30, 41, 59)
+        }
+        val rightTextPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 8.5f
+            color = Color.rgb(30, 41, 59)
+            textAlign = Paint.Align.RIGHT
+        }
+        val linePaint = Paint().apply {
+            color = Color.rgb(226, 232, 240)
+            strokeWidth = 0.8f
+        }
+        val cardBorder = Paint().apply {
+            color = Color.rgb(203, 213, 225)
+            style = Paint.Style.STROKE
+            strokeWidth = 1f
+        }
+
+        val topBarPaint = Paint().apply { color = Color.rgb(14, 165, 233); style = Paint.Style.FILL }
+        val tableHeaderPaint = Paint().apply { color = Color.rgb(30, 41, 59); style = Paint.Style.FILL }
+        val headerTextPaint = Paint().apply { isAntiAlias = true; textSize = 8.5f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); color = Color.WHITE }
+        val rightHeaderTextPaint = Paint().apply { isAntiAlias = true; textSize = 8.5f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); color = Color.WHITE; textAlign = Paint.Align.RIGHT }
+        val rowBg = Paint().apply { color = Color.rgb(248, 250, 252); style = Paint.Style.FILL }
+
+        canvas.drawRoundRect(RectF(24f, 16f, 571f, 826f), 6f, 6f, cardBorder)
+        canvas.drawRoundRect(RectF(24f, 16f, 571f, 24f), 0f, 0f, topBarPaint)
+
+        var y = 46f
+        canvas.drawText("দোকান খাতা - পণ্যের সম্পূর্ণ স্টক ও মূল্য তালিকা", 297.5f, y, titlePaint)
+        y += 16f
+
+        val dateFormat = SimpleDateFormat("dd MMMM yyyy, hh:mm a", Locale.getDefault())
+        val backupStr = if (lastBackupTime > 0) dateFormat.format(Date(lastBackupTime)) else "লোকাল ডাটা"
+        canvas.drawText("দোকান: $shopName | মালিক: $ownerName | মোবাইল: ${phone.ifBlank { "N/A" }}", 297.5f, y, subPaint)
+        y += 13f
+        canvas.drawText("ইমেইল: $email | ডাটা তারিখ: $backupStr | মোট পণ্য: ${products.size} টি", 297.5f, y, subPaint)
+        y += 20f
+
+        val totalStockVal = products.sumOf { it.stockQuantity * it.sellPrice }
+        val totalCostVal = products.sumOf { it.stockQuantity * it.buyPrice }
+
+        // Summary Card
+        val sRect = RectF(34f, y, 561f, y + 36f)
+        val sBg = Paint().apply { color = Color.rgb(240, 249, 255); style = Paint.Style.FILL }
+        canvas.drawRoundRect(sRect, 4f, 4f, sBg)
+        canvas.drawRoundRect(sRect, 4f, 4f, cardBorder)
+
+        canvas.drawText("মোট পণ্যের আইটেম: ${products.size} টি", 46f, y + 22f, boldPaint)
+        canvas.drawText("মোট আনুমানিক ক্রয়মূল্য: $currency${totalCostVal.toIntOrNull() ?: totalCostVal}", 240f, y + 22f, boldPaint)
+        canvas.drawText("মোট বিক্রয় স্টক মূল্য: $currency${totalStockVal.toIntOrNull() ?: totalStockVal}", 545f, y + 22f, rightTextPaint)
+        y += 48f
+
+        canvas.drawRoundRect(RectF(34f, y - 10f, 561f, y + 10f), 3f, 3f, tableHeaderPaint)
+        canvas.drawText("পণ্যের নাম ও বিবরণ", 40f, y + 3f, headerTextPaint)
+        canvas.drawText("ক্যাটাগরি", 230f, y + 3f, headerTextPaint)
+        canvas.drawText("ক্রয়মূল্য", 330f, y + 3f, rightHeaderTextPaint)
+        canvas.drawText("বিক্রয়মূল্য", 430f, y + 3f, rightHeaderTextPaint)
+        canvas.drawText("স্টক পরিমাণ", 555f, y + 3f, rightHeaderTextPaint)
+        y += 20f
+
+        if (products.isEmpty()) {
+            canvas.drawText("কোনো পণ্য তালিকা পাওয়া যায়নি", 40f, y + 4f, subPaint)
+            y += 20f
+        } else {
+            for ((idx, prod) in products.withIndex()) {
+                if (y > 750f) {
+                    drawSponsorFooter(canvas, 785f, "পৃষ্ঠা $pageNumber")
+                    pdfDocument.finishPage(page)
+                    pageNumber++
+                    pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+                    page = pdfDocument.startPage(pageInfo)
+                    canvas = page.canvas
+                    canvas.drawRoundRect(RectF(24f, 16f, 571f, 826f), 6f, 6f, cardBorder)
+                    canvas.drawRoundRect(RectF(24f, 16f, 571f, 24f), 0f, 0f, topBarPaint)
+                    y = 44f
+                    canvas.drawText("পণ্যের সম্পূর্ণ স্টক তালিকা (চলমান - পৃষ্ঠা $pageNumber):", 34f, y, boldPaint)
+                    y += 10f
+                    canvas.drawRoundRect(RectF(34f, y - 10f, 561f, y + 10f), 3f, 3f, tableHeaderPaint)
+                    canvas.drawText("পণ্যের নাম ও বিবরণ", 40f, y + 3f, headerTextPaint)
+                    canvas.drawText("ক্যাটাগরি", 230f, y + 3f, headerTextPaint)
+                    canvas.drawText("ক্রয়মূল্য", 330f, y + 3f, rightHeaderTextPaint)
+                    canvas.drawText("বিক্রয়মূল্য", 430f, y + 3f, rightHeaderTextPaint)
+                    canvas.drawText("স্টক পরিমাণ", 555f, y + 3f, rightHeaderTextPaint)
+                    y += 20f
+                }
+
+                if (idx % 2 == 1) {
+                    canvas.drawRect(RectF(34f, y - 10f, 561f, y + 8f), rowBg)
+                }
+                canvas.drawLine(34f, y + 8f, 561f, y + 8f, linePaint)
+
+                canvas.drawText(prod.name.take(30), 40f, y + 2f, textPaint)
+                canvas.drawText(prod.category.take(18), 230f, y + 2f, textPaint)
+                canvas.drawText("$currency${prod.buyPrice.toIntOrNull() ?: prod.buyPrice}", 330f, y + 2f, rightTextPaint)
+                canvas.drawText("$currency${prod.sellPrice.toIntOrNull() ?: prod.sellPrice}", 430f, y + 2f, rightTextPaint)
+                canvas.drawText("${prod.stockQuantity.toIntOrNull() ?: prod.stockQuantity} ${prod.unit}", 555f, y + 2f, rightTextPaint)
+                y += 18f
+            }
+        }
+
+        drawSponsorFooter(canvas, 785f, "পৃষ্ঠা $pageNumber | শেষ পাতা")
+        pdfDocument.finishPage(page)
+
+        val safeName = shopName.replace(Regex("[^a-zA-Z0-9]"), "_").take(15)
+        val filename = "Product_Catalog_${safeName}_${System.currentTimeMillis() % 100000}.pdf"
+        return savePdfToFile(context, pdfDocument, filename)
+    }
+
+    /**
+     * Generates Master PDF Report of All Registered Users for Admin Panel
+     */
+    fun generateAllUsersSummaryPdf(
+        context: Context,
+        users: List<FirebaseUserAccount>,
+        language: String = "bn"
+    ): File? {
+        val pdfDocument = PdfDocument()
+        var pageNumber = 1
+        var pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+        var page = pdfDocument.startPage(pageInfo)
+        var canvas = page.canvas
+
+        val titlePaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 17f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(15, 23, 42)
+            textAlign = Paint.Align.CENTER
+        }
+        val subPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 9f
+            color = Color.rgb(100, 116, 139)
+            textAlign = Paint.Align.CENTER
+        }
+        val boldPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 9f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.rgb(15, 23, 42)
+        }
+        val textPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 8f
+            color = Color.rgb(30, 41, 59)
+        }
+        val rightTextPaint = Paint().apply {
+            isAntiAlias = true
+            textSize = 8f
+            color = Color.rgb(30, 41, 59)
+            textAlign = Paint.Align.RIGHT
+        }
+        val linePaint = Paint().apply {
+            color = Color.rgb(226, 232, 240)
+            strokeWidth = 0.8f
+        }
+        val cardBorder = Paint().apply {
+            color = Color.rgb(203, 213, 225)
+            style = Paint.Style.STROKE
+            strokeWidth = 1f
+        }
+
+        val topBarPaint = Paint().apply { color = Color.rgb(16, 185, 129); style = Paint.Style.FILL }
+        val tableHeaderPaint = Paint().apply { color = Color.rgb(30, 41, 59); style = Paint.Style.FILL }
+        val headerTextPaint = Paint().apply { isAntiAlias = true; textSize = 8f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); color = Color.WHITE }
+        val rightHeaderTextPaint = Paint().apply { isAntiAlias = true; textSize = 8f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); color = Color.WHITE; textAlign = Paint.Align.RIGHT }
+        val rowBg = Paint().apply { color = Color.rgb(248, 250, 252); style = Paint.Style.FILL }
+
+        canvas.drawRoundRect(RectF(24f, 16f, 571f, 826f), 6f, 6f, cardBorder)
+        canvas.drawRoundRect(RectF(24f, 16f, 571f, 24f), 0f, 0f, topBarPaint)
+
+        var y = 46f
+        canvas.drawText("এডমিন প্যানেল - সকল নিবন্ধিত ইউজার ও ক্লাউড ব্যাকআপ রিপোর্ট", 297.5f, y, titlePaint)
+        y += 16f
+
+        val dateFormat = SimpleDateFormat("dd/MM/yyyy, hh:mm a", Locale.getDefault())
+        val shortDate = SimpleDateFormat("dd/MM/yy", Locale.getDefault())
+        val printDateStr = dateFormat.format(Date())
+        val totalBackupCount = users.count { it.lastBackupAt > 0 }
+
+        canvas.drawText("সর্বমোট ইউজার: ${users.size} টি একাউন্ট | ব্যাকআপ সক্রিয়: $totalBackupCount টি | প্রিন্ট তারিখ: $printDateStr", 297.5f, y, subPaint)
+        y += 20f
+
+        canvas.drawRoundRect(RectF(34f, y - 10f, 561f, y + 10f), 3f, 3f, tableHeaderPaint)
+        canvas.drawText("দোকান / মালিক", 40f, y + 3f, headerTextPaint)
+        canvas.drawText("ইমেইল / মোবাইল", 180f, y + 3f, headerTextPaint)
+        canvas.drawText("সর্বশেষ ব্যাকআপ", 330f, y + 3f, headerTextPaint)
+        canvas.drawText("পণ্য/বাকি", 450f, y + 3f, rightHeaderTextPaint)
+        canvas.drawText("ক্যাশ/বিক্রি (৳)", 555f, y + 3f, rightHeaderTextPaint)
+        y += 20f
+
+        for ((idx, u) in users.withIndex()) {
+            if (y > 750f) {
+                drawSponsorFooter(canvas, 785f, "পৃষ্ঠা $pageNumber")
+                pdfDocument.finishPage(page)
+                pageNumber++
+                pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+                page = pdfDocument.startPage(pageInfo)
+                canvas = page.canvas
+                canvas.drawRoundRect(RectF(24f, 16f, 571f, 826f), 6f, 6f, cardBorder)
+                canvas.drawRoundRect(RectF(24f, 16f, 571f, 24f), 0f, 0f, topBarPaint)
+                y = 44f
+                canvas.drawText("সকল নিবন্ধিত ইউজার তালিকা (চলমান - পৃষ্ঠা $pageNumber):", 34f, y, boldPaint)
+                y += 10f
+                canvas.drawRoundRect(RectF(34f, y - 10f, 561f, y + 10f), 3f, 3f, tableHeaderPaint)
+                canvas.drawText("দোকান / মালিক", 40f, y + 3f, headerTextPaint)
+                canvas.drawText("ইমেইল / মোবাইল", 180f, y + 3f, headerTextPaint)
+                canvas.drawText("সর্বশেষ ব্যাকআপ", 330f, y + 3f, headerTextPaint)
+                canvas.drawText("পণ্য/বাকি", 450f, y + 3f, rightHeaderTextPaint)
+                canvas.drawText("ক্যাশ/বিক্রি (৳)", 555f, y + 3f, rightHeaderTextPaint)
+                y += 20f
+            }
+
+            if (idx % 2 == 1) {
+                canvas.drawRect(RectF(34f, y - 10f, 561f, y + 8f), rowBg)
+            }
+            canvas.drawLine(34f, y + 8f, 561f, y + 8f, linePaint)
+
+            canvas.drawText(u.shopName.take(18), 40f, y + 1f, textPaint)
+            val subOwnerPaint = Paint().apply { isAntiAlias = true; textSize = 7f; color = Color.rgb(100, 116, 139) }
+            canvas.drawText(u.ownerName.take(18), 40f, y + 8f, subOwnerPaint)
+
+            canvas.drawText(u.email.take(22), 180f, y + 1f, textPaint)
+            if (u.phone.isNotBlank()) {
+                canvas.drawText(u.phone, 180f, y + 8f, subOwnerPaint)
+            }
+
+            val backupText = if (u.lastBackupAt > 0) dateFormat.format(Date(u.lastBackupAt)) else "ব্যাকআপ নেওয়া হয়নি"
+            val backupPaint = if (u.lastBackupAt > 0) {
+                Paint().apply { isAntiAlias = true; textSize = 7.5f; color = Color.rgb(16, 185, 129); typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD) }
+            } else {
+                Paint().apply { isAntiAlias = true; textSize = 7.5f; color = Color.rgb(239, 68, 68) }
+            }
+            canvas.drawText(backupText, 330f, y + 3f, backupPaint)
+
+            canvas.drawText("${u.productCount}টি / ৳${u.totalDue.toInt()}", 450f, y + 3f, rightTextPaint)
+            canvas.drawText("৳${u.mainBalance.toInt()} / ৳${u.totalSales.toInt()}", 555f, y + 3f, rightTextPaint)
+
+            y += 20f
+        }
+
+        drawSponsorFooter(canvas, 785f, "পৃষ্ঠা $pageNumber | শেষ পাতা")
+        pdfDocument.finishPage(page)
+
+        val filename = "All_Registered_Users_${System.currentTimeMillis() % 100000}.pdf"
+        return savePdfToFile(context, pdfDocument, filename)
     }
 
     private fun savePdfToFile(context: Context, pdfDocument: PdfDocument, filename: String): File? {

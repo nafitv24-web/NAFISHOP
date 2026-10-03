@@ -1,8 +1,7 @@
 package com.example.data.firebase
 
 import android.util.Log
-import com.example.data.model.AppNotice
-import com.example.data.model.AppUpdateInfo
+import com.example.data.model.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -15,11 +14,35 @@ import java.util.concurrent.TimeUnit
 
 data class FirebaseUserAccount(
     val email: String,
-    val passwordHash: String,
+    val passwordHash: String = "",
+    val shopName: String = "NAFI KHATA",
+    val ownerName: String = "দোকানদার",
+    val phone: String = "",
+    val createdAt: Long = System.currentTimeMillis(),
+    val lastLoginAt: Long = System.currentTimeMillis(),
+    val lastBackupAt: Long = 0L,
+    val productCount: Int = 0,
+    val customerCount: Int = 0,
+    val transactionCount: Int = 0,
+    val totalDue: Double = 0.0,
+    val mainBalance: Double = 0.0,
+    val totalSales: Double = 0.0
+)
+
+data class AdminUserShopData(
+    val email: String,
     val shopName: String,
     val ownerName: String,
-    val createdAt: Long = System.currentTimeMillis(),
-    val lastLoginAt: Long = System.currentTimeMillis()
+    val phone: String,
+    val address: String,
+    val currency: String,
+    val mainBalance: Double,
+    val lastBackupTime: Long,
+    val products: List<Product>,
+    val customers: List<Customer>,
+    val transactions: List<TransactionRecord>,
+    val expenses: List<Expense>,
+    val dueLogs: List<DueLog>
 )
 
 data class FirebaseOperationResult(
@@ -294,6 +317,56 @@ class FirebaseRealtimeManager {
             val resp1 = client.newCall(req1).execute()
 
             if (resp1.isSuccessful) {
+                // Also update user metadata summary for admin panel monitoring
+                try {
+                    val root = JSONObject(backupJsonString)
+                    val sInfo = root.optJSONObject("shopInfo")
+                    val sName = sInfo?.optString("shopName") ?: ""
+                    val oName = sInfo?.optString("ownerName") ?: ""
+                    val uPhone = sInfo?.optString("phone") ?: ""
+                    val mBalance = root.optDouble("mainBalance", sInfo?.optDouble("mainBalance", 0.0) ?: 0.0)
+
+                    val pArr = root.optJSONArray("products")
+                    val cArr = root.optJSONArray("customers")
+                    val tArr = root.optJSONArray("transactions")
+
+                    var totalDueSum = 0.0
+                    if (cArr != null) {
+                        for (i in 0 until cArr.length()) {
+                            totalDueSum += cArr.optJSONObject(i)?.optDouble("totalDue", 0.0) ?: 0.0
+                        }
+                    }
+
+                    var totalSalesSum = 0.0
+                    if (tArr != null) {
+                        for (i in 0 until tArr.length()) {
+                            val tx = tArr.optJSONObject(i)
+                            if (tx?.optString("type") == "SALE") {
+                                totalSalesSum += tx.optDouble("totalAmount", 0.0)
+                            }
+                        }
+                    }
+
+                    val metaUpdate = JSONObject().apply {
+                        put("email", email)
+                        if (sName.isNotBlank()) put("shopName", sName)
+                        if (oName.isNotBlank()) put("ownerName", oName)
+                        if (uPhone.isNotBlank()) put("phone", uPhone)
+                        put("lastBackupAt", System.currentTimeMillis())
+                        put("productCount", pArr?.length() ?: 0)
+                        put("customerCount", cArr?.length() ?: 0)
+                        put("transactionCount", tArr?.length() ?: 0)
+                        put("totalDue", totalDueSum)
+                        put("mainBalance", mBalance)
+                        put("totalSales", totalSalesSum)
+                    }
+                    val metaReq = Request.Builder()
+                        .url("$DATABASE_URL/users/$sanitized.json")
+                        .patch(metaUpdate.toString().toRequestBody(jsonMediaType))
+                        .build()
+                    client.newCall(metaReq).execute()
+                } catch (ignored: Exception) {}
+
                 FirebaseOperationResult(
                     success = true,
                     message = "আপনার অ্যাকাউন্ট (${email})-এর নিজস্ব ক্লাউডে ব্যাকআপ সফলভাবে সংরক্ষিত হয়েছে!"
@@ -592,8 +665,16 @@ class FirebaseRealtimeManager {
                                 passwordHash = "",
                                 shopName = userObj.optString("shopName", "NAFI KHATA"),
                                 ownerName = userObj.optString("ownerName", "দোকানদার"),
+                                phone = userObj.optString("phone", ""),
                                 createdAt = userObj.optLong("createdAt", System.currentTimeMillis()),
-                                lastLoginAt = userObj.optLong("lastLoginAt", System.currentTimeMillis())
+                                lastLoginAt = userObj.optLong("lastLoginAt", System.currentTimeMillis()),
+                                lastBackupAt = userObj.optLong("lastBackupAt", 0L),
+                                productCount = userObj.optInt("productCount", 0),
+                                customerCount = userObj.optInt("customerCount", 0),
+                                transactionCount = userObj.optInt("transactionCount", 0),
+                                totalDue = userObj.optDouble("totalDue", 0.0),
+                                mainBalance = userObj.optDouble("mainBalance", 0.0),
+                                totalSales = userObj.optDouble("totalSales", 0.0)
                             )
                         )
                     }
@@ -605,6 +686,157 @@ class FirebaseRealtimeManager {
         } catch (e: Exception) {
             Log.e(TAG, "Fetch all users failed", e)
             emptyList()
+        }
+    }
+
+    /**
+     * Fetch user's raw full backup JSON from cloud
+     */
+    suspend fun fetchUserFullBackupJson(email: String): String? = withContext(Dispatchers.IO) {
+        val result = restoreShopData(email)
+        if (result.success && !result.data.isNullOrBlank()) {
+            result.data
+        } else null
+    }
+
+    /**
+     * Parses raw backup JSON into strongly typed AdminUserShopData for inspection and PDF export
+     */
+    fun parseUserShopData(email: String, jsonStr: String): AdminUserShopData? {
+        return try {
+            val root = JSONObject(jsonStr)
+            val shopObj = root.optJSONObject("shopInfo")
+            val shopName = shopObj?.optString("shopName")?.ifBlank { "NAFI KHATA" } ?: "NAFI KHATA"
+            val ownerName = shopObj?.optString("ownerName")?.ifBlank { "দোকানদার" } ?: "দোকানদার"
+            val phone = shopObj?.optString("phone") ?: ""
+            val address = shopObj?.optString("address") ?: ""
+            val currency = shopObj?.optString("currency")?.ifBlank { "৳" } ?: "৳"
+            val mainBalance = root.optDouble("mainBalance", shopObj?.optDouble("mainBalance", 0.0) ?: 0.0)
+            val exportTime = root.optLong("exportTime", System.currentTimeMillis())
+
+            val pList = mutableListOf<Product>()
+            val pArr = root.optJSONArray("products")
+            if (pArr != null) {
+                for (i in 0 until pArr.length()) {
+                    val o = pArr.optJSONObject(i) ?: continue
+                    pList.add(
+                        Product(
+                            id = o.optLong("id", i + 1L),
+                            name = o.optString("name", "পণ্য"),
+                            barcode = o.optString("barcode", ""),
+                            category = o.optString("category", "সাধারণ"),
+                            buyPrice = o.optDouble("buyPrice", 0.0),
+                            sellPrice = o.optDouble("sellPrice", 0.0),
+                            stockQuantity = o.optDouble("stockQuantity", 0.0),
+                            unit = o.optString("unit", "পিস"),
+                            minStockAlert = o.optDouble("minStockAlert", 5.0)
+                        )
+                    )
+                }
+            }
+
+            val cList = mutableListOf<Customer>()
+            val cArr = root.optJSONArray("customers")
+            if (cArr != null) {
+                for (i in 0 until cArr.length()) {
+                    val o = cArr.optJSONObject(i) ?: continue
+                    cList.add(
+                        Customer(
+                            id = o.optLong("id", i + 1L),
+                            name = o.optString("name", "কাস্টমার"),
+                            phone = o.optString("phone", ""),
+                            address = o.optString("address", ""),
+                            totalDue = o.optDouble("totalDue", 0.0),
+                            totalPurchased = o.optDouble("totalPurchased", 0.0)
+                        )
+                    )
+                }
+            }
+
+            val tList = mutableListOf<TransactionRecord>()
+            val tArr = root.optJSONArray("transactions")
+            if (tArr != null) {
+                for (i in 0 until tArr.length()) {
+                    val o = tArr.optJSONObject(i) ?: continue
+                    tList.add(
+                        TransactionRecord(
+                            id = o.optLong("id", i + 1L),
+                            type = o.optString("type", "SALE"),
+                            invoiceNumber = o.optString("invoiceNumber", "INV-${i + 1}"),
+                            productName = o.optString("productName", ""),
+                            quantity = o.optDouble("quantity", 1.0),
+                            unit = o.optString("unit", "পিস"),
+                            unitPrice = o.optDouble("unitPrice", 0.0),
+                            costPrice = o.optDouble("costPrice", 0.0),
+                            totalAmount = o.optDouble("totalAmount", 0.0),
+                            profitAmount = o.optDouble("profitAmount", 0.0),
+                            customerName = o.optString("customerName", "ক্যাশ কাস্টমার"),
+                            customerPhone = o.optString("customerPhone", ""),
+                            paidAmount = o.optDouble("paidAmount", 0.0),
+                            dueAmount = o.optDouble("dueAmount", 0.0),
+                            paymentMethod = o.optString("paymentMethod", "CASH"),
+                            timestamp = o.optLong("timestamp", System.currentTimeMillis())
+                        )
+                    )
+                }
+            }
+
+            val eList = mutableListOf<Expense>()
+            val eArr = root.optJSONArray("expenses")
+            if (eArr != null) {
+                for (i in 0 until eArr.length()) {
+                    val o = eArr.optJSONObject(i) ?: continue
+                    eList.add(
+                        Expense(
+                            id = o.optLong("id", i + 1L),
+                            title = o.optString("title", "খরচ"),
+                            category = o.optString("category", "অন্যান্য"),
+                            amount = o.optDouble("amount", 0.0),
+                            note = o.optString("note", ""),
+                            timestamp = o.optLong("timestamp", System.currentTimeMillis())
+                        )
+                    )
+                }
+            }
+
+            val dList = mutableListOf<DueLog>()
+            val dArr = root.optJSONArray("dueLogs")
+            if (dArr != null) {
+                for (i in 0 until dArr.length()) {
+                    val o = dArr.optJSONObject(i) ?: continue
+                    dList.add(
+                        DueLog(
+                            id = o.optLong("id", i + 1L),
+                            customerId = o.optLong("customerId", 0L),
+                            customerName = o.optString("customerName", ""),
+                            customerPhone = o.optString("customerPhone", ""),
+                            type = o.optString("type", "DUE_GIVEN"),
+                            amount = o.optDouble("amount", 0.0),
+                            note = o.optString("note", ""),
+                            timestamp = o.optLong("timestamp", System.currentTimeMillis())
+                        )
+                    )
+                }
+            }
+
+            AdminUserShopData(
+                email = email,
+                shopName = shopName,
+                ownerName = ownerName,
+                phone = phone,
+                address = address,
+                currency = currency,
+                mainBalance = mainBalance,
+                lastBackupTime = exportTime,
+                products = pList,
+                customers = cList,
+                transactions = tList,
+                expenses = eList,
+                dueLogs = dList
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "parseUserShopData failed", e)
+            null
         }
     }
 }
