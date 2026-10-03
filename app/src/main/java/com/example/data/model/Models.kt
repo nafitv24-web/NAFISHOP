@@ -205,6 +205,7 @@ data class DashboardSummary(
     val todayNewSalesAfterClosing: Double = 0.0,
     val lastBackup: String = "আজ, ৩:৪৫ PM",
     val lastBackupDate: String = "আজ, ৩:৪৫ PM",
+    val lastBackupAt: Long = 0L,
     val productCount: Int = 0,
     val totalDue: Double = 0.0,
     val totalSales: Double = 0.0
@@ -224,6 +225,7 @@ data class ShopInfo(
     val isGoogleLinked: Boolean = true,
     val lastBackupDate: String = "আজ, ৩:৪৫ PM",
     val lastBackup: String = "আজ, ৩:৪৫ PM",
+    val lastBackupAt: Long = 0L,
     val productCount: Int = 0,
     val totalDue: Double = 0.0,
     val totalSales: Double = 0.0
@@ -241,6 +243,7 @@ data class RestoreResult(
     val restoredShopInfo: ShopInfo? = null,
     val lastBackup: String = "",
     val lastBackupDate: String = "",
+    val lastBackupAt: Long = 0L,
     val totalDue: Double = 0.0,
     val mainBalance: Double = 0.0,
     val totalSales: Double = 0.0
