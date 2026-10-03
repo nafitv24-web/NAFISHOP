@@ -3011,6 +3011,28 @@ fun DayEndSettlementDialog(
                                 }
                             }
 
+                            // Row 3.5b: সর্বশেষ ক্লোজিংয়ের পরের নতুন বিক্রি
+                            if (summary.todayClosedCash > 0 && summary.todayNewSalesAfterClosing > 0) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = if (language == "bn") "ক্লোজিংয়ের পরের নতুন বিক্রি (+):" else "Sales After Last Settle (+):",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = ProfitGreen,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = "+$currency${summary.todayNewSalesAfterClosing.toIntOrNull() ?: summary.todayNewSalesAfterClosing}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = ProfitGreen
+                                    )
+                                }
+                            }
+
                             // Row 3.6: অবশিষ্ট ক্যাশ ক্লোজিংয়ের জন্য
                             Row(
                                 modifier = Modifier.fillMaxWidth(),

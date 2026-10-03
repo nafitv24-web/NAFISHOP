@@ -67,6 +67,7 @@ fun MainAppScaffold(
     val themeMode by viewModel.themeMode.collectAsState()
     val shopInfo by viewModel.shopInfo.collectAsState()
     val customCategories by viewModel.customCategories.collectAsState()
+    val expenseCategories by viewModel.expenseCategories.collectAsState()
     val invoiceDetails by viewModel.currentInvoice.collectAsState()
 
     var showQuickStockInDialog by remember { mutableStateOf(false) }
@@ -447,6 +448,9 @@ fun MainAppScaffold(
         AddExpenseDialog(
             currency = shopInfo.currency,
             language = language,
+            categories = expenseCategories,
+            onAddCategory = { newCat -> viewModel.addExpenseCategory(newCat) },
+            onDeleteCategory = { cat -> viewModel.deleteExpenseCategory(cat) },
             onDismiss = { showQuickAddExpenseDialog = false },
             onSave = { title, category, amount, note ->
                 viewModel.addExpense(title, category, amount, note)

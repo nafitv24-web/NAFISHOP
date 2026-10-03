@@ -5,6 +5,8 @@ import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -42,6 +44,7 @@ fun ExpenseScreen(
 ) {
     val context = LocalContext.current
     val expenses by viewModel.expenses.collectAsState()
+    val expenseCategories by viewModel.expenseCategories.collectAsState()
     val shopInfo by viewModel.shopInfo.collectAsState()
     val language by viewModel.language.collectAsState()
     val currency = shopInfo.currency
@@ -49,7 +52,9 @@ fun ExpenseScreen(
     var showAddDialog by remember { mutableStateOf(initiallyShowAddDialog) }
     var selectedCategoryFilter by remember { mutableStateOf("সব") }
 
-    val categories = listOf("সব", "দোকান ভাড়া", "বিদ্যুৎ বিল", "কর্মচারীর বেতন", "চা-নাস্তা", "পরিবহন", "প্যাকিং", "অন্যান্য")
+    val categories = remember(expenseCategories) {
+        listOf("সব") + expenseCategories
+    }
 
     val calendar = Calendar.getInstance().apply {
         set(Calendar.HOUR_OF_DAY, 0)
@@ -342,6 +347,9 @@ fun ExpenseScreen(
         AddExpenseDialog(
             currency = currency,
             language = language,
+            categories = expenseCategories,
+            onAddCategory = { newCat -> viewModel.addExpenseCategory(newCat) },
+            onDeleteCategory = { cat -> viewModel.deleteExpenseCategory(cat) },
             onDismiss = { showAddDialog = false },
             onSave = { title, category, amount, note ->
                 viewModel.addExpense(title, category, amount, note)
@@ -351,26 +359,42 @@ fun ExpenseScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddExpenseDialog(
     currency: String,
     language: String,
+    categories: List<String> = emptyList(),
+    onAddCategory: ((String) -> Unit)? = null,
+    onDeleteCategory: ((String) -> Unit)? = null,
     onDismiss: () -> Unit,
     onSave: (String, String, Double, String) -> Unit
 ) {
+    val fallbackCategories = listOf("দোকান ভাড়া", "বিদ্যুৎ বিল", "কর্মচারীর বেতন", "চা-নাস্তা", "পরিবহন", "প্যাকিং", "অন্যান্য")
+    val effectiveCategories = if (categories.isNotEmpty()) categories else fallbackCategories
+
     var title by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf("চা-নাস্তা") }
+    var category by remember(effectiveCategories) {
+        mutableStateOf(effectiveCategories.firstOrNull() ?: "চা-নাস্তা")
+    }
     var amountStr by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
 
-    val categories = listOf("দোকান ভাড়া", "বিদ্যুৎ বিল", "কর্মচারীর বেতন", "চা-নাস্তা", "পরিবহন", "প্যাকিং", "অন্যান্য")
+    var showAddCategoryField by remember { mutableStateOf(false) }
+    var newCategoryInput by remember { mutableStateOf("") }
+    var categoryPendingDelete by remember { mutableStateOf<String?>(null) }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(18.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(20.dp)) {
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
                 Text(
                     text = if (language == "bn") "দোকানের খরচ যুক্ত করুন" else "Add Store Expense",
                     style = MaterialTheme.typography.titleLarge,
@@ -402,24 +426,97 @@ fun AddExpenseDialog(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                Text(
-                    text = if (language == "bn") "ক্যাটেগরি নির্বাচন:" else "Category:",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (language == "bn") "ক্যাটেগরি নির্বাচন:" else "Category:",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    TextButton(
+                        onClick = { showAddCategoryField = !showAddCategoryField },
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Icon(
+                            if (showAddCategoryField) Icons.Default.Close else Icons.Default.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = EmeraldPrimary
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (showAddCategoryField) (if (language == "bn") "বন্ধ করুন" else "Cancel")
+                                   else (if (language == "bn") "+ নতুন ক্যাটাগরি" else "+ New Category"),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = EmeraldPrimary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                if (showAddCategoryField) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = newCategoryInput,
+                            onValueChange = { newCategoryInput = it },
+                            placeholder = { Text(if (language == "bn") "ক্যাটাগরির নাম..." else "Category name...", style = MaterialTheme.typography.bodySmall) },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Button(
+                            onClick = {
+                                val trimmed = newCategoryInput.trim()
+                                if (trimmed.isNotBlank()) {
+                                    onAddCategory?.invoke(trimmed)
+                                    category = trimmed
+                                    if (title.isBlank()) title = trimmed
+                                    newCategoryInput = ""
+                                    showAddCategoryField = false
+                                }
+                            },
+                            enabled = newCategoryInput.isNotBlank(),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
+                        ) {
+                            Text(if (language == "bn") "যোগ" else "Add")
+                        }
+                    }
+                }
 
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.padding(top = 4.dp)
                 ) {
-                    items(categories) { cat ->
+                    items(effectiveCategories) { cat ->
                         FilterChip(
                             selected = category == cat,
                             onClick = {
                                 category = cat
                                 if (title.isBlank()) title = cat
                             },
-                            label = { Text(cat, style = MaterialTheme.typography.labelSmall) }
+                            label = { Text(cat, style = MaterialTheme.typography.labelSmall) },
+                            trailingIcon = {
+                                IconButton(
+                                    onClick = { categoryPendingDelete = cat },
+                                    modifier = Modifier.size(18.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Close,
+                                        contentDescription = "Delete $cat",
+                                        tint = if (category == cat) Color.White else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
+                            }
                         )
                     }
                 }
@@ -459,5 +556,33 @@ fun AddExpenseDialog(
                 }
             }
         }
+    }
+
+    if (categoryPendingDelete != null) {
+        val targetCat = categoryPendingDelete!!
+        AlertDialog(
+            onDismissRequest = { categoryPendingDelete = null },
+            title = { Text(if (language == "bn") "ক্যাটাগরি মুছে ফেলতে চান?" else "Delete Category?") },
+            text = { Text(if (language == "bn") "\"$targetCat\" ক্যাটাগরি তালিকা থেকে মুছে ফেলা হবে।" else "Are you sure you want to remove \"$targetCat\"?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteCategory?.invoke(targetCat)
+                        if (category == targetCat) {
+                            category = effectiveCategories.firstOrNull { it != targetCat } ?: "অন্যান্য"
+                        }
+                        categoryPendingDelete = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = LossRed)
+                ) {
+                    Text(if (language == "bn") "হ্যাঁ, মুছুন" else "Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { categoryPendingDelete = null }) {
+                    Text(if (language == "bn") "বাতিল" else "Cancel")
+                }
+            }
+        )
     }
 }

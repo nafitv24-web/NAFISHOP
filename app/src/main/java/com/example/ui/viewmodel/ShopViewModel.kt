@@ -140,6 +140,50 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         prefs.edit().putStringSet("custom_user_categories", updated.toSet()).apply()
     }
 
+    // User-Defined Ordered Expense Categories (Most recent first, persistently saved in JSON list to preserve order)
+    private val defaultExpenseCategories = listOf("দোকান ভাড়া", "বিদ্যুৎ বিল", "কর্মচারীর বেতন", "চা-নাস্তা", "পরিবহন", "প্যাকিং", "অন্যান্য")
+
+    private val _expenseCategories = MutableStateFlow<List<String>>(loadOrderedExpenseCategories())
+    val expenseCategories: StateFlow<List<String>> = _expenseCategories.asStateFlow()
+
+    private fun loadOrderedExpenseCategories(): List<String> {
+        val rawJson = prefs.getString("ordered_expense_categories", null)
+        if (!rawJson.isNullOrBlank()) {
+            try {
+                val array = org.json.JSONArray(rawJson)
+                val list = mutableListOf<String>()
+                for (i in 0 until array.length()) {
+                    val item = array.optString(i).trim()
+                    if (item.isNotBlank() && item != "সব" && item != "All" && !list.contains(item)) {
+                        list.add(item)
+                    }
+                }
+                if (list.isNotEmpty()) return list
+            } catch (e: Exception) {
+                // fallback
+            }
+        }
+        return defaultExpenseCategories
+    }
+
+    fun addExpenseCategory(newCategory: String) {
+        val trimmed = newCategory.trim()
+        if (trimmed.isBlank() || trimmed == "সব" || trimmed == "All") return
+        // Put the newly typed/used category at the very FRONT (index 0, recent-first order)
+        val current = _expenseCategories.value.filter { it != trimmed }
+        val updated = listOf(trimmed) + current
+        _expenseCategories.value = updated
+        val array = org.json.JSONArray(updated)
+        prefs.edit().putString("ordered_expense_categories", array.toString()).apply()
+    }
+
+    fun deleteExpenseCategory(categoryToRemove: String) {
+        val updated = _expenseCategories.value.filter { it != categoryToRemove }
+        _expenseCategories.value = updated
+        val array = org.json.JSONArray(updated)
+        prefs.edit().putString("ordered_expense_categories", array.toString()).apply()
+    }
+
     private val _isLoggedIn = MutableStateFlow(prefs.getBoolean("is_logged_in", false) || firebaseAuth.isUserLoggedIn)
     val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
 
@@ -541,8 +585,18 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         val todayCollectedDue = round2(dues.filter { it.timestamp >= startOfToday && it.type == "DUE_COLLECTED" }.sumOf { it.amount })
         val todayNewDueGiven = round2(dues.filter { it.timestamp >= startOfToday && it.type == "DUE_GIVEN" }.sumOf { it.amount })
 
-        val todayClosedCash = round2(cLogs.filter { it.timestamp >= startOfToday && it.type == "DAY_END_CLOSING" }.sumOf { it.amount })
-        val todayUnclosedCash = round2((todayCashSales - todayClosedCash).coerceAtLeast(0.0))
+        val todayClosingLogs = cLogs.filter { it.timestamp >= startOfToday && it.type == "DAY_END_CLOSING" }.sortedBy { it.timestamp }
+        val todayClosedCash = round2(todayClosingLogs.sumOf { it.amount })
+
+        // Chronological unclosed cash calculation:
+        // Cash sales occurring after a closing must never be swallowed by past closing amounts.
+        val lastClosingTime = todayClosingLogs.lastOrNull()?.timestamp ?: 0L
+        val salesBeforeLastClose = todaySalesTxs.filter { it.timestamp <= lastClosingTime }.sumOf { it.paidAmount }
+        val salesAfterLastClose = todaySalesTxs.filter { it.timestamp > lastClosingTime }.sumOf { it.paidAmount }
+
+        val unclosedFromBefore = (salesBeforeLastClose - todayClosedCash).coerceAtLeast(0.0)
+        val todayUnclosedCash = round2(unclosedFromBefore + salesAfterLastClose)
+        val todayNewSalesAfterClosing = round2(salesAfterLastClose)
 
         val todayPurchases = round2(todayTxs.filter { it.type == "STOCK_IN" || it.type == "PURCHASE" }.sumOf { it.totalAmount })
         // 1. Pure Product Sales Profit (লাভ শুধুমাত্র পণ্য বিক্রি থেকে)
@@ -593,7 +647,8 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             totalProductsCount = prods.size,
             lowStockCount = lowCount,
             todayClosedCash = todayClosedCash,
-            todayUnclosedCash = todayUnclosedCash
+            todayUnclosedCash = todayUnclosedCash,
+            todayNewSalesAfterClosing = todayNewSalesAfterClosing
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DashboardSummary())
 
@@ -1666,10 +1721,12 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     // Expenses
     fun addExpense(title: String, category: String, amount: Double, note: String) {
         val cleanAmount = round2(amount)
+        val cleanCat = category.trim().ifBlank { "অন্যান্য" }
+        addExpenseCategory(cleanCat)
         viewModelScope.launch {
-            repository.addExpense(title, category, cleanAmount, note)
+            repository.addExpense(title, cleanCat, cleanAmount, note)
             if (cleanAmount > 0) {
-                withdrawCashFromMainBalance(cleanAmount, "খরচ: $title ($category)")
+                withdrawCashFromMainBalance(cleanAmount, "খরচ: $title ($cleanCat)")
             }
             triggerInstantDriveBackup("খরচ এন্ট্রি")
         }
