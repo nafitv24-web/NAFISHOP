@@ -493,8 +493,11 @@ fun CustomerKhataCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (customer.imageUri.isNotBlank()) {
+                        val avatarModel = remember(customer.imageUri) {
+                            com.example.util.ImageStorageHelper.resolveImageModel(context, customer.imageUri) ?: customer.imageUri
+                        }
                         AsyncImage(
-                            model = customer.imageUri,
+                            model = avatarModel,
                             contentDescription = "Customer Photo",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
@@ -710,8 +713,11 @@ fun AddCustomerDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (imageUri.isNotBlank()) {
+                        val newCustomerImg = remember(imageUri) {
+                            com.example.util.ImageStorageHelper.resolveImageModel(context, imageUri) ?: imageUri
+                        }
                         AsyncImage(
-                            model = imageUri,
+                            model = newCustomerImg,
                             contentDescription = "Photo",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
@@ -882,8 +888,11 @@ fun EditCustomerDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (imageUri.isNotBlank()) {
+                        val editCustomerImg = remember(imageUri) {
+                            com.example.util.ImageStorageHelper.resolveImageModel(context, imageUri) ?: imageUri
+                        }
                         AsyncImage(
-                            model = imageUri,
+                            model = editCustomerImg,
                             contentDescription = "Photo",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
@@ -1317,8 +1326,11 @@ fun CustomerFullHistoryDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (customer.imageUri.isNotBlank()) {
+                            val listAvatar = remember(customer.imageUri) {
+                                com.example.util.ImageStorageHelper.resolveImageModel(context, customer.imageUri) ?: customer.imageUri
+                            }
                             AsyncImage(
-                                model = customer.imageUri,
+                                model = listAvatar,
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
