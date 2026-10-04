@@ -32,7 +32,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
-import com.example.ui.components.AppProductImage
 import com.example.data.model.CartItem
 import com.example.data.model.Customer
 import com.example.data.model.Product
@@ -244,17 +243,47 @@ fun PosSaleScreen(
                                                 .height(95.dp)
                                                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                                         ) {
-                                            AppProductImage(
-                                                imageUri = prod.imageUri,
-                                                productName = prod.name,
-                                                category = prod.category,
-                                                modifier = Modifier.fillMaxSize(),
-                                                contentScale = ContentScale.Crop,
-                                                showZoomButton = true,
-                                                onZoomClick = {
-                                                    viewingProductImage = prod
+                                            if (!prod.imageUri.isNullOrBlank()) {
+                                                AsyncImage(
+                                                    model = prod.imageUri,
+                                                    contentDescription = prod.name,
+                                                    contentScale = ContentScale.Crop,
+                                                    modifier = Modifier.fillMaxSize()
+                                                )
+                                                // Zoom Icon Button overlay on top-right of image
+                                                Surface(
+                                                    shape = CircleShape,
+                                                    color = Color.Black.copy(alpha = 0.6f),
+                                                    modifier = Modifier
+                                                        .align(Alignment.TopEnd)
+                                                        .padding(5.dp)
+                                                        .size(24.dp)
+                                                        .clickable {
+                                                            viewingProductImage = prod
+                                                        }
+                                                ) {
+                                                    Box(contentAlignment = Alignment.Center) {
+                                                        Icon(
+                                                            Icons.Default.ZoomIn,
+                                                            contentDescription = "বড় করে দেখুন",
+                                                            tint = Color.White,
+                                                            modifier = Modifier.size(15.dp)
+                                                        )
+                                                    }
                                                 }
-                                            )
+                                            } else {
+                                                Box(
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.Category,
+                                                        contentDescription = null,
+                                                        tint = EmeraldPrimary.copy(alpha = 0.55f),
+                                                        modifier = Modifier.size(34.dp)
+                                                    )
+                                                }
+                                            }
 
                                             // In-Cart or Out-of-Stock Badge
                                             if (inCartQty > 0) {
@@ -881,17 +910,46 @@ fun PosCartItemRow(
                 modifier = Modifier
                     .size(44.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .clickable {
+                    .clickable(enabled = !item.product.imageUri.isNullOrBlank()) {
                         onImageClick?.invoke(item.product)
                     }
             ) {
-                AppProductImage(
-                    imageUri = item.product.imageUri,
-                    productName = item.product.name,
-                    category = item.product.category,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
+                if (!item.product.imageUri.isNullOrBlank()) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        AsyncImage(
+                            model = item.product.imageUri,
+                            contentDescription = item.product.name,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .size(16.dp)
+                                .background(
+                                    Color.Black.copy(alpha = 0.55f),
+                                    shape = RoundedCornerShape(topStart = 4.dp)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.ZoomIn,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(11.dp)
+                            )
+                        }
+                    }
+                } else {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                        Icon(
+                            Icons.Default.Category,
+                            contentDescription = null,
+                            tint = EmeraldPrimary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.width(10.dp))

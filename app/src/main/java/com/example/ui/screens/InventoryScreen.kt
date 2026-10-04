@@ -41,7 +41,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
-import com.example.ui.components.AppProductImage
 import com.example.data.model.Product
 import com.example.ui.components.ProductImageViewerDialog
 import com.example.ui.components.toIntOrNull
@@ -717,17 +716,47 @@ fun ProductItemCard(
                     modifier = Modifier
                         .size(52.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .clickable {
+                        .clickable(enabled = !product.imageUri.isNullOrBlank()) {
                             onImageClick()
                         }
                 ) {
-                    AppProductImage(
-                        imageUri = product.imageUri,
-                        productName = product.name,
-                        category = product.category,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
+                    if (!product.imageUri.isNullOrBlank()) {
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            AsyncImage(
+                                model = product.imageUri,
+                                contentDescription = product.name,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            // Zoom Indicator Overlay Icon
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .size(18.dp)
+                                    .background(
+                                        Color.Black.copy(alpha = 0.55f),
+                                        shape = RoundedCornerShape(topStart = 6.dp)
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.ZoomIn,
+                                    contentDescription = "বড় করে দেখুন",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                            }
+                        }
+                    } else {
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                            Icon(
+                                Icons.Default.Category,
+                                contentDescription = null,
+                                tint = EmeraldPrimary,
+                                modifier = Modifier.size(26.dp)
+                            )
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.width(12.dp))
@@ -1219,17 +1248,31 @@ fun AddEditProductDialog(
                                 }
                         ) {
                             if (imageUri.isNotBlank()) {
-                                AppProductImage(
-                                    imageUri = imageUri,
-                                    productName = name,
-                                    category = category,
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Crop,
-                                    showZoomButton = true,
-                                    onZoomClick = {
-                                        showLargeImageViewer = true
+                                Box(modifier = Modifier.fillMaxSize()) {
+                                    AsyncImage(
+                                        model = imageUri,
+                                        contentDescription = "Product Image",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.BottomEnd)
+                                            .size(20.dp)
+                                            .background(
+                                                Color.Black.copy(alpha = 0.55f),
+                                                shape = RoundedCornerShape(topStart = 6.dp)
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Default.ZoomIn,
+                                            contentDescription = "বড় করে দেখুন",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(14.dp)
+                                        )
                                     }
-                                )
+                                }
                             } else {
                                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                                     Icon(

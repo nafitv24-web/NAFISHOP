@@ -108,120 +108,20 @@ object ImageStorageHelper {
         }
     }
 
-    /**
-     * Resolves any format of image URI (Base64 data URL, raw Base64, file URI, absolute path,
-     * remapped package path, or Content URI) into a Coil-compatible model (ByteArray, File, or Uri).
-     */
-    fun resolveImageModel(context: Context, imageUri: String?): Any? {
-        if (imageUri.isNullOrBlank()) return null
-
-        // 1. Base64 Data URI or raw Base64 string
-        if (imageUri.startsWith("data:image/") || imageUri.startsWith("data:application/") ||
-            (imageUri.length > 80 && !imageUri.contains("/") && !imageUri.contains(":"))
-        ) {
-            return try {
-                val cleanB64 = if (imageUri.contains(",")) imageUri.substringAfter(",") else imageUri
-                Base64.decode(cleanB64, Base64.DEFAULT)
-            } catch (e: Exception) {
-                null
-            }
-        }
-
-        // 2. Local File or Absolute Path
-        if (imageUri.startsWith("file:") || imageUri.startsWith("/")) {
-            val cleanPath = imageUri.removePrefix("file://")
-            val directFile = File(cleanPath)
-            if (directFile.exists() && directFile.length() > 0) {
-                return directFile
-            }
-
-            val fileName = directFile.name
-            // Check in standard app directory
-            val appImageDir = File(context.filesDir, "product_images")
-            val localInApp = File(appImageDir, fileName)
-            if (localInApp.exists() && localInApp.length() > 0) {
-                return localInApp
-            }
-
-            val cacheImageDir = File(context.cacheDir, "product_images")
-            val cacheInApp = File(cacheImageDir, fileName)
-            if (cacheInApp.exists() && cacheInApp.length() > 0) {
-                return cacheInApp
-            }
-
-            val rootFiles = File(context.filesDir, fileName)
-            if (rootFiles.exists() && rootFiles.length() > 0) {
-                return rootFiles
-            }
-
-            // Remap if path contained old package name /files/product_images/
-            if (cleanPath.contains("/product_images/")) {
-                val rel = cleanPath.substringAfter("/product_images/")
-                val candidate = File(appImageDir, rel)
-                if (candidate.exists() && candidate.length() > 0) {
-                    return candidate
-                }
-            }
-
-            return directFile
-        }
-
-        // 3. Web URL
-        if (imageUri.startsWith("http://") || imageUri.startsWith("https://")) {
-            return imageUri
-        }
-
-        // 4. Content URI
-        if (imageUri.startsWith("content://")) {
-            return Uri.parse(imageUri)
-        }
-
-        // 5. Bare filename (e.g. prod_12345.jpg)
-        val fileByName = File(File(context.filesDir, "product_images"), imageUri)
-        if (fileByName.exists() && fileByName.length() > 0) {
-            return fileByName
-        }
-
-        return imageUri
-    }
-
-    private fun openStream(context: Context, uri: Uri): InputStream? {
-        return try {
-            if (uri.scheme == "file" || uri.scheme.isNullOrEmpty()) {
-                val path = uri.path ?: uri.toString().removePrefix("file://")
-                val file = File(path)
-                if (file.exists()) {
-                    java.io.FileInputStream(file)
-                } else {
-                    val candidate = File(File(context.filesDir, "product_images"), file.name)
-                    if (candidate.exists()) {
-                        java.io.FileInputStream(candidate)
-                    } else {
-                        null
-                    }
-                }
-            } else {
-                context.contentResolver.openInputStream(uri)
-            }
-        } catch (e: Exception) {
-            null
-        }
-    }
-
     private fun decodeSampledBitmapFromUri(context: Context, uri: Uri, reqWidth: Int, reqHeight: Int): Bitmap? {
         var input: InputStream? = null
         return try {
-            input = openStream(context, uri) ?: return null
+            input = context.contentResolver.openInputStream(uri)
             val options = BitmapFactory.Options().apply {
                 inJustDecodeBounds = true
             }
             BitmapFactory.decodeStream(input, null, options)
-            input.close()
+            input?.close()
 
             options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight)
             options.inJustDecodeBounds = false
 
-            input = openStream(context, uri) ?: return null
+            input = context.contentResolver.openInputStream(uri)
             BitmapFactory.decodeStream(input, null, options)
         } catch (e: Exception) {
             null
@@ -248,7 +148,7 @@ object ImageStorageHelper {
     private fun fixOrientation(context: Context, uri: Uri, bitmap: Bitmap): Bitmap {
         var input: InputStream? = null
         return try {
-            input = openStream(context, uri) ?: return bitmap
+            input = context.contentResolver.openInputStream(uri) ?: return bitmap
             val exif = ExifInterface(input)
             val orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
             val matrix = Matrix()

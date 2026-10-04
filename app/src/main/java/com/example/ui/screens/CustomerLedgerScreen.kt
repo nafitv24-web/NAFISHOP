@@ -266,11 +266,8 @@ fun CustomerLedgerScreen(
                         modifier = Modifier.clickable { showEditCustomerDialog = true }
                     ) {
                         if (currentCustomer.imageUri.isNotBlank()) {
-                            val topAvatar = remember(currentCustomer.imageUri) {
-                                com.example.util.ImageStorageHelper.resolveImageModel(context, currentCustomer.imageUri) ?: currentCustomer.imageUri
-                            }
                             AsyncImage(
-                                model = topAvatar,
+                                model = currentCustomer.imageUri,
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
@@ -1002,11 +999,8 @@ fun AddLedgerTransactionDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (customer.imageUri.isNotBlank()) {
-                            val dialogAvatar = remember(customer.imageUri) {
-                                com.example.util.ImageStorageHelper.resolveImageModel(context, customer.imageUri) ?: customer.imageUri
-                            }
                             AsyncImage(
-                                model = dialogAvatar,
+                                model = customer.imageUri,
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier

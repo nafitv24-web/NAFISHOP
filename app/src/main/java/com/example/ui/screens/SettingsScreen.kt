@@ -9,7 +9,6 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -644,78 +643,55 @@ fun SettingsScreen(
                                 }
                             }
 
-                            // Google Drive & Gmail Actions
-                            Column(
+                            // 2 Main Google Drive Actions:
+                            // 1. Export to Drive (ড্রাইভে ব্যাকআপ রাখুন)
+                            // 2. Import from Drive (ড্রাইভ থেকে রিস্টোর)
+                            Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    // Button 1: Send to User's Own Gmail
-                                    Button(
-                                        onClick = {
-                                            viewModel.sendBackupToUserGmail(context)
-                                        },
-                                        modifier = Modifier.weight(1f),
-                                        enabled = !isSyncing,
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
-                                    ) {
-                                        Icon(Icons.Default.Mail, contentDescription = null, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = if (language == "bn") "জিমেইলে পাঠান" else "Send to Gmail",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-
-                                    // Button 2: Save to Google Drive
-                                    FilledTonalButton(
-                                        onClick = {
-                                            viewModel.saveBackupToGoogleDrive(context)
-                                        },
-                                        modifier = Modifier.weight(1f),
-                                        enabled = !isSyncing,
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = ButtonDefaults.filledTonalButtonColors(
-                                            containerColor = StockBlue,
-                                            contentColor = Color.White
-                                        )
-                                    ) {
-                                        Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = if (language == "bn") "ড্রাইভে সেভ করুন" else "Save to Drive",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-
-                                // Button 3: Restore from Drive / File
-                                OutlinedButton(
+                                Button(
                                     onClick = {
                                         if (!PermissionHelper.areAllPermissionsGranted(context)) {
                                             showPermissionDialog = true
                                         } else {
-                                            pickRestoreFileLauncher.launch("*/*")
+                                            showDriveExportConfirmDialog = true
                                         }
                                     },
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier.weight(1f),
                                     enabled = !isSyncing,
                                     shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.outlinedButtonColors(
-                                        contentColor = Color(0xFF38BDF8)
-                                    ),
-                                    border = BorderStroke(1.dp, Color(0xFF38BDF8).copy(alpha = 0.5f))
+                                    colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
+                                ) {
+                                    Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (language == "bn") "ড্রাইভে ব্যাকআপ রাখুন" else "Export to Drive",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                FilledTonalButton(
+                                    onClick = {
+                                        if (!PermissionHelper.areAllPermissionsGranted(context)) {
+                                            showPermissionDialog = true
+                                        } else {
+                                            showDriveImportConfirmDialog = true
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    enabled = !isSyncing,
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.filledTonalButtonColors(
+                                        containerColor = Color(0xFF334155),
+                                        contentColor = Color.White
+                                    )
                                 ) {
                                     Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = if (language == "bn") "ড্রাইভ / ফাইল থেকে রিস্টোর করুন" else "Restore from Drive / File",
+                                        text = if (language == "bn") "ড্রাইভ থেকে রিস্টোর" else "Import from Drive",
                                         style = MaterialTheme.typography.labelLarge,
                                         fontWeight = FontWeight.Bold
                                     )
@@ -735,9 +711,9 @@ fun SettingsScreen(
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
                                         text = if (language == "bn")
-                                            "আপনার ব্যাকআপ ফাইলটি সরাসরি আপনার নিজস্ব জিমেইল ও গুগল ড্রাইভে সংরক্ষিত থাকে। এতে আপনার ডাটা ১০০% ব্যক্তিগত, নিরাপদ এবং আপনার নিজস্ব নিয়ন্ত্রণে থাকে।"
+                                            "আপনার গুগল একাউন্টের ড্রাইভে ফাইল নিরাপদে সংরক্ষিত হয়। অন্য যেকোনো নতুন মোবাইলে এই একাউন্ট দিয়ে এক ক্লিকে সম্পূর্ণ দোকান রিস্টোর করতে পারবেন।"
                                         else
-                                            "Data is saved directly to your personal Gmail and Google Drive. 100% private, secure and permanently under your control.",
+                                            "Data is safely backed up to your Google Drive account. When switching devices, simply log in and restore with one tap.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = Color(0xFFCBD5E1),
                                         fontSize = 12.sp
@@ -1423,7 +1399,7 @@ fun SettingsScreen(
             },
             title = {
                 Text(
-                    text = if (language == "bn") "গুগল ড্রাইভে ব্যাকআপ নিশ্চিত করুন" else "Confirm Backup to Google Drive",
+                    text = if (language == "bn") "গুগল ড্রাইভে রপ্তানি নিশ্চিত করুন" else "Confirm Export to Google Drive",
                     fontWeight = FontWeight.Bold
                 )
             },
@@ -1431,9 +1407,9 @@ fun SettingsScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         text = if (language == "bn")
-                            "আপনার দোকানের সকল স্টক, বিক্রয় ভাউচার, বাকি খাতা ও খরচের হিসাব ফাইলটি সরাসরি আপনার গুগল ড্রাইভে সংরক্ষিত হবে।"
+                            "আপনার দোকানের সকল স্টক, বিক্রয় ভাউচার, বাকি খাতা ও খরচের হিসাব গুগল ড্রাইভ ক্লাউড স্টোরেজে আপলোড ও সিঙ্ক হবে।"
                         else
-                            "All inventory, customer dues, sales vouchers and expenses file will be saved directly to your Google Drive.",
+                            "All inventory, customer dues, sales vouchers and expenses will be uploaded to Google Drive AppFolder.",
                         style = MaterialTheme.typography.bodyMedium
                     )
 
@@ -1463,11 +1439,11 @@ fun SettingsScreen(
                 Button(
                     onClick = {
                         showDriveExportConfirmDialog = false
-                        viewModel.saveBackupToGoogleDrive(context) { success, resultMsg ->
+                        viewModel.exportToGoogleDriveCloud(context) { success, resultMsg ->
                             if (success) {
                                 Toast.makeText(
                                     context,
-                                    if (language == "bn") "✅ গুগল ড্রাইভে ব্যাকআপ সফল হয়েছে! ($resultMsg)" else "✅ Successfully backed up to Google Drive! ($resultMsg)",
+                                    if (language == "bn") "✅ গুগল ড্রাইভে সফলভাবে রপ্তানি হয়েছে! ($resultMsg)" else "✅ Successfully exported to Google Drive! ($resultMsg)",
                                     Toast.LENGTH_LONG
                                 ).show()
                             } else {
@@ -1481,7 +1457,7 @@ fun SettingsScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
                 ) {
-                    Text(if (language == "bn") "ড্রাইভে সেভ করুন" else "Save to Drive")
+                    Text(if (language == "bn") "রপ্তানি শুরু করুন" else "Start Export")
                 }
             },
             dismissButton = {

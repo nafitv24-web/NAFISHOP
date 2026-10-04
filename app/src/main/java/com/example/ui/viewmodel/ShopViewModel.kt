@@ -16,8 +16,6 @@ import com.example.data.model.*
 import com.example.data.repository.ShopRepository
 import com.example.util.CalculationHelper.round2
 import com.example.util.NetworkMonitor
-import com.example.util.UserTrackerHelper
-import com.example.util.UserLocationInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
@@ -557,20 +555,6 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
-
-        // Automatic tracking of app entry, location, network, device, and last active time
-        trackUserAppLaunch()
-
-        // Heartbeat ping while app is in foreground (every 3 minutes)
-        viewModelScope.launch {
-            while (true) {
-                kotlinx.coroutines.delay(180_000L)
-                val savedEmail = prefs.getString("user_email", "") ?: _shopInfo.value.userEmail
-                if (savedEmail.isNotBlank()) {
-                    UserTrackerHelper.pingHeartbeat(savedEmail)
-                }
-            }
-        }
     }
 
     // Dashboard Summary derivation
@@ -960,7 +944,6 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
 
                 // Auto-restore previous transactions and shop database on login from Google Drive / Cloud
                 executeCloudRestoreOnLogin(cleanEmail, forceOverwrite = true)
-                trackUserAppLaunch(cleanEmail)
                 onResult(authResult)
                 return@launch
             }
@@ -1000,7 +983,6 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
 
                 // Auto-restore previous transactions and shop database on login from Google Drive / Cloud
                 executeCloudRestoreOnLogin(cleanEmail, forceOverwrite = true)
-                trackUserAppLaunch(cleanEmail)
                 onResult(AuthResult.Success(null, "সফলভাবে লগইন হয়েছে"))
                 return@launch
             }
@@ -1941,57 +1923,6 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * Backward-compatible alias for saving backup to Google Drive
-     */
-    fun saveBackupToGoogleDrive(
-        context: Context,
-        onComplete: (Boolean, String) -> Unit = { _, _ -> }
-    ) {
-        exportToGoogleDriveCloud(context, onComplete)
-    }
-
-    fun saveBackupToGoogleDrive(
-        context: Context,
-        customEmail: String,
-        onComplete: (Boolean, String) -> Unit = { _, _ -> }
-    ) {
-        exportToGoogleDriveCloud(context, onComplete)
-    }
-
-    fun saveBackupToGoogleDrive(
-        onComplete: (Boolean, String) -> Unit = { _, _ -> }
-    ) {
-        exportToGoogleDriveCloud(getApplication(), onComplete)
-    }
-
-    /**
-     * Backward-compatible method for sending backup to user's Gmail
-     */
-    fun sendBackupToUserGmail(
-        context: Context,
-        recipientEmail: String? = null,
-        onComplete: ((Boolean, String) -> Unit)? = null
-    ) {
-        val email = recipientEmail ?: prefs.getString("user_email", "") ?: _shopInfo.value.userEmail
-        exportAndShareJsonBackup(context, viaEmail = true)
-        onComplete?.invoke(true, "ব্যাকআপ জিমেইলে পাঠানো হয়েছে: $email")
-    }
-
-    fun sendBackupToUserGmail(
-        context: Context,
-        onComplete: ((Boolean, String) -> Unit)? = null
-    ) {
-        exportAndShareJsonBackup(context, viaEmail = true)
-        onComplete?.invoke(true, "ব্যাকআপ জিমেইলে পাঠানো হয়েছে")
-    }
-
-    fun sendBackupToUserGmail(
-        recipientEmail: String? = null
-    ) {
-        exportAndShareJsonBackup(getApplication(), viaEmail = true)
-    }
-
     fun exportToGoogleDriveCloud(context: Context, onComplete: (Boolean, String) -> Unit) {
         viewModelScope.launch {
             if (!NetworkMonitor.isOnline(context)) {
@@ -2368,26 +2299,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Records current user app entry, location, network, and device to Firebase Realtime Database
-     */
-    fun trackUserAppLaunch(customEmail: String? = null) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val savedEmail = customEmail ?: prefs.getString("user_email", "") ?: _shopInfo.value.userEmail
-            val emailToUse = if (savedEmail.isNotBlank()) savedEmail else "app_user@nafishop.app"
-            val sName = _shopInfo.value.shopName
-            val oName = _shopInfo.value.ownerName
-            UserTrackerHelper.recordAppEntryInCloud(
-                context = getApplication(),
-                email = emailToUse,
-                shopName = sName,
-                ownerName = oName,
-                appVersion = currentAppVersion
-            )
-        }
-    }
-
-    /**
-     * Load all registered user accounts with location, device & last access details for Admin Dashboard
+     * Load all registered user accounts for Admin Dashboard
      */
     fun loadAllRegisteredUsers(onComplete: ((Int) -> Unit)? = null) {
         viewModelScope.launch {
@@ -2400,41 +2312,20 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                     _isLoadingUsers.value = false
                     onComplete?.invoke(cloudUsers.size)
                 } else {
-                    // Fallback to local account with real detected device and location data
-                    val locInfo = withContext(Dispatchers.IO) {
-                        UserTrackerHelper.detectLocationAndIp(getApplication(), currentAppVersion)
-                    }
-                    val currentEmail = prefs.getString("user_email", "") ?: _shopInfo.value.userEmail
-                    val emailToUse = if (currentEmail.isNotBlank()) currentEmail else "nafitv24@gmail.com"
-                    val now = System.currentTimeMillis()
-                    val fallbackList = listOf(
-                        FirebaseUserAccount(
-                            email = emailToUse,
-                            passwordHash = "",
-                            shopName = _shopInfo.value.shopName.ifBlank { "NAFI KHATA" },
-                            ownerName = _shopInfo.value.ownerName.ifBlank { "দোকানদার" },
-                            phone = _shopInfo.value.phone,
-                            createdAt = now - 86400000L,
-                            lastLoginAt = now,
-                            lastAppEntryAt = now,
-                            lastActiveAt = now,
-                            appEntryCount = 1,
-                            ipAddress = locInfo.ip,
-                            city = locInfo.city,
-                            region = locInfo.region,
-                            country = locInfo.country,
-                            countryCode = locInfo.countryCode,
-                            isp = locInfo.isp,
-                            networkType = locInfo.networkType,
-                            deviceModel = locInfo.deviceModel,
-                            androidVersion = locInfo.androidVersion,
-                            appVersion = locInfo.appVersion,
-                            latitude = locInfo.lat,
-                            longitude = locInfo.lon,
-                            locationDisplay = locInfo.locationDisplay,
-                            isOnline = true
+                    // Fallback to local accounts if any
+                    val currentEmail = _shopInfo.value.userEmail
+                    val fallbackList = if (currentEmail.isNotBlank()) {
+                        listOf(
+                            FirebaseUserAccount(
+                                email = currentEmail,
+                                passwordHash = "",
+                                shopName = _shopInfo.value.shopName,
+                                ownerName = _shopInfo.value.ownerName,
+                                createdAt = System.currentTimeMillis() - 86400000L,
+                                lastLoginAt = System.currentTimeMillis()
+                            )
                         )
-                    )
+                    } else emptyList()
                     _registeredUsers.value = fallbackList
                     _isLoadingUsers.value = false
                     onComplete?.invoke(fallbackList.size)

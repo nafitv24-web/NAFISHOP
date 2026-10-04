@@ -13,52 +13,13 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
-data class UserSessionLog(
-    val timestamp: Long = System.currentTimeMillis(),
-    val ip: String = "",
-    val city: String = "",
-    val region: String = "",
-    val country: String = "",
-    val isp: String = "",
-    val deviceModel: String = "",
-    val networkType: String = "",
-    val lat: Double = 0.0,
-    val lon: Double = 0.0
-)
-
 data class FirebaseUserAccount(
     val email: String,
-    val passwordHash: String = "",
-    val shopName: String = "",
-    val ownerName: String = "",
-    val phone: String = "",
+    val passwordHash: String,
+    val shopName: String,
+    val ownerName: String,
     val createdAt: Long = System.currentTimeMillis(),
-    val lastLoginAt: Long = System.currentTimeMillis(),
-    val lastAppEntryAt: Long = System.currentTimeMillis(),
-    val lastActiveAt: Long = System.currentTimeMillis(),
-    val lastBackupAt: Long = 0L,
-    val lastBackup: String = "",
-    val lastBackupDate: String = "",
-    val appEntryCount: Int = 1,
-    val productCount: Int = 0,
-    val totalDue: Double = 0.0,
-    val mainBalance: Double = 0.0,
-    val totalSales: Double = 0.0,
-    val ipAddress: String = "",
-    val city: String = "",
-    val region: String = "",
-    val country: String = "",
-    val countryCode: String = "",
-    val isp: String = "",
-    val networkType: String = "",
-    val deviceModel: String = "",
-    val androidVersion: String = "",
-    val appVersion: String = "",
-    val latitude: Double = 0.0,
-    val longitude: Double = 0.0,
-    val locationDisplay: String = "",
-    val isOnline: Boolean = false,
-    val sessionHistory: List<UserSessionLog> = emptyList()
+    val lastLoginAt: Long = System.currentTimeMillis()
 )
 
 data class FirebaseOperationResult(
@@ -609,7 +570,6 @@ class FirebaseRealtimeManager {
 
     /**
      * Fetch all registered user accounts from Firebase Realtime Database
-     * Includes user location, IP, ISP, device model, and last accessed timestamp.
      */
     suspend fun fetchAllUsers(): List<FirebaseUserAccount> = withContext(Dispatchers.IO) {
         try {
@@ -621,87 +581,24 @@ class FirebaseRealtimeManager {
                 val json = JSONObject(body)
                 val list = mutableListOf<FirebaseUserAccount>()
                 val keys = json.keys()
-                val now = System.currentTimeMillis()
-
                 while (keys.hasNext()) {
                     val key = keys.next()
                     val userObj = json.optJSONObject(key)
                     if (userObj != null) {
                         val email = userObj.optString("email", key.replace("_dot_", ".").replace("_at_", "@"))
-                        val createdAt = userObj.optLong("createdAt", now)
-                        val lastLoginAt = userObj.optLong("lastLoginAt", createdAt)
-                        val lastAppEntryAt = userObj.optLong("lastAppEntryAt", lastLoginAt)
-                        val lastActiveAt = userObj.optLong("lastActiveAt", maxOf(lastLoginAt, lastAppEntryAt))
-                        val isOnlineExplicit = userObj.optBoolean("isOnline", false)
-                        val isOnlineByPing = (now - lastActiveAt) < 6 * 60 * 1000L // Active in last 6 minutes
-
-                        // Parse recent session logs
-                        val sessionsList = mutableListOf<UserSessionLog>()
-                        val sessArray = userObj.optJSONArray("sessions")
-                        if (sessArray != null) {
-                            for (i in 0 until sessArray.length()) {
-                                val sObj = sessArray.optJSONObject(i) ?: continue
-                                sessionsList.add(
-                                    UserSessionLog(
-                                        timestamp = sObj.optLong("timestamp", 0L),
-                                        ip = sObj.optString("ip", ""),
-                                        city = sObj.optString("city", ""),
-                                        region = sObj.optString("region", ""),
-                                        country = sObj.optString("country", ""),
-                                        isp = sObj.optString("isp", ""),
-                                        deviceModel = sObj.optString("deviceModel", ""),
-                                        networkType = sObj.optString("networkType", ""),
-                                        lat = sObj.optDouble("lat", 0.0),
-                                        lon = sObj.optDouble("lon", 0.0)
-                                    )
-                                )
-                            }
-                        }
-
-                        val city = userObj.optString("city", "").trim()
-                        val country = userObj.optString("country", "").trim()
-                        val locDisplay = userObj.optString("locationDisplay", "").ifBlank {
-                            when {
-                                city.isNotBlank() && country.isNotBlank() -> "$city, $country"
-                                city.isNotBlank() -> city
-                                country.isNotBlank() -> country
-                                else -> "বাংলাদেশ"
-                            }
-                        }
-
                         list.add(
                             FirebaseUserAccount(
                                 email = email,
                                 passwordHash = "",
                                 shopName = userObj.optString("shopName", "NAFI KHATA"),
                                 ownerName = userObj.optString("ownerName", "দোকানদার"),
-                                phone = userObj.optString("phone", ""),
-                                createdAt = createdAt,
-                                lastLoginAt = lastLoginAt,
-                                lastAppEntryAt = lastAppEntryAt,
-                                lastActiveAt = lastActiveAt,
-                                appEntryCount = userObj.optInt("appEntryCount", 1),
-                                ipAddress = userObj.optString("ipAddress", ""),
-                                city = city,
-                                region = userObj.optString("region", ""),
-                                country = country,
-                                countryCode = userObj.optString("countryCode", "BD"),
-                                isp = userObj.optString("isp", ""),
-                                networkType = userObj.optString("networkType", ""),
-                                deviceModel = userObj.optString("deviceModel", ""),
-                                androidVersion = userObj.optString("androidVersion", ""),
-                                appVersion = userObj.optString("appVersion", ""),
-                                latitude = userObj.optDouble("latitude", 0.0),
-                                longitude = userObj.optDouble("longitude", 0.0),
-                                locationDisplay = locDisplay,
-                                isOnline = isOnlineExplicit || isOnlineByPing,
-                                sessionHistory = sessionsList
+                                createdAt = userObj.optLong("createdAt", System.currentTimeMillis()),
+                                lastLoginAt = userObj.optLong("lastLoginAt", System.currentTimeMillis())
                             )
                         )
                     }
                 }
-                // Sort by most recently active or entered
-                list.sortedByDescending { maxOf(it.lastActiveAt, it.lastAppEntryAt, it.lastLoginAt) }
+                list.sortedByDescending { it.createdAt }
             } else {
                 emptyList()
             }
