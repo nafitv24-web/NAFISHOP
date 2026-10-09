@@ -183,7 +183,7 @@ fun CustomerLedgerScreen(
         // 3. Ensure opening balance is present if totalDue has an unlogged difference
         val sumGiven = round2(rawList.filter { it.type == "GIVEN" }.sumOf { it.amount })
         val sumCollected = round2(rawList.filter { it.type == "COLLECTED" }.sumOf { it.amount })
-        val netFromHistory = round2((sumGiven - sumCollected).coerceAtLeast(0.0))
+        val netFromHistory = round2(sumGiven - sumCollected)
         val cleanCustDue = round2(currentCustomer.totalDue)
         val missingOpeningDue = round2(cleanCustDue - netFromHistory)
 
@@ -199,6 +199,21 @@ fun CustomerLedgerScreen(
                     title = if (language == "bn") "প্রারম্ভিক বাকি / পূর্বের হিসাব" else "Opening Balance / Initial Due",
                     note = if (language == "bn") "পূর্বের হিসাবের প্রারম্ভিক বকেয়া" else "Initial account opening balance",
                     amount = missingOpeningDue,
+                    timestamp = earliestTime
+                )
+            )
+        } else if (missingOpeningDue < -0.01) {
+            val earliestTime = rawList.minOfOrNull { it.timestamp }?.let { it - 60000L }
+                ?: (currentCustomer.lastTransactionDate.takeIf { it > 0 } ?: (System.currentTimeMillis() - 86400000L))
+            rawList.add(
+                LedgerEntry(
+                    id = -currentCustomer.id * 100 - 99,
+                    sourceId = 0L,
+                    isDueLog = false,
+                    type = "COLLECTED",
+                    title = if (language == "bn") "প্রারম্ভিক অগ্রিম জমা" else "Opening Advance Deposit",
+                    note = if (language == "bn") "পূর্বের হিসাবের অগ্রিম জমা" else "Initial advance deposit",
+                    amount = -missingOpeningDue,
                     timestamp = earliestTime
                 )
             )
@@ -278,7 +293,7 @@ fun CustomerLedgerScreen(
                         } else {
                             Surface(
                                 shape = CircleShape,
-                                color = if (currentCustomer.totalDue > 0) Color(0xFFFFEDD5) else Color(0xFFDCFCE7),
+                                color = if (currentCustomer.totalDue > 0.01) Color(0xFFFFEDD5) else if (currentCustomer.totalDue < -0.01) Color(0xFFDCFCE7) else Color(0xFFF1F5F9),
                                 modifier = Modifier.size(42.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
@@ -286,7 +301,7 @@ fun CustomerLedgerScreen(
                                         text = currentCustomer.name.take(1).uppercase(),
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (currentCustomer.totalDue > 0) DueOrange else ProfitGreen
+                                        color = if (currentCustomer.totalDue > 0.01) DueOrange else if (currentCustomer.totalDue < -0.01) Color(0xFF16A34A) else ProfitGreen
                                     )
                                 }
                             }
@@ -524,10 +539,12 @@ fun CustomerLedgerScreen(
                                 color = Color(0xFF94A3B8)
                             )
                             Spacer(modifier = Modifier.height(2.dp))
-                            val currentDueBalance = (totalGiven - totalCollected).coerceAtLeast(0.0)
-                            val isDue = currentDueBalance > 0.01
+                            val diff = round2(totalGiven - totalCollected)
+                            val isDue = diff > 0.01
+                            val isAdvance = diff < -0.01
                             Text(
-                                text = if (isDue) "-$currency${currentDueBalance.toIntOrNull() ?: currentDueBalance} বাকি"
+                                text = if (isDue) "-$currency${diff.toIntOrNull() ?: diff} বাকি"
+                                else if (isAdvance) "+$currency${(-diff).toIntOrNull() ?: (-diff)} কাস্টমার পাবে"
                                 else (if (language == "bn") "পরিশোধিত" else "Settled"),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.ExtraBold,
@@ -1009,9 +1026,11 @@ fun AddLedgerTransactionDialog(
                                     .border(1.5.dp, DueOrange, CircleShape)
                             )
                         } else {
+                            val isDue = customer.totalDue > 0.01
+                            val isAdvance = customer.totalDue < -0.01
                             Surface(
                                 shape = CircleShape,
-                                color = if (customer.totalDue > 0) Color(0xFFFFEDD5) else Color(0xFFDCFCE7),
+                                color = if (isDue) Color(0xFFFFEDD5) else if (isAdvance) Color(0xFFDCFCE7) else Color(0xFFF1F5F9),
                                 modifier = Modifier.size(46.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
@@ -1019,7 +1038,7 @@ fun AddLedgerTransactionDialog(
                                         text = customer.name.take(1).uppercase(),
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (customer.totalDue > 0) DueOrange else ProfitGreen
+                                        color = if (isDue) DueOrange else if (isAdvance) Color(0xFF16A34A) else ProfitGreen
                                     )
                                 }
                             }
@@ -1033,12 +1052,15 @@ fun AddLedgerTransactionDialog(
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
-                            val isDue = customer.totalDue > 0
+                            val isDue = customer.totalDue > 0.01
+                            val isAdvance = customer.totalDue < -0.01
                             Text(
-                                text = "${if (language == "bn") "ব্যালেন্স" else "Balance"} ${if (isDue) "-$currency${customer.totalDue.toIntOrNull() ?: customer.totalDue} বাকি" else (if (language == "bn") "০ পরিশোধিত" else "0 Settled")}",
+                                text = if (isDue) "${if (language == "bn") "ব্যালেন্স" else "Balance"} -$currency${customer.totalDue.toIntOrNull() ?: customer.totalDue} বাকি"
+                                else if (isAdvance) "${if (language == "bn") "ব্যালেন্স" else "Balance"} +$currency${(-customer.totalDue).toIntOrNull() ?: (-customer.totalDue)} ${if (language == "bn") "কাস্টমার পাবে" else "Advance"}"
+                                else "${if (language == "bn") "ব্যালেন্স ০ পরিশোধিত" else "Balance 0 Settled"}",
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold,
-                                color = if (isDue) DueOrange else ProfitGreen
+                                color = if (isDue) DueOrange else if (isAdvance) Color(0xFF16A34A) else ProfitGreen
                             )
                         }
                     }
@@ -1213,7 +1235,7 @@ fun AddLedgerTransactionDialog(
                         onClick = {
                             val enteredAmount = amountStr.toDoubleOrNull() ?: 0.0
                             val prevDue = customer.totalDue
-                            val totalCurrentDue = if (selectedType == "GIVEN") prevDue + enteredAmount else (prevDue - enteredAmount).coerceAtLeast(0.0)
+                            val totalCurrentDue = if (selectedType == "GIVEN") prevDue + enteredAmount else prevDue - enteredAmount
                             val msg = com.example.util.CustomerSmsHelper.buildLedgerTransactionMessage(
                                 shopName = shopName,
                                 shopPhone = shopPhone,

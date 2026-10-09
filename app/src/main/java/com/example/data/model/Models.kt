@@ -202,7 +202,13 @@ data class DashboardSummary(
     val lowStockCount: Int = 0,
     val todayClosedCash: Double = 0.0,
     val todayUnclosedCash: Double = 0.0,
-    val todayNewSalesAfterClosing: Double = 0.0
+    val todayNewSalesAfterClosing: Double = 0.0,
+    val lastBackup: String = "আজ, ৩:৪৫ PM",
+    val lastBackupDate: String = "আজ, ৩:৪৫ PM",
+    val lastBackupAt: Long = 0L,
+    val productCount: Int = 0,
+    val totalDue: Double = 0.0,
+    val totalSales: Double = 0.0
 ) {
     val todayTotalSales: Double
         get() = todaySales
@@ -217,7 +223,12 @@ data class ShopInfo(
     val mainBalance: Double = 25000.0,
     val userEmail: String = "nafitv24@gmail.com",
     val isGoogleLinked: Boolean = true,
-    val lastBackupDate: String = "আজ, ৩:৪৫ PM"
+    val lastBackupDate: String = "আজ, ৩:৪৫ PM",
+    val lastBackup: String = "আজ, ৩:৪৫ PM",
+    val lastBackupAt: Long = 0L,
+    val productCount: Int = 0,
+    val totalDue: Double = 0.0,
+    val totalSales: Double = 0.0
 )
 
 data class RestoreResult(
@@ -229,7 +240,13 @@ data class RestoreResult(
     val expenseCount: Int = 0,
     val dueLogCount: Int = 0,
     val cashLogCount: Int = 0,
-    val restoredShopInfo: ShopInfo? = null
+    val restoredShopInfo: ShopInfo? = null,
+    val lastBackup: String = "",
+    val lastBackupDate: String = "",
+    val lastBackupAt: Long = 0L,
+    val totalDue: Double = 0.0,
+    val mainBalance: Double = 0.0,
+    val totalSales: Double = 0.0
 )
 
 data class AppUpdateInfo(

@@ -275,28 +275,43 @@ class ShopRepository(private val database: AppDatabase) {
             }
             sumGiven = round2(sumGiven)
             sumCollected = round2(sumCollected)
-            val netFromLogs = round2((sumGiven - sumCollected).coerceAtLeast(0.0))
+            val netFromLogs = round2(sumGiven - sumCollected)
             val cleanCustDue = round2(cust.totalDue)
 
-            // 3. If customer's total due is higher than the sum of history (due to opening balance)
-            val missingOpeningDue = round2(cleanCustDue - netFromLogs)
-            if (missingOpeningDue > 0.01) {
-                val earliestTime = logs.minOfOrNull { it.timestamp }?.let { it - 60000L }
-                    ?: (cust.lastTransactionDate.takeIf { it > 0 } ?: (System.currentTimeMillis() - 86400000L))
-                dueLogDao.insertDueLog(
-                    DueLog(
-                        customerId = cust.id,
-                        customerName = cust.name,
-                        customerPhone = cust.phone,
-                        type = "DUE_GIVEN",
-                        amount = missingOpeningDue,
-                        note = "প্রারম্ভিক বাকি / পূর্বের হিসাব",
-                        timestamp = earliestTime
+            // If customer has history, update customer totalDue to match net of history exactly
+            if (logs.isNotEmpty()) {
+                if (Math.abs(netFromLogs - cleanCustDue) > 0.001) {
+                    customerDao.setCustomerDue(cust.id, netFromLogs, System.currentTimeMillis())
+                }
+            } else {
+                // If no logs exist yet, record opening balance if customer has an initial balance
+                if (cleanCustDue > 0.01) {
+                    val earliestTime = cust.lastTransactionDate.takeIf { it > 0 } ?: (System.currentTimeMillis() - 86400000L)
+                    dueLogDao.insertDueLog(
+                        DueLog(
+                            customerId = cust.id,
+                            customerName = cust.name,
+                            customerPhone = cust.phone,
+                            type = "DUE_GIVEN",
+                            amount = cleanCustDue,
+                            note = "প্রারম্ভিক বাকি / পূর্বের হিসাব",
+                            timestamp = earliestTime
+                        )
                     )
-                )
-            } else if (netFromLogs > cleanCustDue + 0.01) {
-                // If sum of history is higher, update customer totalDue to match history exactly
-                customerDao.setCustomerDue(cust.id, netFromLogs, System.currentTimeMillis())
+                } else if (cleanCustDue < -0.01) {
+                    val earliestTime = cust.lastTransactionDate.takeIf { it > 0 } ?: (System.currentTimeMillis() - 86400000L)
+                    dueLogDao.insertDueLog(
+                        DueLog(
+                            customerId = cust.id,
+                            customerName = cust.name,
+                            customerPhone = cust.phone,
+                            type = "DUE_COLLECTED",
+                            amount = -cleanCustDue,
+                            note = "প্রারম্ভিক অগ্রিম জমা",
+                            timestamp = earliestTime
+                        )
+                    )
+                }
             }
         }
     }
@@ -488,7 +503,7 @@ class ShopRepository(private val database: AppDatabase) {
     suspend fun collectCustomerDuePayment(customer: Customer, amountPaid: Double, note: String) = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         val cleanPaid = round2(amountPaid)
-        val updatedDue = round2((customer.totalDue - cleanPaid).coerceAtLeast(0.0))
+        val updatedDue = round2(customer.totalDue - cleanPaid)
         customerDao.setCustomerDue(customer.id, updatedDue, now)
 
         dueLogDao.insertDueLog(
@@ -614,7 +629,7 @@ class ShopRepository(private val database: AppDatabase) {
 
         if (customer != null) {
             val updatedDue = if (dueLog.type == "DUE_GIVEN") {
-                round2((customer.totalDue - dueLog.amount).coerceAtLeast(0.0))
+                round2(customer.totalDue - dueLog.amount)
             } else {
                 round2(customer.totalDue + dueLog.amount)
             }
@@ -669,7 +684,7 @@ class ShopRepository(private val database: AppDatabase) {
         if (tx.dueAmount > 0) {
             val customer = customerDao.findExistingCustomer(tx.customerName, tx.customerPhone)
             if (customer != null) {
-                val updatedDue = round2((customer.totalDue - tx.dueAmount).coerceAtLeast(0.0))
+                val updatedDue = round2(customer.totalDue - tx.dueAmount)
                 customerDao.setCustomerDue(customer.id, updatedDue, System.currentTimeMillis())
             }
             // Remove associated DueLog if matching invoice
@@ -697,7 +712,7 @@ class ShopRepository(private val database: AppDatabase) {
             val customer = customerDao.findExistingCustomer(tx.customerName, tx.customerPhone)
             if (customer != null) {
                 val dueReduction = round2(returnedAmount.coerceAtMost(tx.dueAmount))
-                val updatedDue = round2((customer.totalDue - dueReduction).coerceAtLeast(0.0))
+                val updatedDue = round2(customer.totalDue - dueReduction)
                 customerDao.setCustomerDue(customer.id, updatedDue, now)
 
                 dueLogDao.insertDueLog(
@@ -793,7 +808,7 @@ class ShopRepository(private val database: AppDatabase) {
             val customer = customerDao.findExistingCustomer(finalCustName, finalCustPhone)
                 ?: customerDao.findExistingCustomer(oldTx.customerName, oldTx.customerPhone)
             if (customer != null) {
-                val updatedDue = round2((customer.totalDue + dueDiff).coerceAtLeast(0.0))
+                val updatedDue = round2(customer.totalDue + dueDiff)
                 customerDao.setCustomerDue(customer.id, updatedDue, System.currentTimeMillis())
             }
         }

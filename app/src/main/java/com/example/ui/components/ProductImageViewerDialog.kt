@@ -60,6 +60,11 @@ fun ProductImageViewerDialog(
         }
     }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val resolvedModel = remember(imageUri) {
+        com.example.util.ImageStorageHelper.resolveImageModel(context, imageUri)
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
@@ -97,7 +102,7 @@ fun ProductImageViewerDialog(
                 contentAlignment = Alignment.Center
             ) {
                 AsyncImage(
-                    model = imageUri,
+                    model = resolvedModel ?: imageUri,
                     contentDescription = title,
                     contentScale = ContentScale.Fit,
                     modifier = Modifier

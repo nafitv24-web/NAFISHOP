@@ -41,9 +41,9 @@ fun PaymentCollectedSmsDialog(
     val context = LocalContext.current
     val isGiven = transactionType == "GIVEN"
     val remainingDue = if (isGiven) {
-        (previousDue + collectedAmount).coerceAtLeast(0.0)
+        previousDue + collectedAmount
     } else {
-        (previousDue - collectedAmount).coerceAtLeast(0.0)
+        previousDue - collectedAmount
     }
 
     val smsMessage = remember(customer, collectedAmount, previousDue, shopName, shopPhone, note, transactionType) {
@@ -172,12 +172,12 @@ fun PaymentCollectedSmsDialog(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = "পূর্বের বাকি ছিল:",
+                                text = if (previousDue < -0.01) "পূর্বের অগ্রিম জমা ছিল:" else "পূর্বের বাকি ছিল:",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "$currency${CalculationHelper.formatAmount(previousDue)}",
+                                text = "$currency${CalculationHelper.formatAmount(if (previousDue < -0.01) -previousDue else previousDue)}",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -185,19 +185,23 @@ fun PaymentCollectedSmsDialog(
 
                         Spacer(modifier = Modifier.height(4.dp))
 
+                        val isRemainingDue = remainingDue > 0.01
+                        val isRemainingAdvance = remainingDue < -0.01
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = "বর্তমান অবশিষ্ট বাকি:",
+                                text = if (isRemainingAdvance) "বর্তমান জমা (কাস্টমার পাবে):" else if (isRemainingDue) "বর্তমান অবশিষ্ট বাকি:" else "বর্তমান হিসাব:",
                                 fontWeight = FontWeight.SemiBold,
                                 style = MaterialTheme.typography.bodyMedium
                             )
                             Text(
-                                text = "$currency${CalculationHelper.formatAmount(remainingDue)}",
+                                text = if (isRemainingAdvance) "$currency${CalculationHelper.formatAmount(-remainingDue)}"
+                                else if (isRemainingDue) "$currency${CalculationHelper.formatAmount(remainingDue)}"
+                                else "পরিশোধিত (০)",
                                 fontWeight = FontWeight.ExtraBold,
-                                color = if (remainingDue > 0) LossRed else ProfitGreen,
+                                color = if (isRemainingAdvance) ProfitGreen else if (isRemainingDue) LossRed else ProfitGreen,
                                 style = MaterialTheme.typography.titleMedium
                             )
                         }

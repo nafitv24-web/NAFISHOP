@@ -117,8 +117,18 @@ object CustomerSmsHelper {
                 appendLine("বিবরণ: $note")
             }
             appendLine("-------------------------")
-            appendLine("পূর্বের বাকি ছিল: $currency${previousDue.toIntOrNull() ?: previousDue}")
-            appendLine("সর্বমোট বর্তমান বকেয়া: $currency${totalCurrentDue.toIntOrNull() ?: totalCurrentDue}")
+            if (previousDue < -0.01) {
+                appendLine("পূর্বের অগ্রিম জমা ছিল: $currency${(-previousDue).toIntOrNull() ?: (-previousDue)}")
+            } else {
+                appendLine("পূর্বের বাকি ছিল: $currency${previousDue.toIntOrNull() ?: previousDue}")
+            }
+            if (totalCurrentDue < -0.01) {
+                appendLine("বর্তমান জমা / অগ্রিম (কাস্টমার পাবেন): $currency${(-totalCurrentDue).toIntOrNull() ?: (-totalCurrentDue)}")
+            } else if (totalCurrentDue > 0.01) {
+                appendLine("সর্বমোট বর্তমান বকেয়া: $currency${totalCurrentDue.toIntOrNull() ?: totalCurrentDue}")
+            } else {
+                appendLine("বর্তমান হিসাব: সম্পূর্ণ পরিশোধিত (০)")
+            }
             appendLine("-------------------------")
             if (isGiven) {
                 appendLine("সময়মতো পরিশোধের অনুরোধ করা হলো। ধন্যবাদ!")

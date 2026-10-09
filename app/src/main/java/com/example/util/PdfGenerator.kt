@@ -1176,10 +1176,13 @@ object PdfGenerator {
                 val c3X = c2X + cardWidth + 7f
                 canvas.drawRoundRect(RectF(c3X, y, c3X + cardWidth, y + cardHeight), 5f, 5f, b3)
                 canvas.drawRoundRect(RectF(c3X, y, c3X + cardWidth, y + cardHeight), 5f, 5f, b3Border)
-                val dueLabel = Paint().apply { isAntiAlias = true; textSize = 9f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); color = Color.rgb(194, 65, 12) }
-                val dueVal = Paint().apply { isAntiAlias = true; textSize = 13f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); color = Color.rgb(234, 88, 12) }
-                canvas.drawText("সর্বমোট বর্তমান বকেয়া", c3X + 8f, y + 14f, dueLabel)
-                canvas.drawText("$currency${customer.totalDue.toIntOrNull() ?: customer.totalDue}", c3X + 8f, y + 32f, dueVal)
+                val isDue = customer.totalDue > 0.01
+                val isAdvance = customer.totalDue < -0.01
+                val dueLabel = Paint().apply { isAntiAlias = true; textSize = 9f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); color = if (isAdvance) Color.rgb(22, 163, 74) else Color.rgb(194, 65, 12) }
+                val dueVal = Paint().apply { isAntiAlias = true; textSize = 13f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); color = if (isAdvance) Color.rgb(22, 163, 74) else Color.rgb(234, 88, 12) }
+                canvas.drawText(if (isAdvance) "অগ্রিম জমা (কাস্টমার পাবে)" else if (isDue) "সর্বমোট বর্তমান বকেয়া" else "হিসাব পরিশোধিত", c3X + 8f, y + 14f, dueLabel)
+                val displayAmt = if (isAdvance) "$currency${(-customer.totalDue).toIntOrNull() ?: (-customer.totalDue)}" else "$currency${customer.totalDue.toIntOrNull() ?: customer.totalDue}"
+                canvas.drawText(displayAmt, c3X + 8f, y + 32f, dueVal)
 
                 y += cardHeight + 12f
             }
@@ -1231,7 +1234,7 @@ object PdfGenerator {
             if (isGiven) {
                 runningBal += log.amount
             } else {
-                runningBal = (runningBal - log.amount).coerceAtLeast(0.0)
+                runningBal -= log.amount
             }
 
             // SL No
@@ -1271,7 +1274,9 @@ object PdfGenerator {
             canvas.drawText("মোট হিসাব:", 68f, y + 5f, boldPaint)
             canvas.drawText("+$currency${totalGiven.toIntOrNull() ?: totalGiven}", 415f, y + 5f, rightRedPaint)
             canvas.drawText("-$currency${totalCollected.toIntOrNull() ?: totalCollected}", 485f, y + 5f, rightGreenPaint)
-            canvas.drawText("$currency${customer.totalDue.toIntOrNull() ?: customer.totalDue}", 553f, y + 5f, rightRedPaint)
+            val isTotalAdvance = customer.totalDue < -0.01
+            val summaryDueText = if (isTotalAdvance) "+$currency${(-customer.totalDue).toIntOrNull() ?: (-customer.totalDue)} (পাবে)" else "$currency${customer.totalDue.toIntOrNull() ?: customer.totalDue}"
+            canvas.drawText(summaryDueText, 553f, y + 5f, if (isTotalAdvance) rightGreenPaint else rightRedPaint)
             y += 24f
         }
 

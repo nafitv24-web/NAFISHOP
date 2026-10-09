@@ -1696,7 +1696,7 @@ fun DuesSummaryTab(
     language: String,
     onNavigateToDue: (() -> Unit)?
 ) {
-    val totalCustomerDue = remember(customers) { customers.sumOf { it.totalDue } }
+    val totalCustomerDue = remember(customers) { customers.filter { it.totalDue > 0.0 }.sumOf { it.totalDue } }
     val debtorsCount = remember(customers) { customers.count { it.totalDue > 0.0 } }
     val totalCollected = remember(dueLogs) { dueLogs.filter { it.type == "DUE_COLLECTED" }.sumOf { it.amount } }
     val totalGiven = remember(dueLogs) { dueLogs.filter { it.type == "DUE_GIVEN" }.sumOf { it.amount } }

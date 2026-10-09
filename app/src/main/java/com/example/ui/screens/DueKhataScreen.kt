@@ -82,17 +82,27 @@ fun DueKhataScreen(
     var receiptNote by remember { mutableStateOf("") }
     var showReceiptSmsDialog by remember { mutableStateOf(false) }
 
-    val filteredCustomers = remember(customers, searchQuery) {
+    var selectedFilterType by remember { mutableStateOf("ALL") } // "ALL", "DUE", "ADVANCE", "PAID"
+    val filteredCustomers = remember(customers, searchQuery, selectedFilterType) {
         customers.filter { c ->
-            searchQuery.isBlank() ||
+            val matchesSearch = searchQuery.isBlank() ||
                     c.name.contains(searchQuery, ignoreCase = true) ||
                     c.phone.contains(searchQuery, ignoreCase = true) ||
                     c.address.contains(searchQuery, ignoreCase = true)
+            val matchesFilter = when (selectedFilterType) {
+                "DUE" -> c.totalDue > 0.01
+                "ADVANCE" -> c.totalDue < -0.01
+                "PAID" -> Math.abs(c.totalDue) <= 0.01
+                else -> true
+            }
+            matchesSearch && matchesFilter
         }
     }
 
-    val totalDueSum = remember(customers) { customers.sumOf { it.totalDue } }
+    val totalDueSum = remember(customers) { customers.filter { it.totalDue > 0 }.sumOf { it.totalDue } }
     val debtorsCount = remember(customers) { customers.count { it.totalDue > 0 } }
+    val totalAdvanceSum = remember(customers) { customers.filter { it.totalDue < 0 }.sumOf { -it.totalDue } }
+    val advanceDebtorsCount = remember(customers) { customers.count { it.totalDue < 0 } }
 
     if (selectedCustomerForLedger != null) {
         CustomerLedgerScreen(
@@ -156,6 +166,15 @@ fun DueKhataScreen(
                             fontWeight = FontWeight.ExtraBold,
                             color = DueOrange
                         )
+                        if (totalAdvanceSum > 0.01) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = if (language == "bn") "অগ্রিম জমা (কাস্টমার পাবে): $currency${totalAdvanceSum.toIntOrNull() ?: totalAdvanceSum}" else "Customer Advance: $currency${totalAdvanceSum.toIntOrNull() ?: totalAdvanceSum}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF16A34A),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                     Surface(
                         shape = RoundedCornerShape(12.dp),
@@ -255,6 +274,41 @@ fun DueKhataScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Filter Chips: সব | বাকি পাওনা | কাস্টমার পাবে (অগ্রিম) | পরিশোধিত
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                FilterChip(
+                    selected = selectedFilterType == "ALL",
+                    onClick = { selectedFilterType = "ALL" },
+                    label = { Text("${if (language == "bn") "সব" else "All"} (${customers.size})", style = MaterialTheme.typography.labelSmall) }
+                )
+                FilterChip(
+                    selected = selectedFilterType == "DUE",
+                    onClick = { selectedFilterType = "DUE" },
+                    label = { Text("${if (language == "bn") "বাকি" else "Due"} ($debtorsCount)", style = MaterialTheme.typography.labelSmall) },
+                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Color(0xFFFFEDD5), selectedLabelColor = DueOrange)
+                )
+                if (advanceDebtorsCount > 0) {
+                    FilterChip(
+                        selected = selectedFilterType == "ADVANCE",
+                        onClick = { selectedFilterType = "ADVANCE" },
+                        label = { Text("${if (language == "bn") "কাস্টমার পাবে" else "Advance"} ($advanceDebtorsCount)", style = MaterialTheme.typography.labelSmall) },
+                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Color(0xFFDCFCE7), selectedLabelColor = Color(0xFF16A34A))
+                    )
+                }
+                FilterChip(
+                    selected = selectedFilterType == "PAID",
+                    onClick = { selectedFilterType = "PAID" },
+                    label = { Text(if (language == "bn") "পরিশোধিত" else "Settled", style = MaterialTheme.typography.labelSmall) }
                 )
             }
 
@@ -503,9 +557,11 @@ fun CustomerKhataCard(
                                 .border(1.5.dp, DueOrange.copy(alpha = 0.5f), CircleShape)
                         )
                     } else {
+                        val isDue = customer.totalDue > 0.01
+                        val isAdvance = customer.totalDue < -0.01
                         Surface(
                             shape = CircleShape,
-                            color = if (customer.totalDue > 0) Color(0xFFFFEDD5) else Color(0xFFDCFCE7),
+                            color = if (isDue) Color(0xFFFFEDD5) else if (isAdvance) Color(0xFFDCFCE7) else Color(0xFFF1F5F9),
                             modifier = Modifier.size(48.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
@@ -513,7 +569,7 @@ fun CustomerKhataCard(
                                     text = customer.name.take(1).uppercase(),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = if (customer.totalDue > 0) DueOrange else ProfitGreen
+                                    color = if (isDue) DueOrange else if (isAdvance) Color(0xFF16A34A) else ProfitGreen
                                 )
                             }
                         }
@@ -546,16 +602,21 @@ fun CustomerKhataCard(
                 }
 
                 Column(horizontalAlignment = Alignment.End) {
+                    val isDue = customer.totalDue > 0.01
+                    val isAdvance = customer.totalDue < -0.01
                     Text(
-                        text = "$currency${customer.totalDue.toIntOrNull() ?: customer.totalDue}",
+                        text = if (isAdvance) "$currency${(-customer.totalDue).toIntOrNull() ?: (-customer.totalDue)}"
+                               else "$currency${customer.totalDue.toIntOrNull() ?: customer.totalDue}",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.ExtraBold,
-                        color = if (customer.totalDue > 0) DueOrange else ProfitGreen
+                        color = if (isDue) DueOrange else if (isAdvance) Color(0xFF16A34A) else ProfitGreen
                     )
                     Text(
-                        text = if (customer.totalDue > 0) (if (language == "bn") "বাকি পাওনা" else "Due") else (if (language == "bn") "পরিশোধিত" else "Paid"),
+                        text = if (isDue) (if (language == "bn") "বাকি পাওনা" else "Due")
+                               else if (isAdvance) (if (language == "bn") "কাস্টমার পাবে" else "Advance")
+                               else (if (language == "bn") "পরিশোধিত" else "Paid"),
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (customer.totalDue > 0) DueOrange else ProfitGreen,
+                        color = if (isDue) DueOrange else if (isAdvance) Color(0xFF16A34A) else ProfitGreen,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -1016,8 +1077,15 @@ fun CollectDueDialog(
                     fontWeight = FontWeight.Bold,
                     color = ProfitGreen
                 )
+                val isDue = customer.totalDue > 0.01
+                val isAdvance = customer.totalDue < -0.01
+                val balSubtitle = when {
+                    isDue -> "${if (language == "bn") "বর্তমান বাকি:" else "Due:"} $currency${customer.totalDue.toIntOrNull() ?: customer.totalDue}"
+                    isAdvance -> "${if (language == "bn") "বর্তমান জমা (কাস্টমার পাবে):" else "Advance Balance:"} $currency${(-customer.totalDue).toIntOrNull() ?: (-customer.totalDue)}"
+                    else -> if (language == "bn") "হিসাব পরিশোধিত (০)" else "Settled (0)"
+                }
                 Text(
-                    text = "${customer.name} (বর্তমান বাকি: $currency${customer.totalDue.toIntOrNull() ?: customer.totalDue})",
+                    text = "${customer.name} ($balSubtitle)",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1093,8 +1161,15 @@ fun GiveDueDialog(
                     fontWeight = FontWeight.Bold,
                     color = DueOrange
                 )
+                val isDue = customer.totalDue > 0.01
+                val isAdvance = customer.totalDue < -0.01
+                val balSubtitle = when {
+                    isDue -> "${if (language == "bn") "বর্তমান বাকি:" else "Due:"} $currency${customer.totalDue.toIntOrNull() ?: customer.totalDue}"
+                    isAdvance -> "${if (language == "bn") "বর্তমান জমা (কাস্টমার পাবে):" else "Advance Balance:"} $currency${(-customer.totalDue).toIntOrNull() ?: (-customer.totalDue)}"
+                    else -> if (language == "bn") "হিসাব পরিশোধিত (০)" else "Settled (0)"
+                }
                 Text(
-                    text = "${customer.name} (বর্তমান বাকি: $currency${customer.totalDue.toIntOrNull() ?: customer.totalDue})",
+                    text = "${customer.name} ($balSubtitle)",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1383,9 +1458,23 @@ fun CustomerFullHistoryDialog(
                         horizontalArrangement = Arrangement.SpaceAround,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        val isDue = customer.totalDue > 0.01
+                        val isAdvance = customer.totalDue < -0.01
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(if (language == "bn") "মোট বকেয়া" else "Total Due", style = MaterialTheme.typography.labelSmall, color = Color(0xFF9A3412))
-                            Text("$currency${customer.totalDue.toIntOrNull() ?: customer.totalDue}", fontWeight = FontWeight.ExtraBold, color = DueOrange, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                text = if (isAdvance) (if (language == "bn") "কাস্টমার পাবে" else "Advance")
+                                else if (isDue) (if (language == "bn") "মোট বকেয়া" else "Total Due")
+                                else (if (language == "bn") "পরিশোধিত" else "Settled"),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isAdvance) Color(0xFF16A34A) else if (isDue) Color(0xFF9A3412) else Color(0xFF64748B)
+                            )
+                            Text(
+                                text = if (isAdvance) "$currency${(-customer.totalDue).toIntOrNull() ?: (-customer.totalDue)}"
+                                else "$currency${customer.totalDue.toIntOrNull() ?: customer.totalDue}",
+                                fontWeight = FontWeight.ExtraBold,
+                                color = if (isAdvance) Color(0xFF16A34A) else if (isDue) DueOrange else ProfitGreen,
+                                style = MaterialTheme.typography.titleMedium
+                            )
                         }
                         VerticalDivider(modifier = Modifier.height(28.dp), color = Color(0xFFFED7AA))
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1410,7 +1499,11 @@ fun CustomerFullHistoryDialog(
                     // Send Message Option
                     FilledTonalButton(
                         onClick = {
-                            val msg = "শ্রদ্ধেয় ${customer.name}, $shopName এ আপনার মোট বাকি আছে $currency${customer.totalDue}। অনুগ্রহ করে দ্রুত পরিশোধ করার অনুরোধ রইল। ধন্যবাদ।\n-------------------------\n${com.example.util.CustomerSmsHelper.SPONSOR_FOOTER}"
+                            val msg = if (customer.totalDue < -0.01) {
+                                "শ্রদ্ধেয় ${customer.name}, $shopName এ আপনার জমা/অগ্রিম ব্যালেন্স রয়েছে $currency${-customer.totalDue} টাকা (আপনি পাবেন)। ধন্যবাদ।\n-------------------------\n${com.example.util.CustomerSmsHelper.SPONSOR_FOOTER}"
+                            } else {
+                                "শ্রদ্ধেয় ${customer.name}, $shopName এ আপনার মোট বাকি আছে $currency${customer.totalDue}। অনুগ্রহ করে দ্রুত পরিশোধ করার অনুরোধ রইল। ধন্যবাদ।\n-------------------------\n${com.example.util.CustomerSmsHelper.SPONSOR_FOOTER}"
+                            }
                             val sendIntent = Intent().apply {
                                 action = Intent.ACTION_SEND
                                 putExtra(Intent.EXTRA_TEXT, msg)

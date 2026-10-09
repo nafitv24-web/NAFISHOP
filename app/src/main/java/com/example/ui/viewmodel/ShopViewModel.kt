@@ -621,7 +621,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         val todayExps = round2(exps.filter { it.timestamp >= startOfToday }.sumOf { it.amount })
         val todayNetCashFlow = round2((todayCashSales + todayCollectedDue) - todayExps)
 
-        val totalDue = round2(custs.sumOf { it.totalDue })
+        val totalDue = round2(custs.filter { it.totalDue > 0 }.sumOf { it.totalDue })
         val totalStockVal = round2(prods.sumOf { it.stockQuantity * it.sellPrice })
         val lowCount = prods.count { it.stockQuantity <= it.minStockAlert }
 
@@ -1698,7 +1698,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             } else if (newType == "DUE_COLLECTED") {
                 adjustedDue -= cleanNewAmount
             }
-            adjustedDue = round2(adjustedDue.coerceAtLeast(0.0))
+            adjustedDue = round2(adjustedDue)
 
             // 3. Update customer
             val updatedCustomer = customer.copy(

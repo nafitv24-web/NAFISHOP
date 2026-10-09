@@ -819,10 +819,17 @@ fun PosSaleScreen(
                                         }
 
                                         Column(horizontalAlignment = Alignment.End) {
-                                            if (c.totalDue > 0) {
+                                            if (c.totalDue > 0.01) {
                                                 Text(
                                                     "বাকি: $currency${c.totalDue.toIntOrNull() ?: c.totalDue}",
                                                     color = DueOrange,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    style = MaterialTheme.typography.bodyMedium
+                                                )
+                                            } else if (c.totalDue < -0.01) {
+                                                Text(
+                                                    "জমা: $currency${(-c.totalDue).toIntOrNull() ?: (-c.totalDue)}",
+                                                    color = Color(0xFF16A34A),
                                                     fontWeight = FontWeight.ExtraBold,
                                                     style = MaterialTheme.typography.bodyMedium
                                                 )
