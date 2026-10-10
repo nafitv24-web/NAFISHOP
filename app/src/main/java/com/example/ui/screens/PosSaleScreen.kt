@@ -39,6 +39,7 @@ import com.example.ui.components.ProductImageViewerDialog
 import com.example.ui.components.toIntOrNull
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.ShopViewModel
+import com.example.util.CalculationHelper.round2
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -120,7 +121,9 @@ fun PosSaleScreen(
 
     val grossSubtotal = remember(cartItems) { cartItems.sumOf { it.total } }
     val netPayable = remember(grossSubtotal, discount) { (grossSubtotal - discount).coerceAtLeast(0.0) }
-    val calculatedDue = remember(netPayable, paidAmount) { (netPayable - paidAmount).coerceAtLeast(0.0) }
+    val dueDiff = remember(netPayable, paidAmount) { round2(netPayable - paidAmount) }
+    val calculatedDue = remember(dueDiff) { if (dueDiff > 0) dueDiff else 0.0 }
+    val extraAdvance = remember(dueDiff) { if (dueDiff < 0) -dueDiff else 0.0 }
 
     Row(
         modifier = Modifier
@@ -482,6 +485,51 @@ fun PosSaleScreen(
                                         modifier = Modifier.weight(1f)
                                     )
                                 }
+
+                                val cleanCustName = customerName.trim()
+                                val cleanCustPhone = customerPhone.trim()
+                                val matchedCust = remember(cleanCustName, cleanCustPhone, customers) {
+                                    if (cleanCustName.isBlank() && cleanCustPhone.isBlank()) null
+                                    else customers.find {
+                                        (cleanCustPhone.isNotBlank() && it.phone.trim() == cleanCustPhone) ||
+                                        (cleanCustName.isNotBlank() && cleanCustName != "ক্যাশ কাস্টমার" && it.name.trim().equals(cleanCustName, ignoreCase = true))
+                                    }
+                                }
+
+                                if (matchedCust != null) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    val isCustDue = matchedCust.totalDue > 0.01
+                                    val isCustAdvance = matchedCust.totalDue < -0.01
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = if (isCustDue) Color(0xFFFEF2F2) else if (isCustAdvance) Color(0xFFDCFCE7) else Color(0xFFF1F5F9),
+                                        border = BorderStroke(1.dp, if (isCustDue) Color(0xFFFECACA) else if (isCustAdvance) Color(0xFFBBF7D0) else Color(0xFFE2E8F0)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = if (isCustDue) (if (language == "bn") "পূর্বের বাকি পাওনা:" else "Previous Due:")
+                                                       else if (isCustAdvance) (if (language == "bn") "পূর্বের অগ্রিম জমা (কাস্টমার পাবে):" else "Customer Advance:")
+                                                       else (if (language == "bn") "পূর্বের হিসাব পরিশোধিত" else "Previous Settled"),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = if (isCustDue) LossRed else if (isCustAdvance) ProfitGreen else Color(0xFF64748B),
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                            Text(
+                                                text = if (isCustDue) "$currency${matchedCust.totalDue.toIntOrNull() ?: matchedCust.totalDue}"
+                                                       else if (isCustAdvance) "+$currency${(-matchedCust.totalDue).toIntOrNull() ?: (-matchedCust.totalDue)}"
+                                                       else "$currency 0",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = if (isCustDue) LossRed else if (isCustAdvance) ProfitGreen else Color(0xFF64748B),
+                                                fontWeight = FontWeight.ExtraBold
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -631,6 +679,26 @@ fun PosSaleScreen(
                                         Text(
                                             text = "$currency${calculatedDue.toIntOrNull() ?: calculatedDue}",
                                             color = LossRed,
+                                            fontWeight = FontWeight.ExtraBold
+                                        )
+                                    }
+                                } else if (extraAdvance > 0) {
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(Color(0xFFDCFCE7), RoundedCornerShape(8.dp))
+                                            .padding(8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = if (language == "bn") "অগ্রিম জমা (কাস্টমার পাবে):" else "Advance Balance:",
+                                            color = ProfitGreen,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = "+$currency${extraAdvance.toIntOrNull() ?: extraAdvance}",
+                                            color = ProfitGreen,
                                             fontWeight = FontWeight.ExtraBold
                                         )
                                     }

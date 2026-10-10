@@ -42,6 +42,7 @@ import com.example.data.model.Customer
 import com.example.data.model.DueLog
 import com.example.data.model.Product
 import com.example.data.model.TransactionRecord
+import com.example.ui.components.TransferMoneyDialog
 import com.example.ui.components.toIntOrNull
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.ShopViewModel
@@ -95,6 +96,7 @@ fun CustomerLedgerScreen(
     // Dialogs
     var showAddTransactionDialog by remember { mutableStateOf(false) }
     var addTransactionType by remember { mutableStateOf("GIVEN") } // "GIVEN" (প্রদত্ত) or "COLLECTED" (জমা)
+    var showTransferMoneyDialog by remember { mutableStateOf(false) }
 
     var editingLog by remember { mutableStateOf<DueLog?>(null) }
     var showEditLogDialog by remember { mutableStateOf(false) }
@@ -139,6 +141,7 @@ fun CustomerLedgerScreen(
         customerDueLogs.forEach { log ->
             val isGiven = log.type == "DUE_GIVEN"
             val isOpening = log.note.contains("প্রারম্ভিক") || log.note.contains("পূর্বের")
+            val isLoan = log.note.contains("কর্জ") || log.note.contains("ধার") || log.note.contains("হস্তান্তর")
             rawList.add(
                 LedgerEntry(
                     id = log.id * 10 + 1,
@@ -146,7 +149,9 @@ fun CustomerLedgerScreen(
                     isDueLog = true,
                     type = if (isGiven) "GIVEN" else "COLLECTED",
                     title = if (isGiven) {
-                        if (isOpening) (if (language == "bn") "প্রারম্ভিক বাকি" else "Opening Balance") else (if (language == "bn") "বাকি প্রদান" else "Credit Given")
+                        if (isLoan) (if (language == "bn") "🤝 নগদ কর্জ / ধার" else "🤝 Cash Loan Given")
+                        else if (isOpening) (if (language == "bn") "প্রারম্ভিক বাকি" else "Opening Balance")
+                        else (if (language == "bn") "বাকি প্রদান" else "Credit Given")
                     } else (if (language == "bn") "জমা গ্রহণ" else "Payment Received"),
                     note = log.note.ifBlank { if (isGiven) "বাকি হিসাব" else "নগদ জমা" },
                     amount = log.amount,
@@ -310,19 +315,59 @@ fun CustomerLedgerScreen(
                         Spacer(modifier = Modifier.width(10.dp))
 
                         Column {
-                            Text(
-                                text = currentCustomer.name,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1
-                            )
-                            if (currentCustomer.phone.isNotBlank()) {
+                            val isBorrower = currentCustomer.address.contains("কর্জ") || currentCustomer.address.contains("ধার") ||
+                                    customerDueLogs.any { it.note.contains("কর্জ") || it.note.contains("ধার") || it.note.contains("হস্তান্তর") }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = currentCustomer.phone,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.outline
+                                    text = currentCustomer.name,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1
                                 )
+                                if (isBorrower) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = Color(0xFFFEF3C7)
+                                    ) {
+                                        Text(
+                                            text = if (language == "bn") "🤝 কর্জ গ্রহীতা" else "🤝 Borrower",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color(0xFFB45309),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 10.sp,
+                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                        )
+                                    }
+                                }
+                            }
+                            val isCustDue = currentCustomer.totalDue > 0.01
+                            val isCustAdvance = currentCustomer.totalDue < -0.01
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (currentCustomer.phone.isNotBlank()) {
+                                    Text(
+                                        text = currentCustomer.phone,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = if (isCustDue) Color(0xFFFFEDD5) else if (isCustAdvance) Color(0xFFDCFCE7) else Color(0xFFF1F5F9)
+                                ) {
+                                    Text(
+                                        text = if (isCustDue) "-$currency${currentCustomer.totalDue.toIntOrNull() ?: currentCustomer.totalDue} বাকি"
+                                        else if (isCustAdvance) "+$currency${(-currentCustomer.totalDue).toIntOrNull() ?: (-currentCustomer.totalDue)} কাস্টমার পাবে"
+                                        else if (language == "bn") "পরিশোধিত" else "Settled",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isCustDue) DueOrange else if (isCustAdvance) Color(0xFF16A34A) else Color(0xFF64748B),
+                                        fontSize = 10.sp,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -389,6 +434,17 @@ fun CustomerLedgerScreen(
                         }
                     ) {
                         Icon(Icons.Default.PictureAsPdf, contentDescription = "PDF Statement", tint = DueOrange)
+                    }
+
+                    // Money Transfer / Cash Loan Giving Button
+                    IconButton(
+                        onClick = { showTransferMoneyDialog = true }
+                    ) {
+                        Icon(
+                            Icons.Default.SwapHoriz,
+                            contentDescription = if (language == "bn") "টাকা হস্তান্তর / কর্জ দিন" else "Transfer / Loan",
+                            tint = Color(0xFF38BDF8)
+                        )
                     }
 
                     // Call Customer
@@ -539,16 +595,16 @@ fun CustomerLedgerScreen(
                                 color = Color(0xFF94A3B8)
                             )
                             Spacer(modifier = Modifier.height(2.dp))
-                            val diff = round2(totalGiven - totalCollected)
-                            val isDue = diff > 0.01
-                            val isAdvance = diff < -0.01
+                            val displayBal = if (selectedFilterPeriod == "সব") round2(currentCustomer.totalDue) else round2(totalGiven - totalCollected)
+                            val isDue = displayBal > 0.01
+                            val isAdvance = displayBal < -0.01
                             Text(
-                                text = if (isDue) "-$currency${diff.toIntOrNull() ?: diff} বাকি"
-                                else if (isAdvance) "+$currency${(-diff).toIntOrNull() ?: (-diff)} কাস্টমার পাবে"
+                                text = if (isDue) "-$currency${displayBal.toIntOrNull() ?: displayBal} বাকি"
+                                else if (isAdvance) "+$currency${(-displayBal).toIntOrNull() ?: (-displayBal)} কাস্টমার পাবে"
                                 else (if (language == "bn") "পরিশোধিত" else "Settled"),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = if (isDue) Color(0xFFFB923C) else Color(0xFF4ADE80)
+                                color = if (isDue) Color(0xFFFB923C) else if (isAdvance) Color(0xFF4ADE80) else Color(0xFF94A3B8)
                             )
                         }
                     }
@@ -818,6 +874,15 @@ fun CustomerLedgerScreen(
             }
         )
     }
+
+    // Transfer Money Dialog (preselected for this customer)
+    if (showTransferMoneyDialog) {
+        TransferMoneyDialog(
+            viewModel = viewModel,
+            preselectedCustomer = currentCustomer,
+            onDismiss = { showTransferMoneyDialog = false }
+        )
+    }
 }
 
 /**
@@ -904,10 +969,10 @@ fun LedgerRowItem(
                 ) {
                     val bal = entry.runningBalance
                     Text(
-                        text = "${if (bal < 0) "-" else ""}$currency${Math.abs(bal).toIntOrNull() ?: Math.abs(bal)}",
+                        text = "${if (bal < 0) "-" else if (bal > 0) "+" else ""}$currency${Math.abs(bal).toIntOrNull() ?: Math.abs(bal)}",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold,
-                        color = if (bal < 0) DueOrange else ProfitGreen
+                        color = if (bal < 0) DueOrange else if (bal > 0) Color(0xFF16A34A) else ProfitGreen
                     )
                 }
             }

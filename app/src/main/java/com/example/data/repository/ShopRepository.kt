@@ -278,10 +278,37 @@ class ShopRepository(private val database: AppDatabase) {
             val netFromLogs = round2(sumGiven - sumCollected)
             val cleanCustDue = round2(cust.totalDue)
 
-            // If customer has history, update customer totalDue to match net of history exactly
+            // If customer has history, synchronize any missing net difference into due logs rather than overwriting
+            val diff = round2(cleanCustDue - netFromLogs)
             if (logs.isNotEmpty()) {
-                if (Math.abs(netFromLogs - cleanCustDue) > 0.001) {
-                    customerDao.setCustomerDue(cust.id, netFromLogs, System.currentTimeMillis())
+                if (Math.abs(diff) > 0.001) {
+                    if (diff > 0.01) {
+                        // Unlogged due given
+                        dueLogDao.insertDueLog(
+                            DueLog(
+                                customerId = cust.id,
+                                customerName = cust.name,
+                                customerPhone = cust.phone,
+                                type = "DUE_GIVEN",
+                                amount = diff,
+                                note = "প্রারম্ভিক বাকি / পূর্বের সমন্বয়",
+                                timestamp = cust.lastTransactionDate.takeIf { it > 0 } ?: (System.currentTimeMillis() - 60000L)
+                            )
+                        )
+                    } else if (diff < -0.01) {
+                        // Unlogged advance deposit / customer will receive
+                        dueLogDao.insertDueLog(
+                            DueLog(
+                                customerId = cust.id,
+                                customerName = cust.name,
+                                customerPhone = cust.phone,
+                                type = "DUE_COLLECTED",
+                                amount = -diff,
+                                note = "অগ্রিম জমা / পূর্বের সমন্বয়",
+                                timestamp = cust.lastTransactionDate.takeIf { it > 0 } ?: (System.currentTimeMillis() - 60000L)
+                            )
+                        )
+                    }
                 }
             } else {
                 // If no logs exist yet, record opening balance if customer has an initial balance
@@ -338,7 +365,9 @@ class ShopRepository(private val database: AppDatabase) {
         val cleanDiscount = round2(discount)
         val netTotal = round2((grossTotal - cleanDiscount).coerceAtLeast(0.0))
         val cleanPaid = round2(paidAmount)
-        val calculatedDue = round2((netTotal - cleanPaid).coerceAtLeast(0.0))
+        val dueDiff = round2(netTotal - cleanPaid)
+        val calculatedDue = if (dueDiff > 0) dueDiff else 0.0
+        val extraAdvance = if (dueDiff < 0) round2(-dueDiff) else 0.0
 
         // 1. Process each cart item & decrease stock
         for (item in cartItems) {
@@ -376,16 +405,16 @@ class ShopRepository(private val database: AppDatabase) {
             transactionDao.insertTransaction(tx)
         }
 
-        // 2. If customer has due or is identified, update/create customer ledger (No Duplicates!)
+        // 2. If customer has due/advance or is identified, update/create customer ledger (No Duplicates!)
         val cleanName = customerName.trim()
         val cleanPhone = customerPhone.trim()
-        if (cleanName.isNotBlank() && cleanName != "ক্যাশ কাস্টমার" || cleanPhone.isNotBlank() || calculatedDue > 0) {
+        if (cleanName.isNotBlank() && cleanName != "ক্যাশ কাস্টমার" || cleanPhone.isNotBlank() || Math.abs(dueDiff) > 0.001) {
             var existingCustomer = customerDao.findExistingCustomer(cleanName, cleanPhone)
 
             if (existingCustomer != null) {
                 customerDao.updateCustomerBalance(
                     customerId = existingCustomer.id,
-                    dueDiff = calculatedDue,
+                    dueDiff = dueDiff,
                     purchaseAdd = netTotal,
                     time = now
                 )
@@ -395,7 +424,7 @@ class ShopRepository(private val database: AppDatabase) {
                         name = if (cleanName.isNotBlank()) cleanName else "কাস্টমার",
                         phone = cleanPhone,
                         address = "",
-                        totalDue = calculatedDue,
+                        totalDue = dueDiff,
                         totalPurchased = netTotal,
                         lastTransactionDate = now
                     )
@@ -404,11 +433,11 @@ class ShopRepository(private val database: AppDatabase) {
                     id = newCustomerId,
                     name = if (cleanName.isNotBlank()) cleanName else "কাস্টমার",
                     phone = cleanPhone,
-                    totalDue = calculatedDue
+                    totalDue = dueDiff
                 )
             }
 
-            if (calculatedDue > 0) {
+            if (dueDiff > 0) {
                 val itemsSummary = cartItems.joinToString(", ") { "${it.product.name} (${it.quantity.formatQty()} ${it.product.unit})" }
                 val dueNote = if (note.isNotBlank()) "$itemsSummary • $note • মেমো #$invoiceNumber" else "$itemsSummary • মেমো #$invoiceNumber"
                 dueLogDao.insertDueLog(
@@ -417,8 +446,22 @@ class ShopRepository(private val database: AppDatabase) {
                         customerName = existingCustomer.name,
                         customerPhone = existingCustomer.phone,
                         type = "DUE_GIVEN",
-                        amount = calculatedDue,
+                        amount = dueDiff,
                         note = dueNote,
+                        timestamp = now
+                    )
+                )
+            } else if (extraAdvance > 0) {
+                val itemsSummary = cartItems.joinToString(", ") { "${it.product.name} (${it.quantity.formatQty()} ${it.product.unit})" }
+                val advanceNote = if (note.isNotBlank()) "অতিরিক্ত/অগ্রিম জমা • $itemsSummary • $note • মেমো #$invoiceNumber" else "অতিরিক্ত/অগ্রিম জমা • $itemsSummary • মেমো #$invoiceNumber"
+                dueLogDao.insertDueLog(
+                    DueLog(
+                        customerId = existingCustomer.id,
+                        customerName = existingCustomer.name,
+                        customerPhone = existingCustomer.phone,
+                        type = "DUE_COLLECTED",
+                        amount = extraAdvance,
+                        note = advanceNote,
                         timestamp = now
                     )
                 )
@@ -462,6 +505,18 @@ class ShopRepository(private val database: AppDatabase) {
                         timestamp = now
                     )
                 )
+            } else if (cleanDue < 0) {
+                dueLogDao.insertDueLog(
+                    DueLog(
+                        customerId = existing.id,
+                        customerName = existing.name,
+                        customerPhone = existing.phone,
+                        type = "DUE_COLLECTED",
+                        amount = -cleanDue,
+                        note = "অগ্রিম জমা যুক্ত করা হয়েছে",
+                        timestamp = now
+                    )
+                )
             }
             return@withContext
         }
@@ -489,6 +544,18 @@ class ShopRepository(private val database: AppDatabase) {
                     timestamp = now
                 )
             )
+        } else if (cleanDue < 0) {
+            dueLogDao.insertDueLog(
+                DueLog(
+                    customerId = customerId,
+                    customerName = cleanName,
+                    customerPhone = cleanPhone,
+                    type = "DUE_COLLECTED",
+                    amount = -cleanDue,
+                    note = "প্রারম্ভিক অগ্রিম জমা",
+                    timestamp = now
+                )
+            )
         }
     }
 
@@ -506,6 +573,12 @@ class ShopRepository(private val database: AppDatabase) {
         val updatedDue = round2(customer.totalDue - cleanPaid)
         customerDao.setCustomerDue(customer.id, updatedDue, now)
 
+        val logNote = if (updatedDue < -0.01 && customer.totalDue >= 0) {
+            if (note.isNotBlank()) "$note (অতিরিক্ত অগ্রিম জমা: ৳${round2(-updatedDue)})" else "বাকি আদায় ও অতিরিক্ত অগ্রিম জমা"
+        } else {
+            note.ifBlank { "বাকি আদায় / নগদ জমা" }
+        }
+
         dueLogDao.insertDueLog(
             DueLog(
                 customerId = customer.id,
@@ -513,7 +586,7 @@ class ShopRepository(private val database: AppDatabase) {
                 customerPhone = customer.phone,
                 type = "DUE_COLLECTED",
                 amount = cleanPaid,
-                note = note.ifBlank { "বাকি আদায়" },
+                note = logNote,
                 timestamp = now
             )
         )

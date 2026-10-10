@@ -39,6 +39,18 @@ object CalculationHelper {
         return round2((net - paid).coerceAtLeast(0.0))
     }
 
+    fun calculateAdvance(netTotal: Double, paidAmount: Double): Double {
+        val net = round2(netTotal)
+        val paid = round2(paidAmount)
+        return round2((paid - net).coerceAtLeast(0.0))
+    }
+
+    fun calculateNetBalance(netTotal: Double, paidAmount: Double): Double {
+        val net = round2(netTotal)
+        val paid = round2(paidAmount)
+        return round2(net - paid)
+    }
+
     fun calculateProfit(sellingTotal: Double, buyPrice: Double, quantity: Double): Double {
         val costTotal = round2(buyPrice * quantity)
         return round2(sellingTotal - costTotal)

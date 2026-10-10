@@ -1406,7 +1406,8 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         val discount = round2(cartDiscount.value)
         val net = round2((gross - discount).coerceAtLeast(0.0))
         val paid = round2(cartPaidAmount.value)
-        val due = round2((net - paid).coerceAtLeast(0.0))
+        val dueDiff = round2(net - paid)
+        val due = if (dueDiff > 0) dueDiff else 0.0
         val customerName = cartCustomerName.value.ifBlank { "ক্যাশ কাস্টমার" }
         val customerPhone = cartCustomerPhone.value
         val paymentMethod = cartPaymentMethod.value
@@ -1419,7 +1420,7 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             (cleanName.isNotBlank() && cleanName != "ক্যাশ কাস্টমার" && it.name.equals(cleanName, ignoreCase = true))
         }
         val prevDue = round2(existingCust?.totalDue ?: 0.0)
-        val updatedTotalDue = round2(prevDue + due)
+        val updatedTotalDue = round2(prevDue + dueDiff)
 
         viewModelScope.launch {
             val invoiceNo = repository.processSale(
@@ -1826,6 +1827,30 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } else {
                 syncMessage.value = if (_language.value == "bn") "JSON ফাইল তৈরিতে সমস্যা হয়েছে" else "Failed to export JSON file"
+            }
+        }
+    }
+
+    fun sendBackupToUserGmail(context: Context) {
+        exportAndShareJsonBackup(context, viaEmail = true)
+    }
+
+    fun saveBackupToGoogleDrive(context: Context, onResult: ((Boolean, String) -> Unit)? = null) {
+        viewModelScope.launch {
+            try {
+                isSyncing.value = true
+                val jsonStr = getExportJsonString()
+                val jsonFile = com.example.util.DatabaseBackupHelper.exportJsonBackupFile(context, jsonStr)
+                isSyncing.value = false
+                if (jsonFile != null) {
+                    com.example.util.DatabaseBackupHelper.saveBackupDirectlyToGoogleDrive(context, jsonFile)
+                    onResult?.invoke(true, jsonFile.name)
+                } else {
+                    onResult?.invoke(false, "ফাইল তৈরি ব্যর্থ হয়েছে")
+                }
+            } catch (e: Exception) {
+                isSyncing.value = false
+                onResult?.invoke(false, e.localizedMessage ?: "ত্রুটি ঘটেছে")
             }
         }
     }

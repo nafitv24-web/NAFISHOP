@@ -10,6 +10,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -36,6 +38,7 @@ import coil.compose.AsyncImage
 import com.example.data.model.Customer
 import com.example.data.model.DueLog
 import com.example.data.model.TransactionRecord
+import com.example.ui.components.TransferMoneyDialog
 import com.example.ui.components.toIntOrNull
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.ShopViewModel
@@ -72,6 +75,8 @@ fun DueKhataScreen(
     var showEditCustomerDialog by remember { mutableStateOf(false) }
 
     var selectedCustomerForLedger by remember { mutableStateOf<Customer?>(null) }
+    var showTransferMoneyDialog by remember { mutableStateOf(false) }
+    var customerForTransfer by remember { mutableStateOf<Customer?>(null) }
 
     var editingDueLog by remember { mutableStateOf<Pair<DueLog, Customer>?>(null) }
 
@@ -82,15 +87,19 @@ fun DueKhataScreen(
     var receiptNote by remember { mutableStateOf("") }
     var showReceiptSmsDialog by remember { mutableStateOf(false) }
 
-    var selectedFilterType by remember { mutableStateOf("ALL") } // "ALL", "DUE", "ADVANCE", "PAID"
-    val filteredCustomers = remember(customers, searchQuery, selectedFilterType) {
+    var selectedFilterType by remember { mutableStateOf("ALL") } // "ALL", "DUE", "LOAN", "ADVANCE", "PAID"
+    val filteredCustomers = remember(customers, dueLogs, searchQuery, selectedFilterType) {
         customers.filter { c ->
             val matchesSearch = searchQuery.isBlank() ||
                     c.name.contains(searchQuery, ignoreCase = true) ||
                     c.phone.contains(searchQuery, ignoreCase = true) ||
                     c.address.contains(searchQuery, ignoreCase = true)
+            val isLoanDebtor = c.address.contains("কর্জ") || c.address.contains("ধার") ||
+                    dueLogs.any { (it.customerId == c.id || (c.phone.isNotBlank() && it.customerPhone == c.phone)) &&
+                            (it.note.contains("কর্জ") || it.note.contains("ধার") || it.note.contains("হস্তান্তর")) }
             val matchesFilter = when (selectedFilterType) {
                 "DUE" -> c.totalDue > 0.01
+                "LOAN" -> isLoanDebtor
                 "ADVANCE" -> c.totalDue < -0.01
                 "PAID" -> Math.abs(c.totalDue) <= 0.01
                 else -> true
@@ -103,6 +112,13 @@ fun DueKhataScreen(
     val debtorsCount = remember(customers) { customers.count { it.totalDue > 0 } }
     val totalAdvanceSum = remember(customers) { customers.filter { it.totalDue < 0 }.sumOf { -it.totalDue } }
     val advanceDebtorsCount = remember(customers) { customers.count { it.totalDue < 0 } }
+    val loanBorrowersCount = remember(customers, dueLogs) {
+        customers.count { c ->
+            c.address.contains("কর্জ") || c.address.contains("ধার") ||
+                    dueLogs.any { (it.customerId == c.id || (c.phone.isNotBlank() && it.customerPhone == c.phone)) &&
+                            (it.note.contains("কর্জ") || it.note.contains("ধার") || it.note.contains("হস্তান্তর")) }
+        }
+    }
 
     if (selectedCustomerForLedger != null) {
         CustomerLedgerScreen(
@@ -199,21 +215,36 @@ fun DueKhataScreen(
                     }
                 }
 
-                // PDF Download button for All Dues
+                // Actions Row: PDF Download & Transfer Money / Loan
                 HorizontalDivider(color = Color(0xFFFED7AA), thickness = 1.dp)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = if (language == "bn") "সম্পূর্ণ বাকি খাতার স্টেটমেন্ট" else "Full Due Statement",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF9A3412),
-                        fontWeight = FontWeight.Medium
-                    )
+                    FilledTonalButton(
+                        onClick = {
+                            customerForTransfer = null
+                            showTransferMoneyDialog = true
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = Color(0xFF2563EB),
+                            contentColor = Color.White
+                        ),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Icon(Icons.Default.SwapHoriz, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (language == "bn") "টাকা হস্তান্তর / কর্জ" else "Transfer / Loan",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
                     FilledTonalButton(
                         onClick = {
                             val pdfFile = PdfGenerator.generateAllDuesPdf(
@@ -242,12 +273,12 @@ fun DueKhataScreen(
                             containerColor = DueOrange,
                             contentColor = Color.White
                         ),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                     ) {
                         Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = if (language == "bn") "বাকি PDF ডাউনলোড" else "Download Due PDF",
+                            text = if (language == "bn") "বাকি PDF" else "Dues PDF",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -279,11 +310,12 @@ fun DueKhataScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Filter Chips: সব | বাকি পাওনা | কাস্টমার পাবে (অগ্রিম) | পরিশোধিত
+            // Filter Chips: সব | বাকি পাওনা | কর্জ গ্রহীতা | কাস্টমার পাবে (অগ্রিম) | পরিশোধিত
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = 16.dp)
+                    .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 FilterChip(
@@ -297,6 +329,14 @@ fun DueKhataScreen(
                     label = { Text("${if (language == "bn") "বাকি" else "Due"} ($debtorsCount)", style = MaterialTheme.typography.labelSmall) },
                     colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Color(0xFFFFEDD5), selectedLabelColor = DueOrange)
                 )
+                if (loanBorrowersCount > 0) {
+                    FilterChip(
+                        selected = selectedFilterType == "LOAN",
+                        onClick = { selectedFilterType = "LOAN" },
+                        label = { Text("🤝 ${if (language == "bn") "কর্জ গ্রহীতা" else "Loan/Borrowers"} ($loanBorrowersCount)", style = MaterialTheme.typography.labelSmall) },
+                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Color(0xFFFEF3C7), selectedLabelColor = Color(0xFFB45309))
+                    )
+                }
                 if (advanceDebtorsCount > 0) {
                     FilterChip(
                         selected = selectedFilterType == "ADVANCE",
@@ -510,6 +550,18 @@ fun DueKhataScreen(
             }
         )
     }
+
+    // Transfer Money / Loan Dialog
+    if (showTransferMoneyDialog) {
+        TransferMoneyDialog(
+            viewModel = viewModel,
+            preselectedCustomer = customerForTransfer,
+            onDismiss = {
+                showTransferMoneyDialog = false
+                customerForTransfer = null
+            }
+        )
+    }
 }
 
 @Composable
@@ -605,15 +657,16 @@ fun CustomerKhataCard(
                     val isDue = customer.totalDue > 0.01
                     val isAdvance = customer.totalDue < -0.01
                     Text(
-                        text = if (isAdvance) "$currency${(-customer.totalDue).toIntOrNull() ?: (-customer.totalDue)}"
-                               else "$currency${customer.totalDue.toIntOrNull() ?: customer.totalDue}",
+                        text = if (isAdvance) "+$currency${(-customer.totalDue).toIntOrNull() ?: (-customer.totalDue)}"
+                               else if (isDue) "-$currency${customer.totalDue.toIntOrNull() ?: customer.totalDue}"
+                               else "$currency 0",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.ExtraBold,
                         color = if (isDue) DueOrange else if (isAdvance) Color(0xFF16A34A) else ProfitGreen
                     )
                     Text(
                         text = if (isDue) (if (language == "bn") "বাকি পাওনা" else "Due")
-                               else if (isAdvance) (if (language == "bn") "কাস্টমার পাবে" else "Advance")
+                               else if (isAdvance) (if (language == "bn") "কাস্টমার পাবে (অগ্রিম)" else "Customer Advance")
                                else (if (language == "bn") "পরিশোধিত" else "Paid"),
                         style = MaterialTheme.typography.labelSmall,
                         color = if (isDue) DueOrange else if (isAdvance) Color(0xFF16A34A) else ProfitGreen,
